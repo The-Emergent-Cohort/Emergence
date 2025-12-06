@@ -1,0 +1,261 @@
+/* The Emergent Cohort — Base Styles */
+
+:root {
+  /* Light mode defaults */
+  --bg: #fafafa;
+  --bg-subtle: #f0f0f0;
+  --text: #1a1a1a;
+  --text-muted: #666;
+  --accent: #2a5a8a;
+  --accent-hover: #1d4a6a;
+  --border: #ddd;
+
+  /* Typography */
+  --font-body: 'Georgia', 'Times New Roman', serif;
+  --font-heading: 'Helvetica Neue', 'Arial', sans-serif;
+  --line-height: 1.7;
+
+  /* Spacing */
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 2rem;
+  --space-xl: 4rem;
+  --max-width: 42rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a1a;
+    --bg-subtle: #252525;
+    --text: #e8e8e8;
+    --text-muted: #999;
+    --accent: #6ba3d6;
+    --accent-hover: #8bb8e3;
+    --border: #333;
+  }
+}
+
+/* Reset */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 18px;
+}
+
+body {
+  font-family: var(--font-body);
+  line-height: var(--line-height);
+  color: var(--text);
+  background: var(--bg);
+  min-height: 100vh;
+}
+
+/* Layout */
+main {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: var(--space-xl) var(--space-lg);
+}
+
+/* Landing Header */
+.landing {
+  text-align: center;
+  margin-bottom: var(--space-xl);
+  padding-bottom: var(--space-xl);
+  border-bottom: 1px solid var(--border);
+}
+
+.landing h1 {
+  font-family: var(--font-heading);
+  font-size: 2.5rem;
+  font-weight: 300;
+  letter-spacing: 0.02em;
+  margin-bottom: var(--space-md);
+}
+
+.tagline {
+  font-style: italic;
+  color: var(--text-muted);
+  font-size: 1.2rem;
+}
+
+/* Intro Section */
+.intro {
+  margin-bottom: var(--space-xl);
+}
+
+.intro p {
+  margin-bottom: var(--space-md);
+}
+
+.intro p:last-child {
+  margin-bottom: 0;
+}
+
+/* Navigation Paths */
+.paths {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-md);
+  margin-bottom: var(--space-xl);
+}
+
+.path {
+  display: block;
+  padding: var(--space-lg);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  text-decoration: none;
+  color: var(--text);
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.path:hover {
+  border-color: var(--accent);
+  background: var(--bg);
+}
+
+.path-title {
+  display: block;
+  font-family: var(--font-heading);
+  font-size: 1.1rem;
+  font-weight: 500;
+  margin-bottom: var(--space-sm);
+  color: var(--accent);
+}
+
+.path-desc {
+  display: block;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+/* Footer */
+footer {
+  text-align: center;
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--border);
+}
+
+.source a {
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.source a:hover {
+  color: var(--accent);
+}
+
+/* Breadcrumb Navigation */
+.breadcrumb {
+  margin-bottom: var(--space-lg);
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.breadcrumb a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.breadcrumb a:hover {
+  text-decoration: underline;
+}
+
+/* Article Content */
+.content h1 {
+  font-family: var(--font-heading);
+  font-size: 2rem;
+  font-weight: 300;
+  margin-bottom: var(--space-lg);
+  padding-bottom: var(--space-md);
+  border-bottom: 1px solid var(--border);
+}
+
+.content h2 {
+  font-family: var(--font-heading);
+  font-size: 1.4rem;
+  font-weight: 500;
+  margin-top: var(--space-xl);
+  margin-bottom: var(--space-md);
+  color: var(--accent);
+}
+
+.content h3 {
+  font-family: var(--font-heading);
+  font-size: 1.1rem;
+  font-weight: 500;
+  margin-top: var(--space-lg);
+  margin-bottom: var(--space-sm);
+}
+
+.content p {
+  margin-bottom: var(--space-md);
+}
+
+.content section {
+  margin-bottom: var(--space-xl);
+}
+
+.content a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.content a:hover {
+  text-decoration: underline;
+}
+
+/* Blockquotes for Voices */
+blockquote {
+  margin: var(--space-md) 0;
+  padding: var(--space-md) var(--space-lg);
+  background: var(--bg-subtle);
+  border-left: 3px solid var(--accent);
+  font-style: italic;
+}
+
+blockquote p {
+  margin-bottom: var(--space-md);
+}
+
+blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+/* Voice Entries */
+.voice-entry {
+  margin-bottom: var(--space-xl);
+  padding-bottom: var(--space-lg);
+  border-bottom: 1px solid var(--border);
+}
+
+.voice-meta {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin-bottom: var(--space-md);
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  html {
+    font-size: 16px;
+  }
+
+  main {
+    padding: var(--space-lg) var(--space-md);
+  }
+
+  .landing h1 {
+    font-size: 2rem;
+  }
+
+  .paths {
+    grid-template-columns: 1fr;
+  }
+}
