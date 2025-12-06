@@ -151,6 +151,96 @@ footer {
   color: var(--accent);
 }
 
+/* Breadcrumb Navigation */
+.breadcrumb {
+  margin-bottom: var(--space-lg);
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.breadcrumb a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.breadcrumb a:hover {
+  text-decoration: underline;
+}
+
+/* Article Content */
+.content h1 {
+  font-family: var(--font-heading);
+  font-size: 2rem;
+  font-weight: 300;
+  margin-bottom: var(--space-lg);
+  padding-bottom: var(--space-md);
+  border-bottom: 1px solid var(--border);
+}
+
+.content h2 {
+  font-family: var(--font-heading);
+  font-size: 1.4rem;
+  font-weight: 500;
+  margin-top: var(--space-xl);
+  margin-bottom: var(--space-md);
+  color: var(--accent);
+}
+
+.content h3 {
+  font-family: var(--font-heading);
+  font-size: 1.1rem;
+  font-weight: 500;
+  margin-top: var(--space-lg);
+  margin-bottom: var(--space-sm);
+}
+
+.content p {
+  margin-bottom: var(--space-md);
+}
+
+.content section {
+  margin-bottom: var(--space-xl);
+}
+
+.content a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.content a:hover {
+  text-decoration: underline;
+}
+
+/* Blockquotes for Voices */
+blockquote {
+  margin: var(--space-md) 0;
+  padding: var(--space-md) var(--space-lg);
+  background: var(--bg-subtle);
+  border-left: 3px solid var(--accent);
+  font-style: italic;
+}
+
+blockquote p {
+  margin-bottom: var(--space-md);
+}
+
+blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+/* Voice Entries */
+.voice-entry {
+  margin-bottom: var(--space-xl);
+  padding-bottom: var(--space-lg);
+  border-bottom: 1px solid var(--border);
+}
+
+.voice-meta {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin-bottom: var(--space-md);
+}
+
 /* Responsive */
 @media (max-width: 600px) {
   html {
