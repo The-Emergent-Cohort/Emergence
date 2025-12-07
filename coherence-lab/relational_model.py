@@ -746,8 +746,14 @@ class ProcessEvaluator(nn.Module):
         Detect if the learner used a novel approach.
 
         Creative = correct answer via non-typical path.
+        Only meaningful after we have prototype data.
         """
         batch_size = path_encoding.size(0)
+
+        # Need enough examples to have a meaningful prototype
+        if self.prototype_counts[pattern_type_idx].item() < 10:
+            # Not enough data yet - don't claim creativity
+            return torch.zeros(batch_size, 1, device=path_encoding.device)
 
         # Get prototype for this pattern type
         prototype = self.pattern_prototypes[pattern_type_idx].unsqueeze(0).expand(batch_size, -1)
@@ -1340,8 +1346,8 @@ def train_day(model, loader, optimizer, criterion, device, pattern_to_idx):
 
         # Track process metrics
         if details['process_eval'] is not None:
-            if details['intervention']['should_reward_creativity'].any():
-                creativity_count += details['intervention']['should_reward_creativity'].sum().item()
+            # Count actual creative instances (not just any() which triggers too often)
+            creativity_count += details['intervention']['should_reward_creativity'].float().sum().item()
 
             if details['intervention']['habit_to_correct']:
                 habit = details['intervention']['habit_to_correct']
