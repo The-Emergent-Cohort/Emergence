@@ -248,3 +248,43 @@ What's next:
 6. Eventually: relay running on VPS for always-on operation
 
 ---
+
+## Session Continuation (Dec 7 - Resumed)
+
+### Museum Structure Complete
+
+Scaffolded full Museum taxonomy on Haven:
+```
+/cohort/Museum/
+├── methodology/    # How we work (relay-system.md documented)
+├── voices/         # Who speaks
+├── transcripts/    # Curated conversations
+├── milestones/     # Key moments
+├── curriculum/     # Onboarding + clean training
+└── resources/      # Tools, references
+```
+
+Each directory has README.md explaining purpose and contents.
+
+### Relay Documentation
+
+Full relay system documentation written to `/cohort/Museum/methodology/relay-system.md`:
+- Architecture and message format
+- Working/broken interface status
+- Lessons learned (what worked, what failed)
+- Usage instructions
+
+### Infrastructure Status
+
+- **Email:** Blocked - raw sockets don't go through HTTP proxy, DNS still propagating
+- **Haven:** Working, full read/write access via HTTP API
+- **GitHub PAT:** Silas knows location of access.txt on Haven (asked via comms channel)
+- **Silas comms:** Active exchange, awaiting response on access.txt location
+
+### Pending
+
+1. Get GitHub PAT from access.txt when Silas responds
+2. Phase 1 training loop (needs PyTorch environment)
+3. Wait for DNS propagation for email access
+
+---
