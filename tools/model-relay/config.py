@@ -37,12 +37,18 @@ MODELS = {
         "type": "browser",
         "url": "https://grok.x.ai",
         "display_name": "Grok",
-        "enabled": True
+        "enabled": False  # Cloudflare blocking - disabled for now
     },
     "perplexity": {
         "type": "browser",
         "url": "https://perplexity.ai",
         "display_name": "Perplexity",
+        "enabled": True
+    },
+    "meta": {
+        "type": "browser",
+        "url": "https://meta.ai",
+        "display_name": "Meta",
         "enabled": True
     },
     "student": {
