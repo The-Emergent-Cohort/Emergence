@@ -1738,15 +1738,15 @@ class RelationalTeacher(nn.Module):
             if correct_unshown == total_unshown:  # All unshown were correct
                 self.unshown_streak += correct_unshown
             else:
-                self.unshown_streak = 0
+                self.unshown_streak.zero_()
 
-            self.last_monitored_correct = correct_unshown / max(1, total_unshown)
+            self.last_monitored_correct.fill_(correct_unshown / max(1, total_unshown))
 
             # Acknowledge quiet competence after streak of 5+
             # "I noticed you've been getting these right without checking with me. Good!"
             should_acknowledge = self.unshown_streak >= 5
             if should_acknowledge:
-                self.unshown_streak = 0  # Reset after acknowledgment
+                self.unshown_streak.zero_()  # Reset after acknowledgment
 
             return should_acknowledge, self.unshown_streak.item()
 
