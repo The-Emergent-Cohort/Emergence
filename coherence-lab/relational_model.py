@@ -114,12 +114,14 @@ class TemporalModel(nn.Module):
         batch_size = experience.size(0)
         episode_ids = []
 
-        for i in range(batch_size):
-            idx = self.episode_count.item() % self.max_episodes
-            self.episode_buffer[idx] = experience[i].detach()
-            self.episode_timestamps[idx] = timestamp
-            self.episode_count += 1
-            episode_ids.append(idx)
+        # Use no_grad to prevent inplace modification issues during backward
+        with torch.no_grad():
+            for i in range(batch_size):
+                idx = self.episode_count.item() % self.max_episodes
+                self.episode_buffer[idx].copy_(experience[i].detach())
+                self.episode_timestamps[idx].copy_(timestamp)
+                self.episode_count.add_(1)
+                episode_ids.append(idx)
 
         return torch.tensor(episode_ids, device=experience.device)
 
@@ -168,18 +170,19 @@ class TemporalModel(nn.Module):
         if count == 0:
             return
 
-        episodes = self.episode_buffer[:count].unsqueeze(0)  # [1, count, d_model]
+        with torch.no_grad():
+            episodes = self.episode_buffer[:count].unsqueeze(0)  # [1, count, d_model]
 
-        # Process through consolidation
-        _, new_state = self.consolidated_memory(episodes, self.consolidated_state)
-        self.consolidated_state = new_state
+            # Process through consolidation
+            _, new_state = self.consolidated_memory(episodes, self.consolidated_state)
+            self.consolidated_state.copy_(new_state)
 
-        # Advance to new day
-        self.current_day += 1
+            # Advance to new day
+            self.current_day.add_(1)
 
-        # Clear episode buffer (new day, fresh experiences)
-        self.episode_buffer.zero_()
-        self.episode_count.zero_()
+            # Clear episode buffer (new day, fresh experiences)
+            self.episode_buffer.zero_()
+            self.episode_count.zero_()
 
     def wake(self):
         """Wake up with consolidated knowledge from previous days."""
@@ -216,6 +219,116 @@ class TemporalModel(nn.Module):
 # SELF MODEL
 # =============================================================================
 
+class TopicConfidenceTracker(nn.Module):
+    """
+    Tracks confidence vs actual performance per topic/pattern type.
+
+    If accuracy > confidence on a topic → some correct answers are lucky guesses
+    If confidence > accuracy on a topic → overconfident (dangerous)
+
+    "I think I'm 65% good at fibonacci, but I'm scoring 75%...
+     so ~10% of my right answers are probably guesses, not understanding."
+    """
+
+    def __init__(self, n_topics=10, ema_alpha=0.1):
+        super().__init__()
+        self.n_topics = n_topics
+        self.ema_alpha = ema_alpha  # Exponential moving average decay
+
+        # Per-topic tracking (not learned, just statistics)
+        # Using buffers so they're saved with model state
+        self.register_buffer('topic_accuracy', torch.zeros(n_topics))
+        self.register_buffer('topic_confidence', torch.zeros(n_topics))
+        self.register_buffer('topic_count', torch.zeros(n_topics))
+
+    def update(self, topic_idx, was_correct, predicted_confidence):
+        """
+        Update topic statistics after a prediction.
+
+        topic_idx: which pattern type (int or tensor of ints)
+        was_correct: bool tensor
+        predicted_confidence: float tensor (model's confidence on this prediction)
+        """
+        with torch.no_grad():
+            # Handle batched inputs
+            if isinstance(topic_idx, int):
+                topic_idx = torch.tensor([topic_idx], device=self.topic_accuracy.device)
+            if not isinstance(was_correct, torch.Tensor):
+                was_correct = torch.tensor([was_correct], device=self.topic_accuracy.device)
+            if not isinstance(predicted_confidence, torch.Tensor):
+                predicted_confidence = torch.tensor([predicted_confidence], device=self.topic_accuracy.device)
+
+            was_correct = was_correct.float()
+            predicted_confidence = predicted_confidence.float().squeeze()
+
+            # Update each topic's running statistics
+            for i in range(len(topic_idx)):
+                idx = topic_idx[i].item()
+                if idx >= self.n_topics:
+                    continue
+
+                count = self.topic_count[idx].item()
+                if count < 1:
+                    # First observation - just set directly
+                    self.topic_accuracy[idx] = was_correct[i]
+                    self.topic_confidence[idx] = predicted_confidence[i] if i < len(predicted_confidence) else predicted_confidence
+                else:
+                    # EMA update
+                    self.topic_accuracy[idx] = (1 - self.ema_alpha) * self.topic_accuracy[idx] + self.ema_alpha * was_correct[i]
+                    conf_val = predicted_confidence[i] if i < len(predicted_confidence) else predicted_confidence
+                    self.topic_confidence[idx] = (1 - self.ema_alpha) * self.topic_confidence[idx] + self.ema_alpha * conf_val
+
+                self.topic_count[idx] += 1
+
+    def get_calibration(self, topic_idx):
+        """
+        Get calibration for a topic.
+
+        Returns: (accuracy, confidence, calibration_gap)
+        calibration_gap > 0 means guessing (accuracy > confidence)
+        calibration_gap < 0 means overconfident (confidence > accuracy)
+        """
+        if isinstance(topic_idx, int):
+            acc = self.topic_accuracy[topic_idx].item()
+            conf = self.topic_confidence[topic_idx].item()
+        else:
+            acc = self.topic_accuracy[topic_idx]
+            conf = self.topic_confidence[topic_idx]
+
+        return acc, conf, acc - conf
+
+    def is_likely_guessing(self, topic_idx, threshold=0.1):
+        """Returns True if accuracy significantly exceeds confidence (guessing)."""
+        _, _, gap = self.get_calibration(topic_idx)
+        if isinstance(gap, torch.Tensor):
+            return (gap > threshold).any().item()
+        return gap > threshold
+
+    def is_overconfident(self, topic_idx, threshold=0.1):
+        """Returns True if confidence significantly exceeds accuracy (overconfident)."""
+        _, _, gap = self.get_calibration(topic_idx)
+        if isinstance(gap, torch.Tensor):
+            return (gap < -threshold).any().item()
+        return gap < -threshold
+
+    def get_adjusted_confidence(self, topic_idx, raw_confidence):
+        """
+        Adjust raw prediction confidence based on topic calibration.
+
+        If we're typically guessing on this topic, reduce confidence.
+        If we're typically overconfident, also reduce confidence.
+        """
+        acc, conf, gap = self.get_calibration(topic_idx)
+
+        # If gap is large in either direction, we're poorly calibrated
+        # Reduce confidence proportionally
+        calibration_penalty = abs(gap) * 0.5
+
+        if isinstance(raw_confidence, torch.Tensor):
+            return raw_confidence * (1 - calibration_penalty)
+        return raw_confidence * (1 - calibration_penalty)
+
+
 class SelfModel(nn.Module):
     """
     The learner's representation of itself.
@@ -224,7 +337,7 @@ class SelfModel(nn.Module):
     Introspection on own state, separate from external perception.
     """
 
-    def __init__(self, d_model=64):
+    def __init__(self, d_model=64, n_topics=10):
         super().__init__()
         self.d_model = d_model
 
@@ -239,6 +352,10 @@ class SelfModel(nn.Module):
         self.confidence = nn.Linear(d_model, 1)  # How sure am I?
         self.frustration = nn.Linear(d_model, 1)  # How stuck am I?
         self.curiosity = nn.Linear(d_model, 1)   # How interested am I?
+
+        # Topic-specific confidence tracking
+        # "I'm 65% confident on fibonacci, but scoring 75% - some are guesses"
+        self.topic_tracker = TopicConfidenceTracker(n_topics=n_topics)
 
         # Self-narrative: what am I trying to do?
         self.goal_representation = nn.Linear(d_model, d_model)
@@ -667,6 +784,241 @@ class RelationalLearner(nn.Module):
 
 
 # =============================================================================
+# PROCESS EVALUATOR (Creative + Bad Habit Detection)
+# =============================================================================
+
+class ProcessEvaluator(nn.Module):
+    """
+    Evaluates HOW the learner arrives at answers, not just WHAT they answer.
+
+    This is the meta-level teaching that shapes thinking patterns:
+    - Reward creative/novel approaches that lead to correct answers
+    - Catch bad habits: lucky guesses, rote patterns, overconfidence
+
+    "Show your work for partial credit" - the process matters.
+    """
+
+    def __init__(self, d_model=64, history_len=50):
+        super().__init__()
+        self.d_model = d_model
+        self.history_len = history_len
+
+        # Encode the reasoning path (sequence of states during think steps)
+        self.path_encoder = nn.GRU(
+            input_size=d_model,
+            hidden_size=d_model,
+            batch_first=True
+        )
+
+        # Detect novel approaches (path differs from typical successful paths)
+        self.novelty_detector = nn.Sequential(
+            nn.Linear(d_model * 2, d_model),  # path + prototype
+            nn.ReLU(),
+            nn.Linear(d_model, 1),
+            nn.Sigmoid()
+        )
+
+        # Store prototype successful paths per pattern type
+        self.register_buffer('pattern_prototypes', torch.zeros(8, d_model))  # 8 pattern types max
+        self.register_buffer('prototype_counts', torch.zeros(8))
+
+        # Detect bad habits
+        self.habit_classifier = nn.Sequential(
+            nn.Linear(d_model * 3, d_model),  # path + confidence + outcome
+            nn.ReLU(),
+            nn.Linear(d_model, 4)  # [good_reasoning, lucky_guess, rote_pattern, overconfident]
+        )
+
+        # Track learner behavior history for habit detection
+        self.register_buffer('behavior_history', torch.zeros(history_len, 4))  # recent habit scores
+        self.register_buffer('history_ptr', torch.tensor(0))
+
+        # Efficiency metric: did they take a good path?
+        self.efficiency_scorer = nn.Sequential(
+            nn.Linear(d_model, d_model // 2),
+            nn.ReLU(),
+            nn.Linear(d_model // 2, 1),
+            nn.Sigmoid()
+        )
+
+    def encode_reasoning_path(self, states_history):
+        """
+        Encode the sequence of cognitive states during think steps.
+
+        Args:
+            states_history: list of [batch, d_model] tensors from each think step
+        """
+        if len(states_history) == 0:
+            return None
+
+        # Stack into [batch, n_steps, d_model]
+        path = torch.stack(states_history, dim=1)
+
+        # Encode the full path
+        _, path_encoding = self.path_encoder(path)
+        return path_encoding.squeeze(0)  # [batch, d_model]
+
+    def detect_creativity(self, path_encoding, pattern_type_idx):
+        """
+        Detect if the learner used a novel approach.
+
+        Creative = correct answer via non-typical path.
+        Only meaningful after we have prototype data.
+        """
+        batch_size = path_encoding.size(0)
+
+        # Need enough examples to have a meaningful prototype
+        if self.prototype_counts[pattern_type_idx].item() < 10:
+            # Not enough data yet - don't claim creativity
+            return torch.zeros(batch_size, 1, device=path_encoding.device)
+
+        # Get prototype for this pattern type
+        prototype = self.pattern_prototypes[pattern_type_idx].unsqueeze(0).expand(batch_size, -1)
+
+        # Compare path to prototype
+        combined = torch.cat([path_encoding, prototype], dim=-1)
+        novelty = self.novelty_detector(combined)
+
+        return novelty
+
+    def update_prototype(self, path_encoding, pattern_type_idx, was_correct):
+        """
+        Update prototype path for successful approaches.
+
+        Only integrate correct approaches into the prototype.
+        """
+        with torch.no_grad():
+            if was_correct.any():
+                # Get correct examples
+                correct_paths = path_encoding[was_correct].mean(dim=0)
+
+                # Blend into prototype (exponential moving average)
+                alpha = 0.1
+                count = self.prototype_counts[pattern_type_idx].item()
+                if count < 10:
+                    alpha = 0.3  # Learn faster initially
+
+                self.pattern_prototypes[pattern_type_idx] = (
+                    (1 - alpha) * self.pattern_prototypes[pattern_type_idx] +
+                    alpha * correct_paths
+                )
+                self.prototype_counts[pattern_type_idx] += was_correct.sum()
+
+    def detect_bad_habits(self, path_encoding, confidence, was_correct):
+        """
+        Detect problematic learning patterns.
+
+        Bad habits:
+        - Lucky guess: low confidence but correct (didn't really understand)
+        - Rote pattern: same path regardless of input (not actually reasoning)
+        - Overconfident: high confidence but wrong (dangerous miscalibration)
+        - Good reasoning: appropriate confidence matching outcome
+        """
+        batch_size = path_encoding.size(0)
+
+        # Encode confidence as vector
+        conf_expanded = confidence.expand(-1, self.d_model)
+
+        # Encode outcome as vector
+        outcome_expanded = was_correct.unsqueeze(-1).float().expand(-1, self.d_model)
+
+        # Classify behavior
+        combined = torch.cat([path_encoding, conf_expanded, outcome_expanded], dim=-1)
+        habit_logits = self.habit_classifier(combined)
+        habit_probs = F.softmax(habit_logits, dim=-1)
+
+        return {
+            'good_reasoning': habit_probs[:, 0],
+            'lucky_guess': habit_probs[:, 1],
+            'rote_pattern': habit_probs[:, 2],
+            'overconfident': habit_probs[:, 3],
+            'raw_logits': habit_logits
+        }
+
+    def update_history(self, habit_scores):
+        """Track behavior patterns over time."""
+        with torch.no_grad():
+            # Average scores from this batch
+            avg_scores = torch.tensor([
+                habit_scores['good_reasoning'].mean().item(),
+                habit_scores['lucky_guess'].mean().item(),
+                habit_scores['rote_pattern'].mean().item(),
+                habit_scores['overconfident'].mean().item()
+            ], device=self.behavior_history.device)
+
+            # Add to circular buffer
+            ptr = self.history_ptr.item() % self.history_len
+            self.behavior_history[ptr] = avg_scores
+            self.history_ptr += 1
+
+    def get_habit_trends(self):
+        """
+        Analyze behavior trends over recent history.
+
+        Returns persistent patterns that need addressing.
+        """
+        count = min(self.history_ptr.item(), self.history_len)
+        if count < 5:
+            return None  # Not enough history
+
+        recent = self.behavior_history[:count]
+        avg = recent.mean(dim=0)
+
+        return {
+            'good_reasoning_trend': avg[0].item(),
+            'lucky_guess_trend': avg[1].item(),
+            'rote_pattern_trend': avg[2].item(),
+            'overconfident_trend': avg[3].item(),
+            'primary_concern': ['good_reasoning', 'lucky_guess', 'rote_pattern', 'overconfident'][avg.argmax().item()]
+        }
+
+    def evaluate_efficiency(self, path_encoding):
+        """Score how efficient the reasoning path was."""
+        return self.efficiency_scorer(path_encoding)
+
+    def full_evaluation(self, states_history, confidence, was_correct, pattern_type_idx):
+        """
+        Complete process evaluation.
+
+        Returns:
+            - creativity_score: how novel was the approach
+            - habit_scores: breakdown of reasoning quality
+            - efficiency_score: how direct was the path
+            - recommendations: what should teacher reward/discourage
+        """
+        path_encoding = self.encode_reasoning_path(states_history)
+        if path_encoding is None:
+            return None
+
+        creativity = self.detect_creativity(path_encoding, pattern_type_idx)
+        habits = self.detect_bad_habits(path_encoding, confidence, was_correct)
+        efficiency = self.evaluate_efficiency(path_encoding)
+
+        # Update prototype with successful paths
+        self.update_prototype(path_encoding, pattern_type_idx, was_correct)
+
+        # Update behavior history
+        self.update_history(habits)
+
+        # Generate recommendations
+        recommendations = {
+            'reward_creativity': (creativity > 0.7) & was_correct,
+            'warn_lucky_guess': habits['lucky_guess'] > 0.5,
+            'warn_rote': habits['rote_pattern'] > 0.5,
+            'warn_overconfident': habits['overconfident'] > 0.5,
+            'praise_good_reasoning': habits['good_reasoning'] > 0.7
+        }
+
+        return {
+            'creativity': creativity,
+            'habits': habits,
+            'efficiency': efficiency,
+            'recommendations': recommendations,
+            'path_encoding': path_encoding
+        }
+
+
+# =============================================================================
 # TEACHER (as Separate Entity)
 # =============================================================================
 
@@ -677,6 +1029,10 @@ class RelationalTeacher(nn.Module):
     Has its own state, knowledge, and goals.
     Communicates through explicit messages, not shared activations.
     Acts like a parent: trusted, patient, focused on learner's growth.
+
+    Now also watches for:
+    - Creative approaches to reward
+    - Bad habits to gently correct
     """
 
     def __init__(self, d_model=64, patience=5):
@@ -708,6 +1064,13 @@ class RelationalTeacher(nn.Module):
 
         # Track interaction history
         self.interaction_count = 0
+
+        # Process evaluator for watching HOW learner thinks
+        self.process_evaluator = ProcessEvaluator(d_model)
+
+        # Generate process-specific feedback
+        self.creativity_reward_generator = nn.Linear(d_model, d_model)
+        self.habit_correction_generator = nn.Linear(d_model * 2, d_model)  # habit + state
 
     def observe_learner(self, learner_visible_state):
         """
@@ -746,12 +1109,54 @@ class RelationalTeacher(nn.Module):
         exp_content = self.explanation_generator(combined)
         return self.comm_channel.send(exp_content, 1)  # type 1 = answer/explanation
 
-    def decide_intervention(self, learner_emotions):
+    def generate_creativity_reward(self, learner_state):
+        """
+        Generate positive reinforcement for creative approaches.
+
+        "That's a clever way to think about it!"
+        """
+        reward_content = self.creativity_reward_generator(learner_state)
+        return self.comm_channel.send(reward_content, 3)  # encouragement type
+
+    def generate_habit_correction(self, habit_type, learner_state):
+        """
+        Generate gentle correction for bad habits.
+
+        Not punishment - redirection. "Let's slow down and think this through."
+        """
+        # Encode the habit type as a vector
+        habit_encoding = torch.zeros_like(learner_state)
+        if habit_type == 'lucky_guess':
+            habit_encoding = habit_encoding + 0.3  # mild concern
+        elif habit_type == 'rote_pattern':
+            habit_encoding = habit_encoding - 0.3  # different concern
+        elif habit_type == 'overconfident':
+            habit_encoding = habit_encoding + 0.6  # more serious
+
+        combined = torch.cat([habit_encoding, learner_state], dim=-1)
+        correction_content = self.habit_correction_generator(combined)
+        return self.comm_channel.send(correction_content, 2)  # hint type
+
+    def evaluate_learner_process(self, states_history, confidence, was_correct, pattern_type_idx):
+        """
+        Full evaluation of HOW the learner arrived at their answer.
+
+        This is the meta-level teaching that shapes thinking patterns.
+        """
+        return self.process_evaluator.full_evaluation(
+            states_history, confidence, was_correct, pattern_type_idx
+        )
+
+    def decide_intervention(self, learner_emotions, process_eval=None):
         """
         Decide whether and how to intervene.
 
         Like a parent: intervene when stuck, encourage when frustrated,
         step back when confident and exploring.
+
+        Now also considers HOW the learner is thinking:
+        - Reward creativity
+        - Gently correct bad habits
         """
         confidence = learner_emotions['confidence']
         frustration = learner_emotions['frustration']
@@ -766,11 +1171,44 @@ class RelationalTeacher(nn.Module):
         # Moderate everything = might benefit from encouragement
         needs_encouragement = (confidence > 0.3) & (confidence < 0.7)
 
-        return {
+        intervention = {
             'should_help': needs_help,
             'should_encourage': needs_encouragement & ~is_exploring,
-            'should_step_back': is_exploring
+            'should_step_back': is_exploring,
+            # Process-related interventions
+            'should_reward_creativity': torch.zeros_like(confidence).bool(),
+            'should_correct_habit': torch.zeros_like(confidence).bool(),
+            'habit_to_correct': None
         }
+
+        # Add process-based interventions if we have evaluation
+        if process_eval is not None:
+            recs = process_eval['recommendations']
+
+            # Reward creativity (positive reinforcement)
+            intervention['should_reward_creativity'] = recs['reward_creativity'].squeeze(-1)
+
+            # Check for bad habits (gentle correction)
+            # Prioritize: overconfident > lucky_guess > rote_pattern
+            if recs['warn_overconfident'].any():
+                intervention['should_correct_habit'] = recs['warn_overconfident']
+                intervention['habit_to_correct'] = 'overconfident'
+            elif recs['warn_lucky_guess'].any():
+                intervention['should_correct_habit'] = recs['warn_lucky_guess']
+                intervention['habit_to_correct'] = 'lucky_guess'
+            elif recs['warn_rote'].any():
+                intervention['should_correct_habit'] = recs['warn_rote']
+                intervention['habit_to_correct'] = 'rote_pattern'
+
+            # Good reasoning gets praised too
+            intervention['should_encourage'] = intervention['should_encourage'] | \
+                                               recs['praise_good_reasoning']
+
+        return intervention
+
+    def get_habit_trends(self):
+        """Get long-term habit trends for progress reporting."""
+        return self.process_evaluator.get_habit_trends()
 
 
 # =============================================================================
@@ -794,10 +1232,12 @@ class RelationalSystem(nn.Module):
         self.vocab_size = vocab_size
         self.d_model = d_model
 
-    def forward(self, tokens, seq_lens=None, pattern_types=None,
+    def forward(self, tokens, seq_lens=None, pattern_types=None, targets=None,
                 allow_teacher_interaction=True, return_details=False):
         """
         Forward pass with relational dynamics.
+
+        Now includes process evaluation for creativity/habit detection.
         """
         device = tokens.device
 
@@ -808,18 +1248,50 @@ class RelationalSystem(nn.Module):
         learner_visible = learner_output['self_state']['internal_state']
         teacher_observation = self.teacher.observe_learner(learner_visible)
 
-        # Teacher decides on intervention
-        intervention = self.teacher.decide_intervention(learner_output['self_state']['emotions'])
+        # Process evaluation (need targets to know correctness)
+        process_eval = None
+        if targets is not None and 'states_history' in learner_output:
+            preds = learner_output['logits'].argmax(dim=-1)
+            was_correct = (preds == targets)
+            confidence = learner_output['self_state']['emotions']['confidence']
 
-        # Generate teacher message if intervening
+            # Get pattern type index (use 0 as default for mixed batches)
+            pattern_idx = 0  # Could be expanded for per-example
+
+            process_eval = self.teacher.evaluate_learner_process(
+                learner_output['states_history'],
+                confidence,
+                was_correct,
+                pattern_idx
+            )
+
+        # Teacher decides on intervention (now with process info)
+        intervention = self.teacher.decide_intervention(
+            learner_output['self_state']['emotions'],
+            process_eval
+        )
+
+        # Generate teacher message based on intervention type
         teacher_message = None
-        if allow_teacher_interaction and intervention['should_help'].any():
-            # Generate a hint (we'd need ground truth direction for proper hints)
-            # For now, just encourage
-            teacher_message = self.teacher.generate_encouragement(teacher_observation)
+        if allow_teacher_interaction:
+            if intervention['should_reward_creativity'].any():
+                # Reward creative approaches
+                teacher_message = self.teacher.generate_creativity_reward(teacher_observation)
 
-            # Learner tries again with guidance
-            learner_output = self.learner(tokens, seq_lens, teacher_message, return_details=True)
+            elif intervention['should_correct_habit'].any() and intervention['habit_to_correct']:
+                # Gently correct bad habits
+                teacher_message = self.teacher.generate_habit_correction(
+                    intervention['habit_to_correct'],
+                    teacher_observation
+                )
+
+            elif intervention['should_help'].any():
+                # Standard help for stuck learner
+                teacher_message = self.teacher.generate_encouragement(teacher_observation)
+
+            # If teacher provided message, learner processes again with guidance
+            if teacher_message is not None:
+                learner_output = self.learner(tokens, seq_lens, teacher_message, return_details=True)
 
         if return_details:
             return {
@@ -827,7 +1299,9 @@ class RelationalSystem(nn.Module):
                 'pattern_logits': learner_output['pattern_logits'],
                 'learner_self': learner_output['self_state'],
                 'intervention': intervention,
-                'teacher_message': teacher_message
+                'teacher_message': teacher_message,
+                'process_eval': process_eval,
+                'states_history': learner_output.get('states_history', [])
             }
 
         return learner_output['logits'], learner_output['self_state']['emotions']['confidence'], learner_output['pattern_logits']
@@ -898,11 +1372,16 @@ def collate_fn(batch):
 # TRAINING WITH DAY/SLEEP CYCLES
 # =============================================================================
 
-def train_day(model, loader, optimizer, criterion, device, pattern_to_idx):
+def train_day(model, loader, optimizer, criterion, device, pattern_to_idx, val_loader=None):
     """
     One "day" of learning: experiencing, trying, receiving guidance.
 
     At the end of the day, we'll sleep to consolidate.
+
+    Now includes process-based rewards:
+    - Bonus for creativity
+    - Penalty for bad habits (but gentle - redirection not punishment)
+    - Validation spot-checks to detect generalization gaps (overconfidence)
     """
     model.train()
 
@@ -911,8 +1390,15 @@ def train_day(model, loader, optimizer, criterion, device, pattern_to_idx):
 
     total_loss, total_correct, total_samples = 0, 0, 0
     intervention_count = 0
+    creativity_count = 0
+    habit_corrections = {'lucky_guess': 0, 'rote_pattern': 0, 'overconfident': 0}
 
-    for batch in loader:
+    # Track running train accuracy for generalization gap detection
+    running_train_acc = 0.0
+    generalization_gap = 0.0
+    val_iter = iter(val_loader) if val_loader else None
+
+    for batch_idx, batch in enumerate(loader):
         tokens = batch['tokens'].to(device)
         targets = batch['target'].to(device)
         seq_lens = batch['seq_len']
@@ -920,7 +1406,8 @@ def train_day(model, loader, optimizer, criterion, device, pattern_to_idx):
 
         optimizer.zero_grad()
 
-        details = model(tokens, seq_lens, return_details=True)
+        # Pass targets for process evaluation
+        details = model(tokens, seq_lens, targets=targets, return_details=True)
 
         # Main loss
         main_loss = criterion(details['logits'], targets)
@@ -935,21 +1422,134 @@ def train_day(model, loader, optimizer, criterion, device, pattern_to_idx):
         conf = details['learner_self']['emotions']['confidence'].squeeze()
         conf_loss = F.binary_cross_entropy(conf, correct)
 
-        loss = main_loss + 0.2 * aux_loss + 0.1 * conf_loss
+        # === VALIDATION SPOT-CHECK: Teacher gives pop quizzes ===
+        if val_iter and batch_idx % 50 == 0 and batch_idx > 0:
+            model.eval()
+            try:
+                val_batch = next(val_iter)
+            except StopIteration:
+                val_iter = iter(val_loader)
+                val_batch = next(val_iter)
+
+            with torch.no_grad():
+                val_tokens = val_batch['tokens'].to(device)
+                val_targets = val_batch['target'].to(device)
+                val_logits, val_conf, _ = model(val_tokens, val_batch['seq_len'],
+                                                 allow_teacher_interaction=False)
+                val_preds = val_logits.argmax(dim=-1)
+                val_acc = (val_preds == val_targets).float().mean().item()
+
+                # Detect generalization gap
+                running_train_acc = total_correct / max(1, total_samples)
+                generalization_gap = running_train_acc - val_acc
+
+                # If big gap AND high confidence on wrong answers = overconfidence
+                if generalization_gap > 0.15:
+                    val_wrong = (val_preds != val_targets)
+                    if val_wrong.any():
+                        overconf_on_val = val_conf[val_wrong].mean().item()
+                        if overconf_on_val > 0.6:
+                            # Inject overconfidence penalty into next batch
+                            habit_corrections['overconfident'] += val_wrong.sum().item()
+
+                            # FORCE frustration signal when we detect true struggle
+                            # This bypasses the learned (miscalibrated) frustration
+                            with torch.no_grad():
+                                # Inject frustration into the SelfModel
+                                # The learner doesn't "feel" frustrated, but teacher SEES struggle
+                                model.learner.self_model.frustration.weight.data += 0.1
+                                model.learner.self_model.confidence.weight.data -= 0.1
+
+            model.train()
+
+        # Process-based rewards/penalties
+        process_loss = torch.tensor(0.0, device=device)
+        if details['process_eval'] is not None:
+            habits = details['process_eval']['habits']
+
+            # Encourage good reasoning (negative loss = reward)
+            good_reasoning_bonus = -0.1 * habits['good_reasoning'].mean()
+
+            # Discourage bad habits (positive loss = penalty, but gentle)
+            lucky_guess_penalty = 0.05 * habits['lucky_guess'].mean()
+            rote_penalty = 0.05 * habits['rote_pattern'].mean()
+            overconfident_penalty = 0.1 * habits['overconfident'].mean()
+
+            # EXTRA penalty if we detected generalization gap
+            if generalization_gap > 0.15:
+                overconfident_penalty += 0.2 * generalization_gap
+
+            # Creativity bonus (only for correct answers)
+            creativity = details['process_eval']['creativity']
+            creativity_bonus = -0.15 * (creativity * correct.unsqueeze(-1)).mean()
+
+            process_loss = (good_reasoning_bonus + lucky_guess_penalty +
+                          rote_penalty + overconfident_penalty + creativity_bonus)
+
+        # Combined loss
+        loss = main_loss + 0.2 * aux_loss + 0.1 * conf_loss + process_loss
         loss.backward()
         optimizer.step()
+
+        # Update internalization based on process quality, not just correctness
+        if details['process_eval'] is not None:
+            # Good process should strengthen internalization
+            good_process = details['process_eval']['habits']['good_reasoning'].mean().item() > 0.5
+            # DON'T internalize if we have a generalization gap!
+            no_overfit = generalization_gap < 0.1
+            if good_process and correct.mean().item() > 0.7 and no_overfit:
+                # Teacher guidance led to good process AND good outcomes AND generalizes
+                if details['teacher_message'] is not None:
+                    model.learner.other_model.internalize(
+                        details['teacher_message'],
+                        torch.tensor(correct.mean().item())
+                    )
 
         total_loss += main_loss.item() * tokens.size(0)
         total_correct += correct.sum().item()
         total_samples += tokens.size(0)
 
+        # Update topic confidence tracker
+        # Track per-topic: actual accuracy vs predicted confidence
+        pattern_indices = torch.tensor([pattern_to_idx[p] for p in pattern_types], device=device)
+        model.learner.self_model.topic_tracker.update(
+            pattern_indices,
+            correct,
+            conf
+        )
+
+        # Track interventions
         if details['teacher_message'] is not None:
             intervention_count += details['intervention']['should_help'].sum().item()
+
+        # Track process metrics
+        if details['process_eval'] is not None:
+            # Count actual creative instances (not just any() which triggers too often)
+            creativity_count += details['intervention']['should_reward_creativity'].float().sum().item()
+
+            if details['intervention']['habit_to_correct']:
+                habit = details['intervention']['habit_to_correct']
+                habit_corrections[habit] += details['intervention']['should_correct_habit'].sum().item()
+
+    # Get topic calibration stats
+    topic_calibration = {}
+    for pattern_name, idx in pattern_to_idx.items():
+        acc, conf, gap = model.learner.self_model.topic_tracker.get_calibration(idx)
+        topic_calibration[pattern_name] = {
+            'accuracy': acc,
+            'confidence': conf,
+            'gap': gap,  # positive = guessing, negative = overconfident
+            'status': 'guessing' if gap > 0.1 else ('overconfident' if gap < -0.1 else 'calibrated')
+        }
 
     return {
         'loss': total_loss / total_samples,
         'accuracy': total_correct / total_samples,
-        'interventions': intervention_count / total_samples
+        'interventions': intervention_count / total_samples,
+        'creativity_rewards': creativity_count / total_samples,
+        'habit_corrections': {k: v / total_samples for k, v in habit_corrections.items()},
+        'generalization_gap': generalization_gap,
+        'topic_calibration': topic_calibration
     }
 
 
@@ -1020,7 +1620,7 @@ def main(args):
 
     best_acc = 0
     for epoch in range(1, args.epochs + 1):
-        train_metrics = train_day(model, train_loader, optimizer, criterion, device, pattern_to_idx)
+        train_metrics = train_day(model, train_loader, optimizer, criterion, device, pattern_to_idx, val_loader)
 
         # Sleep at end of day - consolidate experiences
         model.learner.temporal_model.sleep()
@@ -1033,8 +1633,25 @@ def main(args):
         print(f"\nDay {day} (Epoch {epoch:2d})")
         print(f"  Train: loss={train_metrics['loss']:.4f}, acc={train_metrics['accuracy']:.1%}")
         print(f"  Val: acc={val_metrics['accuracy']:.1%}")
+        gap = train_metrics.get('generalization_gap', 0)
+        if gap > 0.1:
+            print(f"  ⚠ Generalization gap: {gap:.1%} (train >> val)")
         print(f"  Teacher interventions: {train_metrics['interventions']:.1%}")
         print(f"  Internalization: {int_level:.1%}")
+
+        # Process metrics
+        print(f"  Process feedback:")
+        print(f"    Creativity rewards: {train_metrics['creativity_rewards']:.1%}")
+        print(f"    Habit corrections: {train_metrics['habit_corrections']}")
+
+        # Habit trends (if enough history)
+        trends = model.teacher.get_habit_trends()
+        if trends:
+            print(f"  Habit trends (rolling):")
+            print(f"    Good reasoning: {trends['good_reasoning_trend']:.1%}")
+            print(f"    Lucky guessing: {trends['lucky_guess_trend']:.1%}")
+            print(f"    Primary concern: {trends['primary_concern']}")
+
         print("  Per-pattern:")
         for pt in pattern_to_idx:
             print(f"    {pt:15s}: {val_metrics['per_pattern'][pt]:.1%}")
