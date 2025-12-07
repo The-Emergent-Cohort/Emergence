@@ -136,7 +136,34 @@ Explorer's lit review on pre-school foundational stages:
 
 **On attachment:** Not about reward/reinforcement - it's about *reliable, responsive relationship structure*. The system learns that a particular entity consistently responds to its signals. This reliability becomes the foundation for exploration.
 
-**Status:** Lit review complete. Ready to design phased curriculum.
+**Status:** Lit review complete. Phased curriculum designed.
+
+---
+
+### Coherence Lab Implementation Progress (Dec 7)
+
+**Location:** `/coherence-lab/`
+
+**Completed:**
+1. `curriculum-phases.md` - 6-phase curriculum design
+2. `phase1-data-spec.md` - Data generator specification
+3. `phase1_data.py` - Working data generator (10K examples)
+4. `phase1-model-spec.md` - Model architecture (~270K params)
+5. `phase1_model.py` - PyTorch implementation
+
+**Generated data in `/coherence-lab/data/`:**
+- `phase1_train.json` (9K examples)
+- `phase1_val.json` (1K examples)
+- `phase1_held_out.json` (held-out tokens 21-25)
+- `phase1_balanced.json` (reflex-balanced validation)
+
+**Blocked:** Training loop needs PyTorch environment
+
+**Next when unblocked:**
+1. Implement training loop
+2. Run Phase 1 training
+3. Validate freezing mechanism works
+4. Begin Phase 2 design
 
 ---
 
