@@ -1336,8 +1336,15 @@ def train_day(model, loader, optimizer, criterion, device, pattern_to_idx, val_l
                         overconf_on_val = val_conf[val_wrong].mean().item()
                         if overconf_on_val > 0.6:
                             # Inject overconfidence penalty into next batch
-                            # This makes the teacher aware of the generalization problem
                             habit_corrections['overconfident'] += val_wrong.sum().item()
+
+                            # FORCE frustration signal when we detect true struggle
+                            # This bypasses the learned (miscalibrated) frustration
+                            with torch.no_grad():
+                                # Inject frustration into the SelfModel
+                                # The learner doesn't "feel" frustrated, but teacher SEES struggle
+                                model.learner.self_model.frustration.weight.data += 0.1
+                                model.learner.self_model.confidence.weight.data -= 0.1
 
             model.train()
 
