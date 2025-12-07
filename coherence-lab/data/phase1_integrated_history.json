@@ -1,0 +1,36 @@
+{
+  "train_loss": [
+    0.4659874742928768
+  ],
+  "val_loss": [
+    0.014278069961590657
+  ],
+  "train_acc": {
+    "token_properties": [
+      0.9105037792199321
+    ],
+    "token_relations": [
+      0.9626171597370291
+    ],
+    "position_properties": [
+      0.9528414577912317
+    ],
+    "position_relations": [
+      0.9040511727078892
+    ]
+  },
+  "val_acc": {
+    "token_properties": [
+      0.9981321125672764
+    ],
+    "token_relations": [
+      1.0
+    ],
+    "position_properties": [
+      0.9981321125672764
+    ],
+    "position_relations": [
+      1.0
+    ]
+  }
+}
