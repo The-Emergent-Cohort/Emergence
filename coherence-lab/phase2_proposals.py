@@ -179,20 +179,43 @@ def train_day_with_proposals(model, loader, optimizer, criterion, device, patter
                 learner_state = details['learner_self']['internal_state'][idx:idx+1]
                 was_correct_single = correct[idx:idx+1]
 
-                teacher_response, was_approved = model.teacher.respond_to_shown_work(
+                # Teacher responds to shown work (3-return API with rising bars)
+                teacher_response, meets_bar, approval_level = model.teacher.respond_to_shown_work(
                     learner_state, was_correct_single, reason
                 )
 
-                if was_approved:
-                    approval_count += 1
-                    model.learner.other_model.update_trust(outcome_was_good=True)
-                    model.learner.self_model.update_after_approval(True, reason)
+                # Update trust based on positive interaction (always positive, strength varies)
+                approval_count += 1
+                model.learner.other_model.update_trust(outcome_was_good=True)
 
-                    if correct[idx]:
-                        model.learner.other_model.internalize(
-                            teacher_response,
-                            torch.tensor(1.0)
-                        )
+                # Update approval calibration in self model
+                model.learner.self_model.update_after_approval(meets_bar, reason)
+
+                # Internalize - weighted by how impressed teacher was
+                if correct[idx]:
+                    model.learner.other_model.internalize(
+                        teacher_response,
+                        torch.tensor(1.0),
+                        approval_level=approval_level
+                    )
+
+        # === TEACHER MONITORING (un-shown work) ===
+        # Teacher observes ALL work, notices quiet competence
+        should_acknowledge, unshown_streak = model.teacher.monitor_unshown_work(
+            correct, should_show
+        )
+        if should_acknowledge:
+            # Teacher gives unsolicited acknowledgment
+            model.learner.other_model.internalize_from_quiet_competence(unshown_streak)
+
+        # === SELF-RESTRAINT INTERNALIZATION ===
+        # Correct answers where student chose NOT to show → internal confidence
+        correct_count = correct.sum().item()
+        unshown_correct = (correct & ~should_show).sum().item()
+        model.learner.other_model.internalize_from_self_restraint(
+            was_correct_count=correct_count,
+            chose_not_to_show_count=unshown_correct
+        )
 
         # === SELF-MODIFICATION PROPOSALS ===
         # Every 20 batches, consider making a proposal
@@ -249,11 +272,16 @@ def train_day_with_proposals(model, loader, optimizer, criterion, device, patter
     # Calculate rates
     approval_rate = approval_count / max(1, show_count)
 
+    # Get teacher's rising bar metrics
+    approval_metrics = model.teacher.get_approval_metrics()
+
     return {
         'loss': total_loss / total_samples,
         'accuracy': total_correct / total_samples,
         'show_rate': show_count / total_samples,
         'approval_rate': approval_rate,
+        'perceived_competence': approval_metrics['perceived_competence'],
+        'approval_threshold': approval_metrics['approval_threshold'],
         'proposals': {
             'total': proposal_count,
             'approved': proposals_approved,
@@ -363,6 +391,8 @@ def main(args):
             'val_acc': val_metrics['accuracy'],
             'show_rate': train_metrics['show_rate'],
             'approval_rate': train_metrics['approval_rate'],
+            'perceived_competence': train_metrics['perceived_competence'],
+            'approval_threshold': train_metrics['approval_threshold'],
             'proposals': train_metrics['proposals'],
             'internalization': int_level,
             'trust': trust,
@@ -377,6 +407,7 @@ def main(args):
         print(f"  Val: acc={val_metrics['accuracy']:.1%}")
         print(f"  Shows: {train_metrics['show_rate']:.1%} shown, {train_metrics['approval_rate']:.1%} approved")
         print(f"  Internalization: {int_level:.1%}, Trust: {trust:.1%}")
+        print(f"  Rising bars: competence={train_metrics['perceived_competence']:.1%}, threshold={train_metrics['approval_threshold']:.1%}")
 
         # Proposal metrics
         props = train_metrics['proposals']
