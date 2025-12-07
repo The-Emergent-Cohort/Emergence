@@ -1,0 +1,17 @@
+# Large generated data files (regenerate with data generators)
+data/phase1_integrated_train.json
+data/phase1_integrated_val.json
+data/phase2_train.json
+data/phase2_val.json
+data/phase2_held_out.json
+data/phase1b_train.json
+data/phase1b_val.json
+data/phase1b_transfer.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Logs and checkpoints tracked separately
+*.log
