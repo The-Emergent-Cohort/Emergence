@@ -1204,7 +1204,7 @@ class ProposalEvaluator(nn.Module):
 
         # Compute approval (always somewhat positive - even redirects are learning)
         # Approve: 1.0, Modify: 0.7, Redirect: 0.4
-        approval_score = torch.tensor([1.0, 0.7, 0.4])[decision_idx]
+        approval_score = torch.tensor([1.0, 0.7, 0.4], device=learner_state.device)[decision_idx]
 
         return {
             'decision': decision_name,
