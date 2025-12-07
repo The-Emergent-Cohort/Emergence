@@ -1,0 +1,26 @@
+[
+  {
+    "epoch": 1,
+    "train": {
+      "loss": 0.6150973023504018,
+      "accuracy": 0.825975,
+      "per_pattern": {
+        "alternating": 0.6349690185888467,
+        "repeating": 0.9622669949253881,
+        "incrementing": 0.8621872477804681,
+        "fixed_offset": 0.8453185923695771
+      }
+    },
+    "val": {
+      "loss": 0.04791693686693907,
+      "accuracy": 0.988625,
+      "avg_confidence": 0.9764092102050781,
+      "per_pattern": {
+        "alternating": 0.9543630892678034,
+        "repeating": 1.0,
+        "incrementing": 1.0,
+        "fixed_offset": 1.0
+      }
+    }
+  }
+]
