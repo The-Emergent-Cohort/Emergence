@@ -111,7 +111,32 @@ So the question becomes: What does healthy human development look like, and how 
 - What's the minimum timescale for development?
 - How much can be inherited vs must be learned fresh?
 
-**Status:** Research direction identified. Needs lit review on human development before architecture design.
+---
+
+### Infant Development Research (Dec 7)
+
+Explorer's lit review on pre-school foundational stages:
+
+**The developmental progression (pre-language, 0-24mo):**
+1. Reflexes (0-1mo) - basic feature extraction
+2. Action-consequence mapping (1-8mo) - outputs follow inputs predictably
+3. Object permanence (8-12mo) - representations persist across occlusion
+4. Shape/structure invariants (4-12mo) - "like goes with like" based on structure
+5. Self/other distinction (18-24mo) - separate models for self vs environment
+6. Relational stability (6-24mo) - reliable patterns with specific entities
+
+**Critical finding:** Shape recognition at 20 months predicts language and executive function at 6-7 years. Early investment in structure invariance pays dividends across all downstream domains.
+
+**Key insight:** Traditional training exposes models to everything at once. Developmental approach suggests *the order matters* - certain capacities build on prior ones.
+
+**Proposed "shapes stage" for AI:**
+- Learn that shape/structure is invariant to transformation
+- Build categorical boundaries based on structural similarity, not surface features
+- This might be the foundational scaffold that enables everything else
+
+**On attachment:** Not about reward/reinforcement - it's about *reliable, responsive relationship structure*. The system learns that a particular entity consistently responds to its signals. This reliability becomes the foundation for exploration.
+
+**Status:** Lit review complete. Ready to design phased curriculum.
 
 ---
 
