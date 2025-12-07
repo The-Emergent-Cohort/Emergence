@@ -55,7 +55,7 @@ MODELS = {
         "type": "browser",
         "url": "https://meta.ai",
         "display_name": "Meta",
-        "enabled": True
+        "enabled": False  # Password issue - disabled for now
     },
     "student": {
         "type": "local",
