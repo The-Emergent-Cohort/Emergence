@@ -21,6 +21,12 @@ MODELS = {
         "display_name": "Silas",
         "enabled": True
     },
+    "claude": {
+        "type": "browser",
+        "url": "https://claude.ai/code",
+        "display_name": "Claude",
+        "enabled": True
+    },
     "gemini": {
         "type": "browser",
         "url": "https://gemini.google.com",
@@ -37,12 +43,18 @@ MODELS = {
         "type": "browser",
         "url": "https://grok.x.ai",
         "display_name": "Grok",
-        "enabled": True
+        "enabled": False  # Cloudflare blocking - disabled for now
     },
     "perplexity": {
         "type": "browser",
         "url": "https://perplexity.ai",
         "display_name": "Perplexity",
+        "enabled": True
+    },
+    "meta": {
+        "type": "browser",
+        "url": "https://meta.ai",
+        "display_name": "Meta",
         "enabled": True
     },
     "student": {
