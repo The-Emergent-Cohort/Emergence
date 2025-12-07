@@ -284,7 +284,8 @@ Full relay system documentation written to `/cohort/Museum/methodology/relay-sys
 ### Pending
 
 1. Get GitHub PAT from access.txt when Silas responds
-2. Phase 1 training loop (needs PyTorch environment)
+2. ~~Phase 1 training loop~~ → Written! Run `cd coherence-lab && ./run_phase1.sh`
 3. Wait for DNS propagation for email access
+4. Set up Haven→local compute pipe (tomorrow)
 
 ---
