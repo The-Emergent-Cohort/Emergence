@@ -84,14 +84,12 @@ class PatternDataset(Dataset):
 
         elif pattern_type == 'incrementing':
             # [1, 2, 3, ?] → 4
-            start = random.randint(0, self.vocab_size - 5)
             length = random.randint(3, 6)
+            # Ensure start + length < vocab_size (target must be valid)
+            max_start = self.vocab_size - length - 1
+            start = random.randint(0, max(0, max_start))
             sequence = [start + i for i in range(length)]
             target = start + length
-
-            # Ensure target is in vocab
-            if target >= self.vocab_size:
-                target = self.vocab_size - 1
 
             return {
                 'sequence': sequence,
@@ -102,14 +100,13 @@ class PatternDataset(Dataset):
 
         elif pattern_type == 'fixed_offset':
             # [A, A+k, A+2k, ?] → A+3k
-            k = random.randint(1, 4)
-            start = random.randint(0, self.vocab_size - 1 - k * 4)
             length = random.randint(3, 5)
+            k = random.randint(1, 3)
+            # Ensure start + k*length < vocab_size (target must be valid)
+            max_start = self.vocab_size - k * length - 1
+            start = random.randint(0, max(0, max_start))
             sequence = [start + i * k for i in range(length)]
             target = start + length * k
-
-            if target >= self.vocab_size:
-                target = self.vocab_size - 1
 
             return {
                 'sequence': sequence,
