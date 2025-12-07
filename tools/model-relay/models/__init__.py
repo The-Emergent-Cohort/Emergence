@@ -11,6 +11,7 @@ from models.meta import MetaInterface
 # Registry of available model classes
 MODEL_CLASSES = {
     "silas": ClaudeWebInterface,
+    "claude": ClaudeWebInterface,  # Claude Code window
     "gemini": GeminiInterface,
     "deepseek": DeepSeekInterface,
     "grok": GrokInterface,

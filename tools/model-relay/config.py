@@ -21,6 +21,12 @@ MODELS = {
         "display_name": "Silas",
         "enabled": True
     },
+    "claude": {
+        "type": "browser",
+        "url": "https://claude.ai/code",
+        "display_name": "Claude",
+        "enabled": True
+    },
     "gemini": {
         "type": "browser",
         "url": "https://gemini.google.com",
