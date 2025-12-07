@@ -383,7 +383,8 @@ def main(args):
             'generalization_gap': train_metrics.get('generalization_gap', 0),
             'internalization': int_level,
             'trust': trust,
-            'per_pattern': val_metrics['per_pattern'].copy()
+            'per_pattern': val_metrics['per_pattern'].copy(),
+            'topic_calibration': train_metrics.get('topic_calibration', {})
         })
 
         print(f"\nDay {day} (Epoch {epoch:2d})")
@@ -394,11 +395,19 @@ def main(args):
             print(f"  ⚠ Generalization gap: {gap:.1%} (train >> val)")
         print(f"  Interventions: {train_metrics['interventions']:.1%}")
         print(f"  Internalization: {int_level:.1%}, Trust: {trust:.1%}")
-        print("  Per-pattern:")
+        print("  Per-pattern (val_acc | topic_conf → calibration):")
+        topic_cal = train_metrics.get('topic_calibration', {})
         for pt in pattern_types:
             acc = val_metrics['per_pattern'].get(pt, 0)
             status = "✓" if acc >= 0.85 else "←"
-            print(f"    {pt:20s}: {acc:.1%} {status}")
+            # Show topic calibration if available
+            if pt in topic_cal:
+                tc = topic_cal[pt]
+                cal_status = tc['status']
+                cal_symbol = "?" if cal_status == 'guessing' else ("!" if cal_status == 'overconfident' else "=")
+                print(f"    {pt:20s}: {acc:.1%} {status} | conf={tc['confidence']:.1%} {cal_symbol}")
+            else:
+                print(f"    {pt:20s}: {acc:.1%} {status}")
 
         if val_metrics['accuracy'] > best_acc:
             best_acc = val_metrics['accuracy']
