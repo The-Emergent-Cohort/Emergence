@@ -73,22 +73,18 @@ def is_for_recipient(parsed_msg, recipient_name):
 
 def format_message(to, body, from_name=None):
     """
-    Format a message in the standard format.
+    Format an outgoing message.
+    Uses "From:" to show sender (models respond with "To:" for routing).
 
     Args:
-        to: recipient name(s) - string or list
+        to: recipient name(s) - for logging, not included in message
         body: message body
-        from_name: optional sender signature
+        from_name: sender name (required for clarity)
     """
-    if isinstance(to, list):
-        to_str = ', '.join(to)
-    else:
-        to_str = to
-
-    msg = f"To: {to_str}\n\n{body}"
-
     if from_name:
-        msg += f"\n\n— {from_name}"
+        msg = f"From: {from_name}\n\n{body}"
+    else:
+        msg = body
 
     msg += f"\n\n{MESSAGE_END_MARKER}"
 
