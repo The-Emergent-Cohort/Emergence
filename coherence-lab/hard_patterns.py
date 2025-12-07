@@ -418,14 +418,57 @@ def main(args):
                 'difficulty': args.difficulty
             }, Path(args.data_dir) / f'hard_patterns_{args.difficulty}.pt')
 
-        # Check mastery
+        # Check mastery - but require certification exam on fresh problems!
         all_good = all(
             val_metrics['per_pattern'].get(pt, 0) >= 0.85
             for pt in pattern_types
         )
         if all_good and val_metrics['accuracy'] >= 0.90:
-            print(f"\n*** Hard patterns mastered! ({val_metrics['accuracy']:.1%}) ***")
-            break
+            print(f"\n  Threshold met ({val_metrics['accuracy']:.1%}) - running certification exam...")
+
+            # Generate completely fresh problems (new seed based on epoch)
+            exam_seed = int(run_id.replace('_', '')[-4:]) + epoch * 1000
+            exam_data = HardPatternDataset(
+                n_examples=2000,  # Smaller but fresh
+                seed=exam_seed,
+                difficulty=args.difficulty
+            )
+            exam_loader = DataLoader(
+                exam_data, batch_size=args.batch_size,
+                collate_fn=collate_fn
+            )
+
+            # Evaluate on fresh exam
+            exam_metrics = evaluate(model, exam_loader, device, pattern_to_idx)
+
+            print(f"  📝 Certification Exam (seed={exam_seed}):")
+            print(f"     Overall: {exam_metrics['accuracy']:.1%}")
+            exam_all_good = True
+            for pt in pattern_types:
+                exam_acc = exam_metrics['per_pattern'].get(pt, 0)
+                status = "✓" if exam_acc >= 0.85 else "✗"
+                print(f"     {pt:20s}: {exam_acc:.1%} {status}")
+                if exam_acc < 0.85:
+                    exam_all_good = False
+
+            # Must pass fresh exam to be declared mastered
+            if exam_all_good and exam_metrics['accuracy'] >= 0.90:
+                print(f"\n*** CERTIFIED: Hard patterns mastered! ***")
+                history[-1]['certification'] = {
+                    'passed': True,
+                    'exam_seed': exam_seed,
+                    'exam_acc': exam_metrics['accuracy'],
+                    'exam_per_pattern': exam_metrics['per_pattern']
+                }
+                break
+            else:
+                print(f"  ❌ Certification failed - continue training")
+                history[-1]['certification'] = {
+                    'passed': False,
+                    'exam_seed': exam_seed,
+                    'exam_acc': exam_metrics['accuracy'],
+                    'exam_per_pattern': exam_metrics['per_pattern']
+                }
 
     print("\n" + "=" * 70)
     print(f"Difficulty: {args.difficulty}")
