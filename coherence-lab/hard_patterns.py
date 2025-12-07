@@ -23,6 +23,8 @@ from torch.utils.data import Dataset, DataLoader
 import random
 from pathlib import Path
 import argparse
+import json
+from datetime import datetime
 
 # Import the relational model
 from relational_model import (
@@ -271,13 +273,21 @@ class HardPatternDataset(Dataset):
 
 
 def main(args):
+    # Setup logging with timestamp
+    run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_dir = Path(args.data_dir) / 'runs'
+    log_dir.mkdir(exist_ok=True)
+    log_file = log_dir / f'hard_patterns_{args.difficulty}_{run_id}.json'
+
     print("=" * 70)
     print("Hard Patterns: Testing the Relational Architecture")
+    print(f"Run ID: {run_id}")
     print("=" * 70)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Device: {device}")
     print(f"Difficulty: {args.difficulty}")
+    print(f"Fresh start: {args.fresh}")
 
     # Get pattern types for this difficulty
     dummy = HardPatternDataset(n_examples=1, difficulty=args.difficulty)
@@ -286,16 +296,24 @@ def main(args):
 
     print(f"Pattern types: {pattern_types}")
 
-    # Data
-    print("\nGenerating hard pattern data...")
+    # Handle fresh start - remove existing checkpoint
+    checkpoint_path = Path(args.data_dir) / f'hard_patterns_{args.difficulty}.pt'
+    if args.fresh and checkpoint_path.exists():
+        print(f"Fresh start: removing {checkpoint_path}")
+        checkpoint_path.unlink()
+
+    # Data - use run-specific seeds when fresh to avoid easy val sets
+    train_seed = 42
+    val_seed = int(run_id.replace('_', '')[-6:]) if args.fresh else 123
+    print(f"\nGenerating hard pattern data (train_seed={train_seed}, val_seed={val_seed})...")
     train_data = HardPatternDataset(
         n_examples=args.n_train,
-        seed=42,
+        seed=train_seed,
         difficulty=args.difficulty
     )
     val_data = HardPatternDataset(
         n_examples=args.n_val,
-        seed=123,
+        seed=val_seed,
         difficulty=args.difficulty
     )
 
@@ -359,10 +377,13 @@ def main(args):
         history.append({
             'epoch': epoch,
             'train_acc': train_metrics['accuracy'],
+            'train_loss': train_metrics['loss'],
             'val_acc': val_metrics['accuracy'],
             'interventions': train_metrics['interventions'],
+            'generalization_gap': train_metrics.get('generalization_gap', 0),
             'internalization': int_level,
-            'trust': trust
+            'trust': trust,
+            'per_pattern': val_metrics['per_pattern'].copy()
         })
 
         print(f"\nDay {day} (Epoch {epoch:2d})")
@@ -403,6 +424,24 @@ def main(args):
     print(f"Final internalization: {int_level:.1%}")
     print("=" * 70)
 
+    # Save run log
+    run_log = {
+        'run_id': run_id,
+        'difficulty': args.difficulty,
+        'fresh': args.fresh,
+        'train_seed': train_seed,
+        'val_seed': val_seed,
+        'best_acc': best_acc,
+        'final_internalization': int_level,
+        'final_trust': trust,
+        'epochs_completed': len(history),
+        'args': vars(args),
+        'history': history
+    }
+    with open(log_file, 'w') as f:
+        json.dump(run_log, f, indent=2)
+    print(f"Run log saved: {log_file}")
+
     return best_acc, history
 
 
@@ -419,6 +458,8 @@ if __name__ == '__main__':
     parser.add_argument('--n-think-steps', type=int, default=5)
     parser.add_argument('--difficulty', type=str, default='medium',
                         choices=['easy', 'medium', 'hard', 'all'])
+    parser.add_argument('--fresh', action='store_true',
+                        help='Start fresh (ignore any existing checkpoints)')
 
     args = parser.parse_args()
     main(args)
