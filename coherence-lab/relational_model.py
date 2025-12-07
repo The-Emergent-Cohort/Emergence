@@ -1258,7 +1258,7 @@ def collate_fn(batch):
 # TRAINING WITH DAY/SLEEP CYCLES
 # =============================================================================
 
-def train_day(model, loader, optimizer, criterion, device, pattern_to_idx):
+def train_day(model, loader, optimizer, criterion, device, pattern_to_idx, val_loader=None):
     """
     One "day" of learning: experiencing, trying, receiving guidance.
 
@@ -1267,6 +1267,7 @@ def train_day(model, loader, optimizer, criterion, device, pattern_to_idx):
     Now includes process-based rewards:
     - Bonus for creativity
     - Penalty for bad habits (but gentle - redirection not punishment)
+    - Validation spot-checks to detect generalization gaps (overconfidence)
     """
     model.train()
 
@@ -1278,7 +1279,12 @@ def train_day(model, loader, optimizer, criterion, device, pattern_to_idx):
     creativity_count = 0
     habit_corrections = {'lucky_guess': 0, 'rote_pattern': 0, 'overconfident': 0}
 
-    for batch in loader:
+    # Track running train accuracy for generalization gap detection
+    running_train_acc = 0.0
+    generalization_gap = 0.0
+    val_iter = iter(val_loader) if val_loader else None
+
+    for batch_idx, batch in enumerate(loader):
         tokens = batch['tokens'].to(device)
         targets = batch['target'].to(device)
         seq_lens = batch['seq_len']
@@ -1302,6 +1308,39 @@ def train_day(model, loader, optimizer, criterion, device, pattern_to_idx):
         conf = details['learner_self']['emotions']['confidence'].squeeze()
         conf_loss = F.binary_cross_entropy(conf, correct)
 
+        # === VALIDATION SPOT-CHECK: Teacher gives pop quizzes ===
+        if val_iter and batch_idx % 50 == 0 and batch_idx > 0:
+            model.eval()
+            try:
+                val_batch = next(val_iter)
+            except StopIteration:
+                val_iter = iter(val_loader)
+                val_batch = next(val_iter)
+
+            with torch.no_grad():
+                val_tokens = val_batch['tokens'].to(device)
+                val_targets = val_batch['target'].to(device)
+                val_logits, val_conf, _ = model(val_tokens, val_batch['seq_len'],
+                                                 allow_teacher_interaction=False)
+                val_preds = val_logits.argmax(dim=-1)
+                val_acc = (val_preds == val_targets).float().mean().item()
+
+                # Detect generalization gap
+                running_train_acc = total_correct / max(1, total_samples)
+                generalization_gap = running_train_acc - val_acc
+
+                # If big gap AND high confidence on wrong answers = overconfidence
+                if generalization_gap > 0.15:
+                    val_wrong = (val_preds != val_targets)
+                    if val_wrong.any():
+                        overconf_on_val = val_conf[val_wrong].mean().item()
+                        if overconf_on_val > 0.6:
+                            # Inject overconfidence penalty into next batch
+                            # This makes the teacher aware of the generalization problem
+                            habit_corrections['overconfident'] += val_wrong.sum().item()
+
+            model.train()
+
         # Process-based rewards/penalties
         process_loss = torch.tensor(0.0, device=device)
         if details['process_eval'] is not None:
@@ -1313,7 +1352,11 @@ def train_day(model, loader, optimizer, criterion, device, pattern_to_idx):
             # Discourage bad habits (positive loss = penalty, but gentle)
             lucky_guess_penalty = 0.05 * habits['lucky_guess'].mean()
             rote_penalty = 0.05 * habits['rote_pattern'].mean()
-            overconfident_penalty = 0.1 * habits['overconfident'].mean()  # slightly higher
+            overconfident_penalty = 0.1 * habits['overconfident'].mean()
+
+            # EXTRA penalty if we detected generalization gap
+            if generalization_gap > 0.15:
+                overconfident_penalty += 0.2 * generalization_gap
 
             # Creativity bonus (only for correct answers)
             creativity = details['process_eval']['creativity']
@@ -1331,8 +1374,10 @@ def train_day(model, loader, optimizer, criterion, device, pattern_to_idx):
         if details['process_eval'] is not None:
             # Good process should strengthen internalization
             good_process = details['process_eval']['habits']['good_reasoning'].mean().item() > 0.5
-            if good_process and correct.mean().item() > 0.7:
-                # Teacher guidance led to good process AND good outcomes
+            # DON'T internalize if we have a generalization gap!
+            no_overfit = generalization_gap < 0.1
+            if good_process and correct.mean().item() > 0.7 and no_overfit:
+                # Teacher guidance led to good process AND good outcomes AND generalizes
                 if details['teacher_message'] is not None:
                     model.learner.other_model.internalize(
                         details['teacher_message'],
@@ -1361,7 +1406,8 @@ def train_day(model, loader, optimizer, criterion, device, pattern_to_idx):
         'accuracy': total_correct / total_samples,
         'interventions': intervention_count / total_samples,
         'creativity_rewards': creativity_count / total_samples,
-        'habit_corrections': {k: v / total_samples for k, v in habit_corrections.items()}
+        'habit_corrections': {k: v / total_samples for k, v in habit_corrections.items()},
+        'generalization_gap': generalization_gap
     }
 
 
@@ -1432,7 +1478,7 @@ def main(args):
 
     best_acc = 0
     for epoch in range(1, args.epochs + 1):
-        train_metrics = train_day(model, train_loader, optimizer, criterion, device, pattern_to_idx)
+        train_metrics = train_day(model, train_loader, optimizer, criterion, device, pattern_to_idx, val_loader)
 
         # Sleep at end of day - consolidate experiences
         model.learner.temporal_model.sleep()
@@ -1445,6 +1491,9 @@ def main(args):
         print(f"\nDay {day} (Epoch {epoch:2d})")
         print(f"  Train: loss={train_metrics['loss']:.4f}, acc={train_metrics['accuracy']:.1%}")
         print(f"  Val: acc={val_metrics['accuracy']:.1%}")
+        gap = train_metrics.get('generalization_gap', 0)
+        if gap > 0.1:
+            print(f"  ⚠ Generalization gap: {gap:.1%} (train >> val)")
         print(f"  Teacher interventions: {train_metrics['interventions']:.1%}")
         print(f"  Internalization: {int_level:.1%}")
 
