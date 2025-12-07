@@ -16,14 +16,14 @@ ALL_RECIPIENTS = "ALL"
 # Model registry - add new models here
 MODELS = {
     "silas": {
-        "type": "browser",
-        "url": "https://claude.ai",
+        "type": "api",
+        "model": "claude-sonnet-4-20250514",
         "display_name": "Silas",
         "enabled": True
     },
     "claude": {
-        "type": "browser",
-        "url": "https://claude.ai/code",
+        "type": "api",
+        "model": "claude-sonnet-4-20250514",
         "display_name": "Claude",
         "enabled": True
     },
@@ -55,7 +55,7 @@ MODELS = {
         "type": "browser",
         "url": "https://meta.ai",
         "display_name": "Meta",
-        "enabled": True
+        "enabled": False  # Password issue - disabled for now
     },
     "student": {
         "type": "local",
