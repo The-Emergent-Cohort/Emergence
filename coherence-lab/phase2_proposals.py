@@ -450,6 +450,7 @@ def main(args):
 
     # Save log
     run_log = {
+        'script': 'phase2_proposals.py',
         'run_id': run_id,
         'best_acc': best_acc,
         'final_trust': trust,

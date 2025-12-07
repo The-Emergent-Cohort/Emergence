@@ -498,6 +498,7 @@ def main(args):
 
     # Save run log
     run_log = {
+        'script': 'hard_patterns.py',
         'run_id': run_id,
         'difficulty': args.difficulty,
         'fresh': args.fresh,
