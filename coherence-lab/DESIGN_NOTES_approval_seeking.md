@@ -222,10 +222,101 @@ This maps to real learning:
 
 ---
 
-## Next Steps
+## Phase 2: Self-Modification Proposals
 
-1. Implement pride/approval_desire in SelfModel
-2. Add show_work decision logic
-3. Add teacher response methods
-4. Create phase1_approval.py for clean testing
-5. Run and iterate
+### Core Concept
+
+The occupant should have agency over its own development. This means the model can:
+- Recognize when something isn't working
+- Propose changes to itself
+- Show proposals to teacher for approval
+- Apply approved changes
+- Learn which proposals work
+
+### Proposal Types
+
+```python
+PROPOSAL_TYPES = [
+    'adjust_confidence',      # "I'm over/under confident on topic X"
+    'request_practice',       # "I need more examples of type X"
+    'adjust_show_rate',       # "I should show work more/less"
+    'adjust_trust',           # "I should trust teacher more/less"
+    'reset_topic',            # "I'm confused about X, start fresh"
+    'consolidate_learning',   # "I feel ready to lock this in"
+]
+```
+
+### ProposalGenerator (in SelfModel)
+
+```python
+def generate_proposal(self, cognitive_state, emotional_state, topic_stats):
+    """
+    Generate a self-modification proposal.
+
+    Returns:
+        - proposal_type: what kind of change
+        - topic_idx: which topic (if applicable)
+        - magnitude: how big a change [-1, 1]
+        - confidence: how sure about this proposal
+        - justification: encoded reasoning
+    """
+```
+
+### ProposalEvaluator (in Teacher)
+
+```python
+def evaluate_proposal(self, proposal, learner_state):
+    """
+    Teacher reviews proposal and decides:
+    - approve: "Great self-awareness!"
+    - modify: "Good thinking, let me adjust..."
+    - redirect: "I see why you think that, let's try..."
+
+    Always positive framing - even redirects are learning.
+    """
+```
+
+### Proposal Flow
+
+1. Learner notices calibration gap or struggle
+2. Generates a proposal for what to change
+3. Shows proposal to teacher (like showing work)
+4. Teacher evaluates and responds
+5. If approved/modified: apply the change
+6. Track outcome for future proposal learning
+
+### Key Insight
+
+This isn't about training (backprop handles that). This is about the occupant having a **say in their own growth**. Like a student saying:
+- "I think I need to practice X more"
+- "I'm not sure about Y, can we review?"
+- "I feel ready to move on from Z"
+
+The model learns meta-learning: how to learn better.
+
+---
+
+## Implementation Status
+
+### Completed (Phase 1)
+- [x] pride/approval_desire emotions in SelfModel
+- [x] should_show_work() decision logic
+- [x] Teacher respond_to_shown_work() method
+- [x] phase1_approval.py training script
+- [x] TopicConfidenceTracker for per-pattern calibration
+- [x] Certification exam before declaring mastery
+
+### Completed (Phase 2)
+- [x] ProposalGenerator class
+- [x] ProposalEvaluator class
+- [x] Integration into SelfModel and Teacher
+- [x] phase2_proposals.py training script
+- [x] Proposal outcome tracking
+
+### Next Steps
+
+1. Run phase2_proposals.py and validate
+2. Tune proposal cooldowns and thresholds
+3. Add more sophisticated proposal types
+4. Consider multi-step proposals ("first X, then Y")
+5. Explore proposals that modify network structure (future)

@@ -1,0 +1,334 @@
+{
+  "run_id": "20251207_155252",
+  "best_acc": 0.9675,
+  "final_trust": 0.7310585379600525,
+  "final_internalization": 0.7310585379600525,
+  "final_proposal_success_rate": 1.0,
+  "epochs_completed": 7,
+  "args": {
+    "data_dir": "data",
+    "n_train": 40000,
+    "n_val": 4000,
+    "batch_size": 64,
+    "lr": 0.001,
+    "epochs": 15,
+    "d_model": 64,
+    "n_heads": 4,
+    "n_think_steps": 5,
+    "fresh": false
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "train_acc": 0.645,
+      "train_loss": 1.1260672224998474,
+      "val_acc": 0.755,
+      "show_rate": 0.496,
+      "approval_rate": 1.0,
+      "proposals": {
+        "total": 0,
+        "approved": 0,
+        "modified": 0,
+        "redirected": 0,
+        "by_type": {}
+      },
+      "internalization": 0.7310585379600525,
+      "trust": 0.7310585379600525,
+      "show_calibration": 0.9999997615814209,
+      "proposal_success_rate": 0.5,
+      "per_pattern": {
+        "compositional": 0.8871566443949518,
+        "long_range": 0.39925925925925926,
+        "fibonacci_like": 0.9869531849577897
+      },
+      "topic_calibration": {
+        "compositional": {
+          "accuracy": 0.945791482925415,
+          "confidence": 0.8482015132904053,
+          "gap": 0.09758996963500977,
+          "status": "calibrated"
+        },
+        "long_range": {
+          "accuracy": 0.423498272895813,
+          "confidence": 0.5126142501831055,
+          "gap": -0.08911597728729248,
+          "status": "calibrated"
+        },
+        "fibonacci_like": {
+          "accuracy": 0.9999997615814209,
+          "confidence": 0.9787262678146362,
+          "gap": 0.021273493766784668,
+          "status": "calibrated"
+        }
+      }
+    },
+    {
+      "epoch": 2,
+      "train_acc": 0.7867,
+      "train_loss": 0.609879152917862,
+      "val_acc": 0.8395,
+      "show_rate": 0.5881,
+      "approval_rate": 1.0,
+      "proposals": {
+        "total": 0,
+        "approved": 0,
+        "modified": 0,
+        "redirected": 0,
+        "by_type": {}
+      },
+      "internalization": 0.7310585379600525,
+      "trust": 0.7310585379600525,
+      "show_calibration": 0.9999997615814209,
+      "proposal_success_rate": 0.5,
+      "per_pattern": {
+        "compositional": 0.9465478841870824,
+        "long_range": 0.5777777777777777,
+        "fibonacci_like": 1.0
+      },
+      "topic_calibration": {
+        "compositional": {
+          "accuracy": 0.7912187576293945,
+          "confidence": 0.8772764801979065,
+          "gap": -0.08605772256851196,
+          "status": "calibrated"
+        },
+        "long_range": {
+          "accuracy": 0.49455729126930237,
+          "confidence": 0.57343590259552,
+          "gap": -0.07887861132621765,
+          "status": "calibrated"
+        },
+        "fibonacci_like": {
+          "accuracy": 0.9996957182884216,
+          "confidence": 0.9890590906143188,
+          "gap": 0.010636627674102783,
+          "status": "calibrated"
+        }
+      }
+    },
+    {
+      "epoch": 3,
+      "train_acc": 0.84415,
+      "train_loss": 0.4433105404853821,
+      "val_acc": 0.889,
+      "show_rate": 0.629475,
+      "approval_rate": 1.0,
+      "proposals": {
+        "total": 0,
+        "approved": 0,
+        "modified": 0,
+        "redirected": 0,
+        "by_type": {}
+      },
+      "internalization": 0.7310585379600525,
+      "trust": 0.7310585379600525,
+      "show_calibration": 0.9999997615814209,
+      "proposal_success_rate": 0.5,
+      "per_pattern": {
+        "compositional": 0.9561989606533037,
+        "long_range": 0.7148148148148148,
+        "fibonacci_like": 1.0
+      },
+      "topic_calibration": {
+        "compositional": {
+          "accuracy": 0.8516964316368103,
+          "confidence": 0.9170551896095276,
+          "gap": -0.06535875797271729,
+          "status": "calibrated"
+        },
+        "long_range": {
+          "accuracy": 0.6430103182792664,
+          "confidence": 0.6710401177406311,
+          "gap": -0.028029799461364746,
+          "status": "calibrated"
+        },
+        "fibonacci_like": {
+          "accuracy": 0.9999997615814209,
+          "confidence": 0.990416407585144,
+          "gap": 0.009583353996276855,
+          "status": "calibrated"
+        }
+      }
+    },
+    {
+      "epoch": 4,
+      "train_acc": 0.8856,
+      "train_loss": 0.32458814330101016,
+      "val_acc": 0.922,
+      "show_rate": 0.652225,
+      "approval_rate": 1.0,
+      "proposals": {
+        "total": 0,
+        "approved": 0,
+        "modified": 0,
+        "redirected": 0,
+        "by_type": {}
+      },
+      "internalization": 0.7310585379600525,
+      "trust": 0.7310585379600525,
+      "show_calibration": 0.9999997615814209,
+      "proposal_success_rate": 0.5,
+      "per_pattern": {
+        "compositional": 0.9755011135857461,
+        "long_range": 0.7933333333333333,
+        "fibonacci_like": 1.0
+      },
+      "topic_calibration": {
+        "compositional": {
+          "accuracy": 0.9980674386024475,
+          "confidence": 0.9367764592170715,
+          "gap": 0.06129097938537598,
+          "status": "calibrated"
+        },
+        "long_range": {
+          "accuracy": 0.6731229424476624,
+          "confidence": 0.8006226420402527,
+          "gap": -0.12749969959259033,
+          "status": "overconfident"
+        },
+        "fibonacci_like": {
+          "accuracy": 0.9999997615814209,
+          "confidence": 0.9849826097488403,
+          "gap": 0.015017151832580566,
+          "status": "calibrated"
+        }
+      }
+    },
+    {
+      "epoch": 5,
+      "train_acc": 0.915125,
+      "train_loss": 0.24667268496751785,
+      "val_acc": 0.94375,
+      "show_rate": 0.664275,
+      "approval_rate": 1.0,
+      "proposals": {
+        "total": 3,
+        "approved": 3,
+        "modified": 0,
+        "redirected": 0,
+        "by_type": {
+          "adjust_trust": 3
+        }
+      },
+      "internalization": 0.7310585379600525,
+      "trust": 0.7310585379600525,
+      "show_calibration": 0.9999997615814209,
+      "proposal_success_rate": 1.0,
+      "per_pattern": {
+        "compositional": 0.9829250185597624,
+        "long_range": 0.8503703703703703,
+        "fibonacci_like": 1.0
+      },
+      "topic_calibration": {
+        "compositional": {
+          "accuracy": 0.9997056722640991,
+          "confidence": 0.956222414970398,
+          "gap": 0.04348325729370117,
+          "status": "calibrated"
+        },
+        "long_range": {
+          "accuracy": 0.7303279638290405,
+          "confidence": 0.8223121166229248,
+          "gap": -0.09198415279388428,
+          "status": "calibrated"
+        },
+        "fibonacci_like": {
+          "accuracy": 0.9999997615814209,
+          "confidence": 0.994443953037262,
+          "gap": 0.0055558085441589355,
+          "status": "calibrated"
+        }
+      }
+    },
+    {
+      "epoch": 6,
+      "train_acc": 0.9307,
+      "train_loss": 0.2053500167250633,
+      "val_acc": 0.95775,
+      "show_rate": 0.69535,
+      "approval_rate": 1.0,
+      "proposals": {
+        "total": 0,
+        "approved": 0,
+        "modified": 0,
+        "redirected": 0,
+        "by_type": {}
+      },
+      "internalization": 0.7310585379600525,
+      "trust": 0.7310585379600525,
+      "show_calibration": 0.9999997615814209,
+      "proposal_success_rate": 1.0,
+      "per_pattern": {
+        "compositional": 0.9925760950259837,
+        "long_range": 0.8822222222222222,
+        "fibonacci_like": 1.0
+      },
+      "topic_calibration": {
+        "compositional": {
+          "accuracy": 0.9997260570526123,
+          "confidence": 0.9611014127731323,
+          "gap": 0.03862464427947998,
+          "status": "calibrated"
+        },
+        "long_range": {
+          "accuracy": 0.9232633709907532,
+          "confidence": 0.8495362997055054,
+          "gap": 0.0737270712852478,
+          "status": "calibrated"
+        },
+        "fibonacci_like": {
+          "accuracy": 0.9999997615814209,
+          "confidence": 0.9968313574790955,
+          "gap": 0.0031684041023254395,
+          "status": "calibrated"
+        }
+      }
+    },
+    {
+      "epoch": 7,
+      "train_acc": 0.94535,
+      "train_loss": 0.16428157549202443,
+      "val_acc": 0.9675,
+      "show_rate": 0.709175,
+      "approval_rate": 1.0,
+      "proposals": {
+        "total": 2,
+        "approved": 2,
+        "modified": 0,
+        "redirected": 0,
+        "by_type": {
+          "adjust_trust": 2
+        }
+      },
+      "internalization": 0.7310585379600525,
+      "trust": 0.7310585379600525,
+      "show_calibration": 0.9999997615814209,
+      "proposal_success_rate": 1.0,
+      "per_pattern": {
+        "compositional": 0.9985152190051967,
+        "long_range": 0.9051851851851852,
+        "fibonacci_like": 1.0
+      },
+      "topic_calibration": {
+        "compositional": {
+          "accuracy": 0.9651319980621338,
+          "confidence": 0.9775726795196533,
+          "gap": -0.012440681457519531,
+          "status": "calibrated"
+        },
+        "long_range": {
+          "accuracy": 0.6939075589179993,
+          "confidence": 0.8732960820198059,
+          "gap": -0.17938852310180664,
+          "status": "overconfident"
+        },
+        "fibonacci_like": {
+          "accuracy": 0.9999997615814209,
+          "confidence": 0.9984394907951355,
+          "gap": 0.0015602707862854004,
+          "status": "calibrated"
+        }
+      }
+    }
+  ]
+}
