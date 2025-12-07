@@ -649,16 +649,27 @@ class OtherModel(nn.Module):
 
         If following the teacher's guidance led to good outcomes,
         trust increases. If not, trust decreases (but doesn't go negative).
+
+        NOTE: No clamping here - sigmoid is applied when reading trust,
+        which naturally bounds output to [0, 1]. This allows trust to
+        grow stronger over time without saturation.
         """
         with torch.no_grad():
             delta = 0.1 if outcome_was_good else -0.05
-            self.trust.data = torch.clamp(self.trust.data + delta, 0.0, 1.0)
+            # Allow trust to go negative but not too far (soft floor at -3)
+            # sigmoid(-3) ≈ 0.05, sigmoid(3) ≈ 0.95
+            new_val = self.trust.data + delta
+            self.trust.data = torch.clamp(new_val, -3.0, 5.0)  # Wide range for sigmoid
 
     def internalize(self, teacher_message, outcome):
         """
         Internalize the teacher's pattern when guidance leads to good outcomes.
 
         The external teacher gradually becomes the inner voice.
+
+        NOTE: No clamping to [0, 1] - sigmoid is applied when reading,
+        which naturally bounds output. This allows internalization to
+        grow stronger over time without saturation.
         """
         with torch.no_grad():
             if outcome > 0.5:  # Good outcome
@@ -666,10 +677,10 @@ class OtherModel(nn.Module):
                 alpha = 0.1
                 self.teacher_pattern_memory = (1 - alpha) * self.teacher_pattern_memory + \
                                                alpha * teacher_message.mean(dim=0, keepdim=True)
-                # Increase internalization level
-                self.internalization_level.data = torch.clamp(
-                    self.internalization_level.data + 0.01, 0.0, 1.0
-                )
+                # Increase internalization level (wide range for sigmoid)
+                # sigmoid(-3) ≈ 0.05, sigmoid(3) ≈ 0.95
+                new_val = self.internalization_level.data + 0.01
+                self.internalization_level.data = torch.clamp(new_val, -3.0, 5.0)
 
     def consult_inner_guide(self, self_state):
         """

@@ -146,18 +146,38 @@ class HardPatternDataset(Dataset):
 
     def _gen_long_range(self):
         """
-        Long range: Answer depends on position far back
-        Example: [A, x, x, x, x, ?] → A (copy from position 0)
+        Long range: Answer depends on a value placed earlier in sequence.
+
+        The anchor is placed at a RANDOM position (not always 0), and the
+        target is anchor + 1 (mod vocab_size). Model must:
+        1. Find the anchor (the only value that appears exactly once)
+        2. Output anchor + 1
+
+        This requires tracking value frequencies across the sequence.
         """
-        anchor = random.randint(0, self.vocab_size - 1)
-        length = random.randint(5, 9)
+        length = random.randint(6, 10)
+        anchor = random.randint(0, self.vocab_size - 2)  # Leave room for +1
+        anchor_pos = random.randint(0, length - 3)  # Not at the very end
 
-        # Fill with distractors
-        seq = [random.randint(0, self.vocab_size - 1) for _ in range(length)]
-        seq[0] = anchor  # Anchor at position 0
+        # Fill with distractor pairs (each value appears twice)
+        distractors = []
+        while len(distractors) < (length - 1) * 2:
+            d = random.randint(0, self.vocab_size - 1)
+            if d != anchor and d != anchor + 1:
+                distractors.append(d)
+                distractors.append(d)  # Each distractor appears twice
 
-        # Target is the anchor
-        target = anchor
+        # Build sequence: pick from distractors, insert anchor once
+        random.shuffle(distractors)
+        seq = distractors[:length - 1]
+        random.shuffle(seq)  # Shuffle again so pairs aren't adjacent
+
+        # Insert anchor at random position
+        seq.insert(anchor_pos, anchor)
+        seq = seq[:length]  # Ensure correct length
+
+        # Target is anchor + 1 (not just copy)
+        target = (anchor + 1) % self.vocab_size
 
         return {'sequence': seq, 'target': target, 'pattern_type': 'long_range'}
 
