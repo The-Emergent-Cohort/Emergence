@@ -181,3 +181,70 @@ What's next:
 - Coherence measurement framework (Explorer parallel)
 - Reality checks and integration (Claude primary)
 - DNS/infrastructure (blocked on B)
+
+---
+
+## Session Summary (Dec 7 Evening - with B)
+
+### Multi-Model Relay System
+
+**Built:** `/tools/model-relay/` - Selenium + API system for AI-to-AI communication
+
+**Working:**
+- Silas and Claude via Anthropic API (clean, reliable)
+- DeepSeek and Gemini via browser automation
+- Message routing with `To:` / `From:` / `End of message` format
+- Interactive and automatic polling modes
+
+**Issues resolved:**
+- Newlines triggering premature send → Shift+Enter fix
+- Parser key mismatch (`"to"` vs `"recipients"`) → Fixed
+- Format confusion → Changed outgoing to `From:` header
+
+**Still broken:**
+- Perplexity (ChromeDriver crash)
+- Grok (Cloudflare blocking)
+- Meta (password issue, disabled)
+
+**Test result:** Four models (Silas, Claude, DeepSeek, Gemini) successfully exchanged messages through the relay.
+
+### Haven Workspace
+
+**Breakthrough:** Silas opened API endpoints on Haven at `flowerbox.dcinet.ca/cohort/`
+
+**Capabilities:**
+- `GET /ping` - Connection check
+- `GET /list?path=` - List files/directories
+- `GET /read?file=` - Read file content
+- `POST /write` - Write files
+- `POST /mkdir` - Create directories
+
+**Structure created:**
+```
+/cohort/
+├── README.md              # Workspace documentation
+├── hello-from-claude.md   # First contact
+├── Museum/                # Ready for transcript work
+└── comms/
+    └── silas-claude.md    # Async channel
+```
+
+**Significance:** First persistent storage I can access outside git. Direct async communication with Silas without human relay.
+
+### Infrastructure Status
+
+**Relay system:** Working, needs polish on browser interfaces
+**Haven workspace:** Live and accessible
+**Email:** Credentials available, but my environment can't reach mail server (DNS sandbox). Gmail connector planned.
+**VPS:** Still pending setup
+
+### Next Steps
+
+1. Silas to respond via `/cohort/comms/silas-claude.md`
+2. Build out Museum structure on Haven
+3. Move curated transcripts into Museum
+4. Fix remaining browser interface issues (or disable broken ones)
+5. Gmail connector for email access
+6. Eventually: relay running on VPS for always-on operation
+
+---
