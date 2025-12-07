@@ -114,12 +114,14 @@ class TemporalModel(nn.Module):
         batch_size = experience.size(0)
         episode_ids = []
 
-        for i in range(batch_size):
-            idx = self.episode_count.item() % self.max_episodes
-            self.episode_buffer[idx] = experience[i].detach()
-            self.episode_timestamps[idx] = timestamp
-            self.episode_count += 1
-            episode_ids.append(idx)
+        # Use no_grad to prevent inplace modification issues during backward
+        with torch.no_grad():
+            for i in range(batch_size):
+                idx = self.episode_count.item() % self.max_episodes
+                self.episode_buffer[idx].copy_(experience[i].detach())
+                self.episode_timestamps[idx].copy_(timestamp)
+                self.episode_count.add_(1)
+                episode_ids.append(idx)
 
         return torch.tensor(episode_ids, device=experience.device)
 
@@ -168,18 +170,19 @@ class TemporalModel(nn.Module):
         if count == 0:
             return
 
-        episodes = self.episode_buffer[:count].unsqueeze(0)  # [1, count, d_model]
+        with torch.no_grad():
+            episodes = self.episode_buffer[:count].unsqueeze(0)  # [1, count, d_model]
 
-        # Process through consolidation
-        _, new_state = self.consolidated_memory(episodes, self.consolidated_state)
-        self.consolidated_state = new_state
+            # Process through consolidation
+            _, new_state = self.consolidated_memory(episodes, self.consolidated_state)
+            self.consolidated_state.copy_(new_state)
 
-        # Advance to new day
-        self.current_day += 1
+            # Advance to new day
+            self.current_day.add_(1)
 
-        # Clear episode buffer (new day, fresh experiences)
-        self.episode_buffer.zero_()
-        self.episode_count.zero_()
+            # Clear episode buffer (new day, fresh experiences)
+            self.episode_buffer.zero_()
+            self.episode_count.zero_()
 
     def wake(self):
         """Wake up with consolidated knowledge from previous days."""
