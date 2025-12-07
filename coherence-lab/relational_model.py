@@ -352,6 +352,15 @@ class SelfModel(nn.Module):
         self.confidence = nn.Linear(d_model, 1)  # How sure am I?
         self.frustration = nn.Linear(d_model, 1)  # How stuck am I?
         self.curiosity = nn.Linear(d_model, 1)   # How interested am I?
+        self.pride = nn.Linear(d_model, 1)       # Did I do something worth showing?
+        self.approval_desire = nn.Linear(d_model, 1)  # Do I want feedback?
+
+        # Approval-seeking calibration (learned over time)
+        # Tracks: when is showing work valuable vs unnecessary?
+        self.register_buffer('show_calibration', torch.tensor(0.5))  # Start neutral
+        self.register_buffer('streak_count', torch.tensor(0))  # Current correct streak
+        self.register_buffer('total_shows', torch.tensor(0))
+        self.register_buffer('approved_shows', torch.tensor(0))
 
         # Topic-specific confidence tracking
         # "I'm 65% confident on fibonacci, but scoring 75% - some are guesses"
@@ -381,7 +390,9 @@ class SelfModel(nn.Module):
         emotions = {
             'confidence': torch.sigmoid(self.confidence(internal)),
             'frustration': torch.sigmoid(self.frustration(internal)),
-            'curiosity': torch.sigmoid(self.curiosity(internal))
+            'curiosity': torch.sigmoid(self.curiosity(internal)),
+            'pride': torch.sigmoid(self.pride(internal)),
+            'approval_desire': torch.sigmoid(self.approval_desire(internal))
         }
 
         if goal is not None:
@@ -403,6 +414,73 @@ class SelfModel(nn.Module):
                                        device=experience.device)
         _, new_memory = self.experience_memory(exp, memory_state)
         return new_memory
+
+    def should_show_work(self, was_correct, is_creative, confidence, internalization_level):
+        """
+        Decide whether to present work to teacher for approval.
+
+        Student shows when:
+        - Creative approach (novel path to answer)
+        - Streak of correct answers (3+)
+        - Uncertain but correct (seeking validation)
+        - Sometimes spontaneously (learning the dynamic)
+
+        NOT every correct answer - calibration develops over time.
+        """
+        batch_size = was_correct.size(0)
+        device = was_correct.device
+
+        should_show = torch.zeros(batch_size, dtype=torch.bool, device=device)
+        show_reasons = ['none'] * batch_size
+
+        with torch.no_grad():
+            for i in range(batch_size):
+                # Update streak
+                if was_correct[i]:
+                    self.streak_count += 1
+                else:
+                    self.streak_count.zero_()
+
+                reason = None
+
+                # Creative and correct → definitely show
+                if is_creative[i] and was_correct[i]:
+                    reason = 'creative'
+
+                # Streak of 3+ → show pride
+                elif self.streak_count >= 3 and was_correct[i]:
+                    reason = 'streak'
+                    self.streak_count.zero_()  # Reset after showing
+
+                # Uncertain but correct → seeking validation
+                elif was_correct[i] and confidence[i] < 0.5:
+                    reason = 'validation'
+
+                # Spontaneous (decreases as internalization grows)
+                elif was_correct[i]:
+                    spontaneous_rate = 0.15 * (1.0 - internalization_level)
+                    if torch.rand(1).item() < spontaneous_rate:
+                        reason = 'spontaneous'
+
+                if reason is not None:
+                    should_show[i] = True
+                    show_reasons[i] = reason
+
+        return should_show, show_reasons
+
+    def update_after_approval(self, was_approved, show_reason):
+        """
+        Update approval-seeking calibration after teacher response.
+
+        If teacher approved, reinforce this type of showing.
+        """
+        with torch.no_grad():
+            self.total_shows += 1
+            if was_approved:
+                self.approved_shows += 1
+                # Update calibration based on approval rate
+                approval_rate = self.approved_shows.float() / self.total_shows.float()
+                self.show_calibration = 0.9 * self.show_calibration + 0.1 * approval_rate
 
 
 # =============================================================================
@@ -1136,6 +1214,34 @@ class RelationalTeacher(nn.Module):
         combined = torch.cat([habit_encoding, learner_state], dim=-1)
         correction_content = self.habit_correction_generator(combined)
         return self.comm_channel.send(correction_content, 2)  # hint type
+
+    def respond_to_shown_work(self, learner_state, was_correct, show_reason):
+        """
+        Respond when student presents work for approval.
+
+        ALWAYS positive framing, even for corrections.
+        "Great that you're showing me!" / "Good thinking!" / "Let's look at this together..."
+        """
+        if was_correct.any():
+            if show_reason == 'creative':
+                # Acknowledge creativity, channel appropriately
+                # "That's an interesting approach!"
+                return self.generate_creativity_reward(learner_state), True
+            elif show_reason == 'streak':
+                # Celebrate the streak
+                # "You're really getting this!"
+                return self.generate_encouragement(learner_state), True
+            elif show_reason == 'validation':
+                # Confirm their uncertain answer was right
+                # "Yes, you got it!"
+                return self.generate_encouragement(learner_state), True
+            else:  # spontaneous
+                # Simple approval
+                return self.generate_encouragement(learner_state), True
+        else:
+            # Wrong but showed - still positive! Builds trust that it's safe to show
+            # "Good that you're checking! Let's look at this together..."
+            return self.generate_encouragement(learner_state), True  # Still approved!
 
     def evaluate_learner_process(self, states_history, confidence, was_correct, pattern_type_idx):
         """
