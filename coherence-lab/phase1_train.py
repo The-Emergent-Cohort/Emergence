@@ -32,8 +32,14 @@ class ReflexDataset(Dataset):
         self.examples = []
 
         with open(data_path, 'r') as f:
-            for line in f:
-                self.examples.append(json.loads(line.strip()))
+            content = f.read().strip()
+            # Handle both JSON array and JSONL formats
+            if content.startswith('['):
+                self.examples = json.loads(content)
+            else:
+                for line in content.split('\n'):
+                    if line.strip():
+                        self.examples.append(json.loads(line.strip()))
 
     def __len__(self):
         return len(self.examples)
