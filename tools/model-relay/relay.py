@@ -133,7 +133,7 @@ class ModelRelay:
             print(f"[{from_name}] Response not in routing format, skipping")
             return
 
-        recipients = parsed.get("to", [])
+        recipients = parsed.get("recipients", [])
         body = parsed.get("body", "")
 
         if not recipients or not body:
