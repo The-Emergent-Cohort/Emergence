@@ -423,13 +423,13 @@ class SelfModel(nn.Module):
         """
         Decide whether to present work to teacher for approval.
 
-        Student shows when:
-        - Creative approach (novel path to answer)
-        - Streak of correct answers (3+)
-        - Uncertain but correct (seeking validation)
-        - Sometimes spontaneously (learning the dynamic)
+        === RISING SHOW BAR ===
+        As internalization grows, student becomes more selective:
+        - Early: show often, learn the approval dynamic
+        - Later: only show genuinely interesting/uncertain work
+        - Mature: rarely show routine work, self-validated
 
-        NOT every correct answer - calibration develops over time.
+        This is the student's internal standard developing.
         """
         batch_size = was_correct.size(0)
         device = was_correct.device
@@ -438,6 +438,18 @@ class SelfModel(nn.Module):
         show_reasons = ['none'] * batch_size
 
         with torch.no_grad():
+            # === RISING THRESHOLDS ===
+            # Streak threshold rises: 3 → 5 → 7 as internalization grows
+            streak_threshold = 3 + int(4 * internalization_level)
+
+            # Confidence threshold for validation-seeking rises
+            # Early: seek validation when confidence < 0.5
+            # Later: only seek validation when really uncertain (< 0.3)
+            validation_conf_threshold = 0.5 - 0.2 * internalization_level
+
+            # Spontaneous rate decreases more steeply
+            spontaneous_rate = 0.15 * (1.0 - internalization_level) ** 2
+
             for i in range(batch_size):
                 # Update streak
                 if was_correct[i]:
@@ -447,22 +459,26 @@ class SelfModel(nn.Module):
 
                 reason = None
 
-                # Creative and correct → definitely show
+                # Creative and correct → always worth showing
+                # (But later, we might distinguish "truly creative" vs "just different")
                 if is_creative[i] and was_correct[i]:
                     reason = 'creative'
 
-                # Streak of 3+ → show pride
-                elif self.streak_count >= 3 and was_correct[i]:
+                # Streak shows pride - but bar rises with internalization
+                # Early: 3 in a row is exciting!
+                # Later: need 5-7 in a row to feel worth sharing
+                elif self.streak_count >= streak_threshold and was_correct[i]:
                     reason = 'streak'
                     self.streak_count.zero_()  # Reset after showing
 
                 # Uncertain but correct → seeking validation
-                elif was_correct[i] and confidence[i] < 0.5:
+                # Early: show when not sure (confidence < 0.5)
+                # Later: only show when VERY unsure (threshold drops)
+                elif was_correct[i] and confidence[i] < validation_conf_threshold:
                     reason = 'validation'
 
-                # Spontaneous (decreases as internalization grows)
+                # Spontaneous showing - decreases rapidly with internalization
                 elif was_correct[i]:
-                    spontaneous_rate = 0.15 * (1.0 - internalization_level)
                     if torch.rand(1).item() < spontaneous_rate:
                         reason = 'spontaneous'
 
@@ -661,25 +677,64 @@ class OtherModel(nn.Module):
             new_val = self.trust.data + delta
             self.trust.data = torch.clamp(new_val, -3.0, 5.0)  # Wide range for sigmoid
 
-    def internalize(self, teacher_message, outcome):
+    def internalize(self, teacher_message, outcome, approval_level=1.0):
         """
         Internalize the teacher's pattern when guidance leads to good outcomes.
 
         The external teacher gradually becomes the inner voice.
 
-        NOTE: No clamping to [0, 1] - sigmoid is applied when reading,
-        which naturally bounds output. This allows internalization to
-        grow stronger over time without saturation.
+        Now weighted by APPROVAL_LEVEL - strong approval (meeting rising bar)
+        leads to more internalization than routine acknowledgment.
         """
         with torch.no_grad():
             if outcome > 0.5:  # Good outcome
                 # Blend teacher message into internal pattern memory
-                alpha = 0.1
+                alpha = 0.1 * approval_level  # Weight by how impressed teacher was
                 self.teacher_pattern_memory = (1 - alpha) * self.teacher_pattern_memory + \
                                                alpha * teacher_message.mean(dim=0, keepdim=True)
-                # Increase internalization level (wide range for sigmoid)
-                # sigmoid(-3) ≈ 0.05, sigmoid(3) ≈ 0.95
-                new_val = self.internalization_level.data + 0.01
+                # Increase internalization level - scaled by approval_level
+                # Strong approval (1.0) → full increment
+                # Weak approval (0.3) → small increment
+                increment = 0.01 * approval_level
+                new_val = self.internalization_level.data + increment
+                self.internalization_level.data = torch.clamp(new_val, -3.0, 5.0)
+
+    def internalize_from_quiet_competence(self, streak_length):
+        """
+        Internalization from teacher noticing UN-SHOWN competence.
+
+        This builds a DIFFERENT kind of confidence:
+        - Not "teacher approved" but "I know I'm good"
+        - Teacher's unsolicited acknowledgment validates internal knowing
+
+        This is stronger internalization than approval-seeking!
+        "They noticed even though I didn't ask for attention."
+        """
+        with torch.no_grad():
+            # Larger increment for quiet competence recognition
+            # This is worth more than routine approval
+            increment = 0.03 * min(streak_length / 5.0, 1.0)
+            new_val = self.internalization_level.data + increment
+            self.internalization_level.data = torch.clamp(new_val, -3.0, 5.0)
+
+    def internalize_from_self_restraint(self, was_correct_count, chose_not_to_show_count):
+        """
+        Internalization from choosing NOT to show routine work.
+
+        When student is correct and DOESN'T seek approval, it shows:
+        - Internal confidence
+        - Rising internal standard ("I know this is right")
+        - Less need for external validation
+
+        This is the core of internalization - self-reliance.
+        """
+        with torch.no_grad():
+            if chose_not_to_show_count > 0 and was_correct_count > 0:
+                # Correct decisions not to seek approval
+                self_reliance_rate = chose_not_to_show_count / max(1, was_correct_count)
+                # Small increment for each self-reliant correct answer
+                increment = 0.005 * self_reliance_rate * min(chose_not_to_show_count, 5)
+                new_val = self.internalization_level.data + increment
                 self.internalization_level.data = torch.clamp(new_val, -3.0, 5.0)
 
     def consult_inner_guide(self, self_state):
@@ -1509,6 +1564,20 @@ class RelationalTeacher(nn.Module):
         # Track interaction history
         self.interaction_count = 0
 
+        # === RISING APPROVAL BAR ===
+        # As student demonstrates competence, teacher's approval bar rises
+        # Early: "Good job!" for everything
+        # Later: Need genuinely impressive work for strong approval
+        self.register_buffer('perceived_competence', torch.tensor(0.0))  # Running estimate
+        self.register_buffer('approval_threshold', torch.tensor(0.3))   # Rises with competence
+        self.register_buffer('total_observed', torch.tensor(0))
+        self.register_buffer('correct_observed', torch.tensor(0))
+
+        # === TEACHER MONITORING ===
+        # Teacher notices work NOT shown - builds different kind of confidence
+        self.register_buffer('unshown_streak', torch.tensor(0))  # Quiet competence streak
+        self.register_buffer('last_monitored_correct', torch.tensor(0.0))
+
         # Process evaluator for watching HOW learner thinks
         self.process_evaluator = ProcessEvaluator(d_model)
 
@@ -1588,29 +1657,106 @@ class RelationalTeacher(nn.Module):
         """
         Respond when student presents work for approval.
 
-        ALWAYS positive framing, even for corrections.
-        "Great that you're showing me!" / "Good thinking!" / "Let's look at this together..."
+        ALWAYS positive framing, but approval STRENGTH varies with rising bar.
+        Early: everything gets "great job!"
+        Later: routine correct answers get "good", only impressive work gets "great!"
+
+        Returns: (response, strong_approval, approval_level)
+        - strong_approval: True if this met the rising bar
+        - approval_level: 0.0-1.0 scale of how impressed the teacher is
         """
+        with torch.no_grad():
+            # Update perceived competence (EMA of correctness)
+            self.total_observed += 1
+            if was_correct.any():
+                self.correct_observed += 1
+            obs_rate = self.correct_observed.float() / self.total_observed.float()
+            self.perceived_competence = 0.95 * self.perceived_competence + 0.05 * obs_rate
+
+            # Approval threshold rises with perceived competence
+            # At 50% competence: threshold = 0.3 (low bar)
+            # At 90% competence: threshold = 0.7 (high bar)
+            self.approval_threshold = 0.3 + 0.5 * self.perceived_competence
+
         if was_correct.any():
+            # Determine if this MEETS the rising bar
+            # Creative and streak always meet it (genuinely impressive)
+            # Validation/spontaneous only meet it if student is still learning
+            meets_bar = False
+            approval_level = 0.5  # Default: acknowledged but not impressive
+
             if show_reason == 'creative':
-                # Acknowledge creativity, channel appropriately
-                # "That's an interesting approach!"
-                return self.generate_creativity_reward(learner_state), True
+                # Creativity always meets the bar
+                meets_bar = True
+                approval_level = 1.0
+                response = self.generate_creativity_reward(learner_state)
             elif show_reason == 'streak':
-                # Celebrate the streak
-                # "You're really getting this!"
-                return self.generate_encouragement(learner_state), True
+                # Streaks meet the bar, but approval level depends on how expected it was
+                meets_bar = True
+                # If competence is high, streak is expected (lower approval)
+                approval_level = 1.0 - 0.3 * self.perceived_competence.item()
+                response = self.generate_encouragement(learner_state)
             elif show_reason == 'validation':
-                # Confirm their uncertain answer was right
-                # "Yes, you got it!"
-                return self.generate_encouragement(learner_state), True
+                # Seeking validation - meets bar if competence is low (learning)
+                # If competence high, this is "you should know this by now"
+                meets_bar = self.perceived_competence.item() < 0.7
+                approval_level = 0.7 if meets_bar else 0.4
+                response = self.generate_encouragement(learner_state)
             else:  # spontaneous
-                # Simple approval
-                return self.generate_encouragement(learner_state), True
+                # Random showing - meets bar only if still early in learning
+                meets_bar = self.perceived_competence.item() < 0.5
+                approval_level = 0.6 if meets_bar else 0.3
+                response = self.generate_encouragement(learner_state)
+
+            return response, meets_bar, approval_level
         else:
-            # Wrong but showed - still positive! Builds trust that it's safe to show
-            # "Good that you're checking! Let's look at this together..."
-            return self.generate_encouragement(learner_state), True  # Still approved!
+            # Wrong but showed - always positive! Safe to show failures
+            # This always "meets bar" because showing mistakes is brave
+            return self.generate_encouragement(learner_state), True, 0.5
+
+    def monitor_unshown_work(self, was_correct_batch, was_shown_batch):
+        """
+        Teacher monitors ALL work, not just what's shown.
+
+        When student is quietly competent (correct without showing),
+        teacher notices and may give unsolicited positive feedback.
+        This builds a DIFFERENT kind of confidence - internal rather than approval-based.
+
+        Returns:
+            - should_acknowledge: True if teacher should give unsolicited feedback
+            - streak_length: how many correct in a row without showing
+        """
+        with torch.no_grad():
+            # Count correct answers that weren't shown
+            correct_unshown = (was_correct_batch & ~was_shown_batch).sum().item()
+            total_unshown = (~was_shown_batch).sum().item()
+
+            if total_unshown == 0:
+                return False, 0
+
+            # Track unshown streak
+            if correct_unshown == total_unshown:  # All unshown were correct
+                self.unshown_streak += correct_unshown
+            else:
+                self.unshown_streak.zero_()
+
+            self.last_monitored_correct.fill_(correct_unshown / max(1, total_unshown))
+
+            # Acknowledge quiet competence after streak of 5+
+            # "I noticed you've been getting these right without checking with me. Good!"
+            should_acknowledge = self.unshown_streak >= 5
+            if should_acknowledge:
+                self.unshown_streak.zero_()  # Reset after acknowledgment
+
+            return should_acknowledge, self.unshown_streak.item()
+
+    def get_approval_metrics(self):
+        """Get current approval bar state for logging."""
+        return {
+            'perceived_competence': self.perceived_competence.item(),
+            'approval_threshold': self.approval_threshold.item(),
+            'unshown_streak': self.unshown_streak.item()
+        }
 
     def evaluate_learner_process(self, states_history, confidence, was_correct, pattern_type_idx):
         """

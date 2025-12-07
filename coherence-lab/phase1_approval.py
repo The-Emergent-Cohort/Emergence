@@ -75,10 +75,11 @@ def train_day_with_approval(model, loader, optimizer, criterion, device, pattern
         loss.backward()
         optimizer.step()
 
-        # === APPROVAL-SEEKING BEHAVIOR ===
+        # === APPROVAL-SEEKING BEHAVIOR with RISING BARS ===
         # Student decides whether to show work to teacher
+        # As internalization grows, student becomes more selective
 
-        # Get internalization level for spontaneous show rate
+        # Get internalization level for rising show bar
         int_level = torch.sigmoid(model.learner.other_model.internalization_level).item()
 
         # Detect creativity (simplified - check if process_eval available)
@@ -86,12 +87,12 @@ def train_day_with_approval(model, loader, optimizer, criterion, device, pattern
         if details.get('process_eval') is not None and details['process_eval'].get('creativity') is not None:
             is_creative = details['process_eval']['creativity'].squeeze() > 0.5
 
-        # Student decides: should I show this?
+        # Student decides: should I show this? (rising bar based on internalization)
         should_show, reasons = model.learner.self_model.should_show_work(
             correct, is_creative, conf, int_level
         )
 
-        # Process shows
+        # Process shows with RISING APPROVAL BAR
         if should_show.any():
             show_indices = should_show.nonzero(as_tuple=True)[0]
 
@@ -104,28 +105,49 @@ def train_day_with_approval(model, loader, optimizer, criterion, device, pattern
                     show_reasons[reason] += 1
                 show_count += 1
 
-                # Teacher responds to shown work
+                # Teacher responds to shown work (now returns approval_level too)
                 learner_state = details['learner_self']['internal_state'][idx:idx+1]
                 was_correct_single = correct[idx:idx+1]
 
-                teacher_response, was_approved = model.teacher.respond_to_shown_work(
+                teacher_response, meets_bar, approval_level = model.teacher.respond_to_shown_work(
                     learner_state, was_correct_single, reason
                 )
 
                 # Update trust based on positive interaction
-                if was_approved:
-                    approval_count += 1
-                    model.learner.other_model.update_trust(outcome_was_good=True)
+                # (always positive, but strength varies)
+                approval_count += 1
+                model.learner.other_model.update_trust(outcome_was_good=True)
 
-                    # Also update approval calibration in self model
-                    model.learner.self_model.update_after_approval(True, reason)
+                # Update approval calibration in self model
+                model.learner.self_model.update_after_approval(meets_bar, reason)
 
-                    # If correct, potentially internalize this as "good pattern"
-                    if correct[idx]:
-                        model.learner.other_model.internalize(
-                            teacher_response,
-                            torch.tensor(1.0)
-                        )
+                # Internalize - weighted by how impressed teacher was
+                if correct[idx]:
+                    model.learner.other_model.internalize(
+                        teacher_response,
+                        torch.tensor(1.0),
+                        approval_level=approval_level
+                    )
+
+        # === TEACHER MONITORING (un-shown work) ===
+        # Teacher observes ALL work, notices quiet competence
+        should_acknowledge, unshown_streak = model.teacher.monitor_unshown_work(
+            correct, should_show
+        )
+        if should_acknowledge:
+            # Teacher gives unsolicited acknowledgment
+            # "I noticed you've been getting these right without checking with me!"
+            model.learner.other_model.internalize_from_quiet_competence(unshown_streak)
+
+        # === SELF-RESTRAINT INTERNALIZATION ===
+        # Correct answers where student chose NOT to show → internal confidence
+        correct_count = correct.sum().item()
+        shown_count = should_show.sum().item()
+        unshown_correct = (correct & ~should_show).sum().item()
+        model.learner.other_model.internalize_from_self_restraint(
+            was_correct_count=correct_count,
+            chose_not_to_show_count=unshown_correct
+        )
 
         # Track metrics
         total_loss += main_loss.item() * tokens.size(0)
@@ -139,12 +161,17 @@ def train_day_with_approval(model, loader, optimizer, criterion, device, pattern
     # Calculate approval rate
     approval_rate = approval_count / max(1, show_count)
 
+    # Get teacher's rising bar metrics
+    approval_metrics = model.teacher.get_approval_metrics()
+
     return {
         'loss': total_loss / total_samples,
         'accuracy': total_correct / total_samples,
         'show_rate': show_count / total_samples,
         'approval_rate': approval_rate,
-        'show_reasons': show_reasons
+        'show_reasons': show_reasons,
+        'perceived_competence': approval_metrics['perceived_competence'],
+        'approval_threshold': approval_metrics['approval_threshold']
     }
 
 
@@ -231,10 +258,9 @@ def main(args):
         print(f"  Train: loss={train_metrics['loss']:.4f}, acc={train_metrics['accuracy']:.1%}")
         print(f"  Val: acc={val_metrics['accuracy']:.1%}")
         print(f"  Shows: {train_metrics['show_rate']:.1%} of answers shown to teacher")
-        print(f"  Approval: {train_metrics['approval_rate']:.1%} (should be ~100%)")
         print(f"  Show reasons: {train_metrics['show_reasons']}")
         print(f"  Internalization: {int_level:.1%}, Trust: {trust:.1%}")
-        print(f"  Show calibration: {show_cal:.2f}")
+        print(f"  Rising bars: competence={train_metrics['perceived_competence']:.1%}, threshold={train_metrics['approval_threshold']:.1%}")
         print("  Per-pattern:")
         for pt in pattern_types:
             acc = val_metrics['per_pattern'].get(pt, 0)
@@ -264,6 +290,7 @@ def main(args):
 
     # Save log
     run_log = {
+        'script': 'phase1_approval.py',
         'run_id': run_id,
         'best_acc': best_acc,
         'final_trust': trust,
