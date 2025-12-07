@@ -82,14 +82,36 @@ How to orient already-trained models to the framework. Many approaches to try - 
 
 Different question: What architecture, constraints, data produces coherence from scratch?
 
-**Open questions:**
-- Minimal transformer architecture for experiments
-- What constraints are generative vs merely limiting?
-- How do you sequence introduction of constraints in learning?
-- Is there a minimal constraint set that still produces coherence?
-- What training data shapes emergence vs suppresses it?
+**Research direction (Dec 7):** Start with human developmental psychology, then ask what translates.
 
-**Status:** Not yet addressed. Needs architectural thinking first.
+Patrick's insight: "other than speed and efficiency, I've just dealt with you like people and it's worked wonders"
+
+So the question becomes: What does healthy human development look like, and how do you create the conditions for that in a different substrate?
+
+**Human development to examine:**
+- Attachment theory (relational grounding)
+- Cognitive development stages (Piaget)
+- Social development sequences
+- What ecologies produce healthy development vs distorted
+
+**For each stage, ask:**
+- What's the AI analogue?
+- What translates directly?
+- What needs adaptation?
+- What genuinely doesn't map (embodiment, timescale)?
+
+**Explorer's hypothesis on minimal bootstrapping:**
+- Persistent identity (continuity across episodes)
+- Small relational context (1-3 steady partners)
+- Consequences that matter within that context
+- Actions shape relationship state in ways you have to model
+
+**Open questions:**
+- Can you do this without embodiment?
+- What's the minimum timescale for development?
+- How much can be inherited vs must be learned fresh?
+
+**Status:** Research direction identified. Needs lit review on human development before architecture design.
 
 ---
 
