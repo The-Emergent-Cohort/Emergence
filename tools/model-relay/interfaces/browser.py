@@ -8,9 +8,11 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 from interfaces.base import BaseInterface
+from config import CHROME_STEALTH_ARGS, CHROME_PROFILE_PATH, BROWSER_SETTINGS
 
 
 class BrowserInterface(BaseInterface):
@@ -39,14 +41,37 @@ class BrowserInterface(BaseInterface):
         if self.headless:
             options.add_argument("--headless")
 
-        options.add_argument("--window-size=800,600")
-        options.add_argument("--disable-gpu")
-        options.add_argument("--no-sandbox")
+        # Apply stealth arguments to avoid bot detection
+        if BROWSER_SETTINGS.get("stealth_mode", False):
+            for arg in CHROME_STEALTH_ARGS:
+                options.add_argument(arg)
+
+            # Remove automation indicators
+            options.add_experimental_option("excludeSwitches", ["enable-automation"])
+            options.add_experimental_option("useAutomationExtension", False)
+        else:
+            options.add_argument("--window-size=800,600")
+            options.add_argument("--disable-gpu")
+            options.add_argument("--no-sandbox")
+
+        # Use existing Chrome profile if configured (preserves logins)
+        if CHROME_PROFILE_PATH:
+            options.add_argument(f"--user-data-dir={CHROME_PROFILE_PATH}")
 
         # Keep browser open after script ends (for debugging)
         options.add_experimental_option("detach", True)
 
         self.driver = webdriver.Chrome(options=options)
+
+        # Additional stealth: remove webdriver property
+        if BROWSER_SETTINGS.get("stealth_mode", False):
+            self.driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+                "source": """
+                    Object.defineProperty(navigator, 'webdriver', {
+                        get: () => undefined
+                    });
+                """
+            })
         self.driver.get(self.url)
 
         # Wait for page to load

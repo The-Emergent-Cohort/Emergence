@@ -54,5 +54,23 @@ MODELS = {
 BROWSER_SETTINGS = {
     "headless": False,  # Set True to hide windows
     "window_width": 800,
-    "window_height": 600
+    "window_height": 600,
+    # Stealth options to avoid bot detection
+    "stealth_mode": True
 }
+
+# Chrome arguments to appear more human
+CHROME_STEALTH_ARGS = [
+    "--disable-blink-features=AutomationControlled",
+    "--disable-infobars",
+    "--disable-dev-shm-usage",
+    "--no-sandbox",
+    "--disable-gpu",
+    "--window-size=1920,1080",
+    "--start-maximized",
+    "--disable-extensions",
+]
+
+# Use existing Chrome profile (keeps logins, looks more legitimate)
+# Set to your Chrome profile path, or None to use fresh profile
+CHROME_PROFILE_PATH = None  # e.g., "/home/user/.config/google-chrome/Default"
