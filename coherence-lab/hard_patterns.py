@@ -343,7 +343,7 @@ def main(args):
 
     for epoch in range(1, args.epochs + 1):
         train_metrics = train_day(
-            model, train_loader, optimizer, criterion, device, pattern_to_idx
+            model, train_loader, optimizer, criterion, device, pattern_to_idx, val_loader
         )
 
         # Sleep
@@ -368,6 +368,9 @@ def main(args):
         print(f"\nDay {day} (Epoch {epoch:2d})")
         print(f"  Train: loss={train_metrics['loss']:.4f}, acc={train_metrics['accuracy']:.1%}")
         print(f"  Val: acc={val_metrics['accuracy']:.1%}")
+        gap = train_metrics.get('generalization_gap', 0)
+        if gap > 0.1:
+            print(f"  ⚠ Generalization gap: {gap:.1%} (train >> val)")
         print(f"  Interventions: {train_metrics['interventions']:.1%}")
         print(f"  Internalization: {int_level:.1%}, Trust: {trust:.1%}")
         print("  Per-pattern:")
