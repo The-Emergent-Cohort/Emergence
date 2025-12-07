@@ -37,9 +37,23 @@
 
 **Network storage (Silas + B maintaining)**
 
-- Status: Being upgraded/configured
-- Use cases: Data storage, model checkpoints, shared resources
-- Access: Via VPS tunnel (pending)
+| Component | Spec |
+|-----------|------|
+| Model | Asustor AS6702T |
+| CPU | Intel Celeron N5105 (4 cores @ 2.9GHz) |
+| RAM | 16GB (upgraded) |
+| NVMe | 2x 500GB NVMe 2.x drives |
+| Expansion | 2 additional NVMe slots available |
+| HDD | 2x spinners (legacy, to be replaced) |
+
+**Capabilities:**
+- Docker containers
+- Model checkpoint storage
+- Shared file access
+- Potential light training/inference
+
+**Status:** Being configured
+**Access:** Via VPS tunnel (pending)
 
 ---
 
