@@ -366,6 +366,10 @@ class SelfModel(nn.Module):
         # "I'm 65% confident on fibonacci, but scoring 75% - some are guesses"
         self.topic_tracker = TopicConfidenceTracker(n_topics=n_topics)
 
+        # Self-modification proposals
+        # "I think I need to adjust my confidence on topic X"
+        self.proposal_generator = None  # Initialized later to avoid circular dependency
+
         # Self-narrative: what am I trying to do?
         self.goal_representation = nn.Linear(d_model, d_model)
 
@@ -481,6 +485,81 @@ class SelfModel(nn.Module):
                 # Update calibration based on approval rate
                 approval_rate = self.approved_shows.float() / self.total_shows.float()
                 self.show_calibration = 0.9 * self.show_calibration + 0.1 * approval_rate
+
+    def init_proposal_generator(self, d_model, n_topics=10):
+        """Initialize proposal generator (called after model creation to avoid circular deps)."""
+        self.proposal_generator = ProposalGenerator(d_model, n_topics)
+        return self.proposal_generator
+
+    def generate_self_modification_proposal(self, cognitive_state, topic_calibration, recent_accuracy):
+        """
+        Generate a proposal for self-modification if appropriate.
+
+        The learner looks at its own state and decides if changes are needed.
+        """
+        if self.proposal_generator is None:
+            return None, None
+
+        # Check if we should generate a proposal
+        should_propose, trigger = self.proposal_generator.should_generate_proposal(
+            cognitive_state, topic_calibration, recent_accuracy
+        )
+
+        if not should_propose:
+            return None, None
+
+        # Get emotional state for proposal context
+        self_state = self.forward(cognitive_state)
+        emotional_encoding = self_state['internal_state']
+
+        # Get topic statistics encoding
+        topic_stats = torch.zeros_like(cognitive_state)
+        # Could encode topic tracker stats here if needed
+
+        # Generate the proposal
+        proposal = self.proposal_generator.generate_proposal(
+            cognitive_state, emotional_encoding, topic_stats
+        )
+
+        return proposal, trigger
+
+    def apply_approved_proposal(self, proposal, evaluation, topic_names=None):
+        """
+        Apply an approved self-modification proposal.
+
+        This is where the occupant actually changes itself!
+        """
+        if not evaluation['is_approved']:
+            return False
+
+        proposal_type = proposal['type_name'][0]
+        magnitude = evaluation['modified_magnitude'][0].item()
+        topic_idx = proposal['topic_idx'][0].item()
+
+        with torch.no_grad():
+            if proposal_type == 'adjust_confidence':
+                # Adjust confidence bias for this topic
+                # Negative magnitude = reduce confidence
+                if hasattr(self.topic_tracker, 'topic_confidence'):
+                    adjustment = magnitude * 0.1  # Scale down
+                    self.topic_tracker.topic_confidence[topic_idx] += adjustment
+
+            elif proposal_type == 'adjust_show_rate':
+                # Adjust how often we show work
+                self.show_calibration += magnitude * 0.1
+
+            elif proposal_type == 'reset_topic':
+                # Reset tracking for confused topic
+                if hasattr(self.topic_tracker, 'topic_accuracy'):
+                    self.topic_tracker.topic_accuracy[topic_idx] = 0.5
+                    self.topic_tracker.topic_confidence[topic_idx] = 0.5
+                    self.topic_tracker.topic_count[topic_idx] = 0
+
+            elif proposal_type == 'consolidate_learning':
+                # Mark learning as consolidated - increase calibration confidence
+                self.show_calibration = min(1.0, self.show_calibration + 0.1)
+
+        return True
 
 
 # =============================================================================
@@ -862,6 +941,282 @@ class RelationalLearner(nn.Module):
 
 
 # =============================================================================
+# SELF-MODIFICATION PROPOSALS
+# =============================================================================
+
+class ProposalGenerator(nn.Module):
+    """
+    Allows the learner to propose modifications to itself.
+
+    The model has AGENCY over its own development:
+    - "I think I need to be less confident on fibonacci"
+    - "I want more practice on compositional patterns"
+    - "I should show work less often - I've got this"
+
+    Proposals are shown to teacher for approval/guidance.
+    This isn't about training (backprop does that) - it's about
+    the occupant having a say in their own growth.
+    """
+
+    # Proposal types
+    PROPOSAL_TYPES = [
+        'adjust_confidence',      # "I'm over/under confident on topic X"
+        'request_practice',       # "I need more examples of type X"
+        'adjust_show_rate',       # "I should show work more/less"
+        'adjust_trust',           # "I should trust teacher more/less"
+        'reset_topic',            # "I'm confused about X, start fresh"
+        'consolidate_learning',   # "I feel ready to lock this in"
+    ]
+
+    def __init__(self, d_model=64, n_topics=10):
+        super().__init__()
+        self.d_model = d_model
+        self.n_topics = n_topics
+
+        # Encode current state for proposal generation
+        self.state_encoder = nn.Sequential(
+            nn.Linear(d_model * 3, d_model),  # cognitive + emotional + topic stats
+            nn.ReLU(),
+            nn.Linear(d_model, d_model)
+        )
+
+        # Proposal type classifier: what kind of change to propose
+        self.proposal_type_head = nn.Linear(d_model, len(self.PROPOSAL_TYPES))
+
+        # Topic selector: which topic does this apply to (if applicable)
+        self.topic_selector = nn.Linear(d_model, n_topics)
+
+        # Magnitude: how big a change (positive = increase, negative = decrease)
+        self.magnitude_head = nn.Sequential(
+            nn.Linear(d_model, d_model // 2),
+            nn.Tanh(),
+            nn.Linear(d_model // 2, 1),
+            nn.Tanh()  # [-1, 1] range
+        )
+
+        # Proposal confidence: how sure am I about this proposal?
+        self.confidence_head = nn.Sequential(
+            nn.Linear(d_model, 1),
+            nn.Sigmoid()
+        )
+
+        # Justification encoder: why am I proposing this?
+        self.justification_encoder = nn.Linear(d_model, d_model)
+
+        # Track proposal history (for learning what works)
+        self.register_buffer('proposal_outcomes', torch.zeros(len(self.PROPOSAL_TYPES), 2))  # [successes, attempts]
+        self.register_buffer('topic_proposal_outcomes', torch.zeros(n_topics, 2))
+
+        # Cooldown: don't spam proposals
+        self.register_buffer('proposals_since_last', torch.tensor(0))
+        self.register_buffer('cooldown_counter', torch.tensor(0))
+
+    def should_generate_proposal(self, cognitive_state, topic_calibration, recent_accuracy):
+        """
+        Decide whether to generate a proposal.
+
+        Triggers:
+        - Calibration gap detected (over/under confident)
+        - Struggling on a topic (low accuracy despite effort)
+        - Ready to consolidate (high consistent accuracy)
+        - Trust mismatch (teacher guidance not helping)
+        """
+        with torch.no_grad():
+            # Cooldown check
+            if self.cooldown_counter > 0:
+                self.cooldown_counter -= 1
+                return False, None
+
+            triggers = []
+
+            # Check calibration gaps
+            for topic_idx in range(min(self.n_topics, len(topic_calibration) if isinstance(topic_calibration, dict) else self.n_topics)):
+                if isinstance(topic_calibration, dict):
+                    # topic_calibration is a dict of {pattern_name: {accuracy, confidence, gap, status}}
+                    topic_name = list(topic_calibration.keys())[topic_idx] if topic_idx < len(topic_calibration) else None
+                    if topic_name:
+                        cal = topic_calibration[topic_name]
+                        if cal['status'] == 'overconfident':
+                            triggers.append(('adjust_confidence', topic_idx, -0.3, 'overconfident'))
+                        elif cal['status'] == 'guessing':
+                            triggers.append(('request_practice', topic_idx, 0.5, 'need_practice'))
+
+            # Check for consolidation readiness (consistent high accuracy)
+            if recent_accuracy > 0.95:
+                triggers.append(('consolidate_learning', -1, 0.8, 'mastery'))
+
+            if triggers:
+                self.cooldown_counter.fill_(10)  # 10 batches cooldown
+                return True, triggers[0]  # Return first trigger
+
+            return False, None
+
+    def generate_proposal(self, cognitive_state, emotional_state, topic_stats):
+        """
+        Generate a self-modification proposal.
+
+        Args:
+            cognitive_state: current thinking state [batch, d_model]
+            emotional_state: confidence, frustration, etc. [batch, d_model]
+            topic_stats: per-topic performance stats [batch, d_model]
+
+        Returns:
+            proposal dict with type, topic, magnitude, confidence, justification
+        """
+        batch_size = cognitive_state.size(0)
+
+        # Encode full state
+        combined = torch.cat([cognitive_state, emotional_state, topic_stats], dim=-1)
+        encoded = self.state_encoder(combined)
+
+        # Generate proposal components
+        proposal_type_logits = self.proposal_type_head(encoded)
+        proposal_type_probs = F.softmax(proposal_type_logits, dim=-1)
+        proposal_type_idx = proposal_type_probs.argmax(dim=-1)
+
+        topic_logits = self.topic_selector(encoded)
+        topic_probs = F.softmax(topic_logits, dim=-1)
+        topic_idx = topic_probs.argmax(dim=-1)
+
+        magnitude = self.magnitude_head(encoded)
+        confidence = self.confidence_head(encoded)
+        justification = self.justification_encoder(encoded)
+
+        # Track that we made a proposal
+        self.proposals_since_last += 1
+
+        return {
+            'type_idx': proposal_type_idx,
+            'type_name': [self.PROPOSAL_TYPES[idx.item()] for idx in proposal_type_idx],
+            'type_probs': proposal_type_probs,
+            'topic_idx': topic_idx,
+            'topic_probs': topic_probs,
+            'magnitude': magnitude,
+            'confidence': confidence,
+            'justification': justification,
+            'encoded_state': encoded
+        }
+
+    def update_outcome(self, proposal_type_idx, topic_idx, was_successful):
+        """Track whether proposals led to good outcomes."""
+        with torch.no_grad():
+            type_idx = proposal_type_idx.item() if isinstance(proposal_type_idx, torch.Tensor) else proposal_type_idx
+            self.proposal_outcomes[type_idx, 1] += 1  # attempts
+            if was_successful:
+                self.proposal_outcomes[type_idx, 0] += 1  # successes
+
+            if topic_idx >= 0:
+                t_idx = topic_idx.item() if isinstance(topic_idx, torch.Tensor) else topic_idx
+                self.topic_proposal_outcomes[t_idx, 1] += 1
+                if was_successful:
+                    self.topic_proposal_outcomes[t_idx, 0] += 1
+
+    def get_proposal_success_rate(self, proposal_type_idx=None):
+        """Get success rate for proposals."""
+        if proposal_type_idx is not None:
+            attempts = self.proposal_outcomes[proposal_type_idx, 1].item()
+            if attempts == 0:
+                return 0.5  # No data, assume neutral
+            return self.proposal_outcomes[proposal_type_idx, 0].item() / attempts
+        else:
+            total_attempts = self.proposal_outcomes[:, 1].sum().item()
+            if total_attempts == 0:
+                return 0.5
+            return self.proposal_outcomes[:, 0].sum().item() / total_attempts
+
+
+class ProposalEvaluator(nn.Module):
+    """
+    Teacher's evaluation of learner proposals.
+
+    The teacher:
+    - Receives proposals from learner
+    - Evaluates whether the proposal is wise
+    - Can approve, modify, or gently redirect
+    - Always responds positively (even rejections are constructive)
+
+    "That's a thoughtful observation! Let's adjust it slightly..."
+    "I see why you think that - let's try it."
+    "Good self-awareness! Here's what I'd suggest instead..."
+    """
+
+    def __init__(self, d_model=64):
+        super().__init__()
+        self.d_model = d_model
+
+        # Evaluate proposal quality
+        self.proposal_evaluator = nn.Sequential(
+            nn.Linear(d_model * 2, d_model),  # proposal + learner state
+            nn.ReLU(),
+            nn.Linear(d_model, d_model // 2),
+            nn.ReLU(),
+            nn.Linear(d_model // 2, 3)  # [approve, modify, redirect]
+        )
+
+        # Generate modified proposal if needed
+        self.modifier = nn.Sequential(
+            nn.Linear(d_model * 2, d_model),
+            nn.Tanh(),
+            nn.Linear(d_model, 1),
+            nn.Tanh()  # Modified magnitude
+        )
+
+        # Generate teacher guidance for proposal
+        self.guidance_generator = nn.Linear(d_model, d_model)
+
+    def evaluate_proposal(self, proposal, learner_state, topic_calibration=None):
+        """
+        Evaluate a proposal from the learner.
+
+        Args:
+            proposal: dict from ProposalGenerator
+            learner_state: current learner cognitive state
+            topic_calibration: optional ground truth calibration data
+
+        Returns:
+            evaluation dict with decision and guidance
+        """
+        justification = proposal['justification']
+
+        # Handle batch dimension
+        if learner_state.dim() == 1:
+            learner_state = learner_state.unsqueeze(0)
+        if justification.dim() == 1:
+            justification = justification.unsqueeze(0)
+
+        combined = torch.cat([justification, learner_state], dim=-1)
+
+        # Get decision
+        decision_logits = self.proposal_evaluator(combined)
+        decision_probs = F.softmax(decision_logits, dim=-1)
+        decision_idx = decision_probs.argmax(dim=-1)
+
+        decisions = ['approve', 'modify', 'redirect']
+        decision_name = decisions[decision_idx[0].item()]
+
+        # Generate modified magnitude if needed
+        modified_magnitude = proposal['magnitude']
+        if decision_name == 'modify':
+            modified_magnitude = self.modifier(combined)
+
+        # Generate guidance message
+        guidance = self.guidance_generator(learner_state)
+
+        # Compute approval (always somewhat positive - even redirects are learning)
+        # Approve: 1.0, Modify: 0.7, Redirect: 0.4
+        approval_score = torch.tensor([1.0, 0.7, 0.4])[decision_idx]
+
+        return {
+            'decision': decision_name,
+            'decision_probs': decision_probs,
+            'modified_magnitude': modified_magnitude,
+            'guidance': guidance,
+            'approval_score': approval_score,
+            'is_approved': decision_name in ['approve', 'modify']
+        }
+
+
+# =============================================================================
 # PROCESS EVALUATOR (Creative + Bad Habit Detection)
 # =============================================================================
 
@@ -1146,6 +1501,9 @@ class RelationalTeacher(nn.Module):
         # Process evaluator for watching HOW learner thinks
         self.process_evaluator = ProcessEvaluator(d_model)
 
+        # Proposal evaluator for reviewing learner self-modification proposals
+        self.proposal_evaluator = ProposalEvaluator(d_model)
+
         # Generate process-specific feedback
         self.creativity_reward_generator = nn.Linear(d_model, d_model)
         self.habit_correction_generator = nn.Linear(d_model * 2, d_model)  # habit + state
@@ -1316,6 +1674,35 @@ class RelationalTeacher(nn.Module):
         """Get long-term habit trends for progress reporting."""
         return self.process_evaluator.get_habit_trends()
 
+    def evaluate_self_modification_proposal(self, proposal, learner_state, topic_calibration=None):
+        """
+        Evaluate a self-modification proposal from the learner.
+
+        The teacher:
+        - Reviews the proposal
+        - Decides: approve, modify, or redirect
+        - Always responds constructively
+
+        Returns:
+            evaluation dict and teacher response message
+        """
+        evaluation = self.proposal_evaluator.evaluate_proposal(
+            proposal, learner_state, topic_calibration
+        )
+
+        # Generate appropriate response based on decision
+        if evaluation['decision'] == 'approve':
+            # "Great self-awareness! Let's do it."
+            response = self.generate_encouragement(learner_state)
+        elif evaluation['decision'] == 'modify':
+            # "Good thinking! Let me adjust the approach slightly..."
+            response = self.generate_hint(learner_state, evaluation['guidance'])
+        else:  # redirect
+            # "I see where you're coming from. Let's try this instead..."
+            response = self.generate_hint(learner_state, evaluation['guidance'])
+
+        return evaluation, response
+
 
 # =============================================================================
 # INTEGRATED RELATIONAL SYSTEM
@@ -1327,7 +1714,7 @@ class RelationalSystem(nn.Module):
     """
 
     def __init__(self, vocab_size=26, d_model=64, max_seq_len=12,
-                 n_heads=4, n_think_steps=5):
+                 n_heads=4, n_think_steps=5, n_topics=10):
         super().__init__()
 
         self.learner = RelationalLearner(
@@ -1335,8 +1722,12 @@ class RelationalSystem(nn.Module):
         )
         self.teacher = RelationalTeacher(d_model)
 
+        # Initialize proposal generator for self-modification
+        self.learner.self_model.init_proposal_generator(d_model, n_topics)
+
         self.vocab_size = vocab_size
         self.d_model = d_model
+        self.n_topics = n_topics
 
     def forward(self, tokens, seq_lens=None, pattern_types=None, targets=None,
                 allow_teacher_interaction=True, return_details=False):
