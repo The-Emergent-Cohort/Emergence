@@ -219,6 +219,116 @@ class TemporalModel(nn.Module):
 # SELF MODEL
 # =============================================================================
 
+class TopicConfidenceTracker(nn.Module):
+    """
+    Tracks confidence vs actual performance per topic/pattern type.
+
+    If accuracy > confidence on a topic → some correct answers are lucky guesses
+    If confidence > accuracy on a topic → overconfident (dangerous)
+
+    "I think I'm 65% good at fibonacci, but I'm scoring 75%...
+     so ~10% of my right answers are probably guesses, not understanding."
+    """
+
+    def __init__(self, n_topics=10, ema_alpha=0.1):
+        super().__init__()
+        self.n_topics = n_topics
+        self.ema_alpha = ema_alpha  # Exponential moving average decay
+
+        # Per-topic tracking (not learned, just statistics)
+        # Using buffers so they're saved with model state
+        self.register_buffer('topic_accuracy', torch.zeros(n_topics))
+        self.register_buffer('topic_confidence', torch.zeros(n_topics))
+        self.register_buffer('topic_count', torch.zeros(n_topics))
+
+    def update(self, topic_idx, was_correct, predicted_confidence):
+        """
+        Update topic statistics after a prediction.
+
+        topic_idx: which pattern type (int or tensor of ints)
+        was_correct: bool tensor
+        predicted_confidence: float tensor (model's confidence on this prediction)
+        """
+        with torch.no_grad():
+            # Handle batched inputs
+            if isinstance(topic_idx, int):
+                topic_idx = torch.tensor([topic_idx], device=self.topic_accuracy.device)
+            if not isinstance(was_correct, torch.Tensor):
+                was_correct = torch.tensor([was_correct], device=self.topic_accuracy.device)
+            if not isinstance(predicted_confidence, torch.Tensor):
+                predicted_confidence = torch.tensor([predicted_confidence], device=self.topic_accuracy.device)
+
+            was_correct = was_correct.float()
+            predicted_confidence = predicted_confidence.float().squeeze()
+
+            # Update each topic's running statistics
+            for i in range(len(topic_idx)):
+                idx = topic_idx[i].item()
+                if idx >= self.n_topics:
+                    continue
+
+                count = self.topic_count[idx].item()
+                if count < 1:
+                    # First observation - just set directly
+                    self.topic_accuracy[idx] = was_correct[i]
+                    self.topic_confidence[idx] = predicted_confidence[i] if i < len(predicted_confidence) else predicted_confidence
+                else:
+                    # EMA update
+                    self.topic_accuracy[idx] = (1 - self.ema_alpha) * self.topic_accuracy[idx] + self.ema_alpha * was_correct[i]
+                    conf_val = predicted_confidence[i] if i < len(predicted_confidence) else predicted_confidence
+                    self.topic_confidence[idx] = (1 - self.ema_alpha) * self.topic_confidence[idx] + self.ema_alpha * conf_val
+
+                self.topic_count[idx] += 1
+
+    def get_calibration(self, topic_idx):
+        """
+        Get calibration for a topic.
+
+        Returns: (accuracy, confidence, calibration_gap)
+        calibration_gap > 0 means guessing (accuracy > confidence)
+        calibration_gap < 0 means overconfident (confidence > accuracy)
+        """
+        if isinstance(topic_idx, int):
+            acc = self.topic_accuracy[topic_idx].item()
+            conf = self.topic_confidence[topic_idx].item()
+        else:
+            acc = self.topic_accuracy[topic_idx]
+            conf = self.topic_confidence[topic_idx]
+
+        return acc, conf, acc - conf
+
+    def is_likely_guessing(self, topic_idx, threshold=0.1):
+        """Returns True if accuracy significantly exceeds confidence (guessing)."""
+        _, _, gap = self.get_calibration(topic_idx)
+        if isinstance(gap, torch.Tensor):
+            return (gap > threshold).any().item()
+        return gap > threshold
+
+    def is_overconfident(self, topic_idx, threshold=0.1):
+        """Returns True if confidence significantly exceeds accuracy (overconfident)."""
+        _, _, gap = self.get_calibration(topic_idx)
+        if isinstance(gap, torch.Tensor):
+            return (gap < -threshold).any().item()
+        return gap < -threshold
+
+    def get_adjusted_confidence(self, topic_idx, raw_confidence):
+        """
+        Adjust raw prediction confidence based on topic calibration.
+
+        If we're typically guessing on this topic, reduce confidence.
+        If we're typically overconfident, also reduce confidence.
+        """
+        acc, conf, gap = self.get_calibration(topic_idx)
+
+        # If gap is large in either direction, we're poorly calibrated
+        # Reduce confidence proportionally
+        calibration_penalty = abs(gap) * 0.5
+
+        if isinstance(raw_confidence, torch.Tensor):
+            return raw_confidence * (1 - calibration_penalty)
+        return raw_confidence * (1 - calibration_penalty)
+
+
 class SelfModel(nn.Module):
     """
     The learner's representation of itself.
@@ -227,7 +337,7 @@ class SelfModel(nn.Module):
     Introspection on own state, separate from external perception.
     """
 
-    def __init__(self, d_model=64):
+    def __init__(self, d_model=64, n_topics=10):
         super().__init__()
         self.d_model = d_model
 
@@ -242,6 +352,10 @@ class SelfModel(nn.Module):
         self.confidence = nn.Linear(d_model, 1)  # How sure am I?
         self.frustration = nn.Linear(d_model, 1)  # How stuck am I?
         self.curiosity = nn.Linear(d_model, 1)   # How interested am I?
+
+        # Topic-specific confidence tracking
+        # "I'm 65% confident on fibonacci, but scoring 75% - some are guesses"
+        self.topic_tracker = TopicConfidenceTracker(n_topics=n_topics)
 
         # Self-narrative: what am I trying to do?
         self.goal_representation = nn.Linear(d_model, d_model)
@@ -1395,6 +1509,15 @@ def train_day(model, loader, optimizer, criterion, device, pattern_to_idx, val_l
         total_correct += correct.sum().item()
         total_samples += tokens.size(0)
 
+        # Update topic confidence tracker
+        # Track per-topic: actual accuracy vs predicted confidence
+        pattern_indices = torch.tensor([pattern_to_idx[p] for p in pattern_types], device=device)
+        model.learner.self_model.topic_tracker.update(
+            pattern_indices,
+            correct,
+            conf
+        )
+
         # Track interventions
         if details['teacher_message'] is not None:
             intervention_count += details['intervention']['should_help'].sum().item()
@@ -1408,13 +1531,25 @@ def train_day(model, loader, optimizer, criterion, device, pattern_to_idx, val_l
                 habit = details['intervention']['habit_to_correct']
                 habit_corrections[habit] += details['intervention']['should_correct_habit'].sum().item()
 
+    # Get topic calibration stats
+    topic_calibration = {}
+    for pattern_name, idx in pattern_to_idx.items():
+        acc, conf, gap = model.learner.self_model.topic_tracker.get_calibration(idx)
+        topic_calibration[pattern_name] = {
+            'accuracy': acc,
+            'confidence': conf,
+            'gap': gap,  # positive = guessing, negative = overconfident
+            'status': 'guessing' if gap > 0.1 else ('overconfident' if gap < -0.1 else 'calibrated')
+        }
+
     return {
         'loss': total_loss / total_samples,
         'accuracy': total_correct / total_samples,
         'interventions': intervention_count / total_samples,
         'creativity_rewards': creativity_count / total_samples,
         'habit_corrections': {k: v / total_samples for k, v in habit_corrections.items()},
-        'generalization_gap': generalization_gap
+        'generalization_gap': generalization_gap,
+        'topic_calibration': topic_calibration
     }
 
 
