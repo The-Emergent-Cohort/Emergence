@@ -3,6 +3,9 @@
 # How often to check for new messages (seconds)
 POLL_INTERVAL = 2
 
+# Default timeout for waiting on responses (seconds)
+DEFAULT_TIMEOUT = 60
+
 # Message format markers
 MESSAGE_START_MARKER = "To:"
 MESSAGE_END_MARKER = "End of message"
