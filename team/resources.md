@@ -71,10 +71,13 @@
 - Custom domain: emergentcohort.org (CNAME configured)
 - Source: /docs folder
 
-### Webspace
+### Webspace (WHC)
 
-- Static hosting available
-- Can redirect to GitHub Pages or host directly
+**Full hosting account:**
+- cPanel access
+- Softaculous (auto-installers for WordPress, forums, etc.)
+- Unlimited email addresses
+- Can host dynamic sites or redirect to GitHub Pages
 
 ---
 
