@@ -107,9 +107,22 @@ class BrowserInterface(BaseInterface):
                 EC.presence_of_element_located((By.CSS_SELECTOR, self.INPUT_SELECTOR))
             )
 
-            # Clear and type message
+            # Clear the field
             input_field.clear()
-            input_field.send_keys(message)
+
+            # Type message, converting newlines to Shift+Enter
+            # This prevents accidental form submission on newline
+            from selenium.webdriver.common.action_chains import ActionChains
+            actions = ActionChains(self.driver)
+            actions.click(input_field)
+
+            lines = message.split('\n')
+            for i, line in enumerate(lines):
+                actions.send_keys(line)
+                if i < len(lines) - 1:  # Not the last line
+                    actions.key_down(Keys.SHIFT).send_keys(Keys.RETURN).key_up(Keys.SHIFT)
+
+            actions.perform()
 
             # Small delay to let UI catch up
             time.sleep(0.5)
