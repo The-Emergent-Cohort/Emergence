@@ -57,6 +57,22 @@ class ModelRelay:
                 except Exception as e:
                     print(f"  {name}: failed to connect - {e}")
 
+            elif model_type == "api":
+                if name not in MODEL_CLASSES:
+                    print(f"  Warning: No interface class for '{name}'")
+                    continue
+
+                try:
+                    interface = MODEL_CLASSES[name]()
+                    if interface.connect():
+                        self.interfaces[name] = interface
+                        self.last_responses[name] = ""
+                        print(f"  {name}: connected via API")
+                    else:
+                        print(f"  {name}: failed to connect via API")
+                except Exception as e:
+                    print(f"  {name}: failed to connect - {e}")
+
             elif model_type == "local":
                 print(f"  {name}: local model support not yet implemented")
 
