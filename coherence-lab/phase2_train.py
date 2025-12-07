@@ -310,8 +310,8 @@ if __name__ == '__main__':
                         help='Batch size for training')
     parser.add_argument('--lr', type=float, default=1e-3,
                         help='Learning rate')
-    parser.add_argument('--epochs', type=int, default=50,
-                        help='Maximum number of epochs')
+    parser.add_argument('--epochs', type=int, default=20,
+                        help='Maximum number of epochs (v2: fewer epochs, more data)')
     parser.add_argument('--patience', type=int, default=5,
                         help='Early stopping patience')
     parser.add_argument('--target-acc', type=float, default=0.95,

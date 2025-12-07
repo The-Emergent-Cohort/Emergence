@@ -148,14 +148,21 @@ class Phase2DataGenerator:
 
 def main():
     """Generate Phase 2 datasets."""
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--n-examples', type=int, default=150000,
+                        help='Number of training examples (default: 150K)')
+    parser.add_argument('--seed', type=int, default=42)
+    args = parser.parse_args()
+
     print("Phase 2: Action-Consequence Mapping Data Generator")
     print("=" * 50)
 
-    generator = Phase2DataGenerator(seed=42)
+    generator = Phase2DataGenerator(seed=args.seed)
 
-    # Generate datasets
-    train_data, val_data = generator.generate_dataset(n_examples=50000)
-    held_out_data = generator.generate_held_out(n_examples=1000)
+    # Generate datasets - v2 uses 150K by default for more diversity
+    train_data, val_data = generator.generate_dataset(n_examples=args.n_examples)
+    held_out_data = generator.generate_held_out(n_examples=2000)
 
     print(f"Training examples: {len(train_data)}")
     print(f"Validation examples: {len(val_data)}")
