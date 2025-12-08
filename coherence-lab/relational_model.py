@@ -582,10 +582,16 @@ class TopicConfidenceTracker(nn.Module):
         - Calibrated: 100% (knows what and why)
         - Guessing/Overconfident: 75% ("let's make sure")
 
+        Mastered topics: No more XP (you've proven yourself).
+
         XP cannot go below 0.
         """
         with torch.no_grad():
             if isinstance(topic_idx, int):
+                # Skip XP for mastered topics - you've proven yourself
+                if self.topic_mastered[topic_idx]:
+                    return
+
                 level = max(1, self.get_level(topic_idx))
 
                 # Check calibration - uncalibrated gets 75%
@@ -635,6 +641,8 @@ class TopicConfidenceTracker(nn.Module):
             self.register_buffer('topic_graduated', torch.zeros(self.n_topics, dtype=torch.bool, device=device))
             self.register_buffer('exam_attempts', torch.zeros(self.n_topics, dtype=torch.long, device=device))
             self.register_buffer('exam_passes', torch.zeros(self.n_topics, dtype=torch.long, device=device))
+            # Confirmed level: only advances on exam pass (not XP alone)
+            self.register_buffer('confirmed_level', torch.zeros(self.n_topics, dtype=torch.long, device=device))
 
     def get_exam_size(self, level):
         """
@@ -677,16 +685,19 @@ class TopicConfidenceTracker(nn.Module):
         Check if topic is eligible for level-up exam.
 
         Eligible when:
-        - XP >= threshold for next level
+        - XP >= threshold for next level (based on confirmed_level, not XP-level)
         - Not on cooldown from failed exam
         - Not already graduated (L10 passed)
+
+        Uses confirmed_level (exam-verified) not get_level() (XP-based).
+        XP gets you eligible to test, but you must pass to advance.
         """
         self._init_exam_state()
 
         with torch.no_grad():
-            current_level = self.get_level(topic_idx)
-            if current_level >= self.max_level:
-                return False  # Already at max
+            confirmed = self.confirmed_level[topic_idx].item()
+            if confirmed >= self.max_level:
+                return False  # Already at max confirmed level
 
             if self.topic_graduated[topic_idx]:
                 return False  # Already graduated
@@ -695,7 +706,7 @@ class TopicConfidenceTracker(nn.Module):
                 return False  # On cooldown
 
             # Check if XP meets next level threshold
-            next_level = current_level + 1
+            next_level = confirmed + 1
             threshold = self.xp_threshold(next_level)
             current_xp = self.topic_xp[topic_idx].item()
 
@@ -716,28 +727,32 @@ class TopicConfidenceTracker(nn.Module):
             passed: bool
             score: float (0-1)
             threshold: float (required to pass)
-            new_level: int (if passed)
+            new_level: int (confirmed level after exam)
             xp_lost: float (if failed)
             cooldown: int (epochs until retry, if failed)
+            graduated: bool (if passed L10)
         """
         self._init_exam_state()
 
         with torch.no_grad():
-            current_level = self.get_level(topic_idx)
-            target_level = current_level + 1
+            # Use confirmed_level (exam-verified), not XP-based level
+            confirmed = self.confirmed_level[topic_idx].item()
+            target_level = confirmed + 1
             threshold = self.get_pass_threshold(target_level)
             score = correct_count / max(1, total_count)
 
             self.exam_attempts[topic_idx] += 1
 
             if score >= threshold:
-                # PASSED - level up!
+                # PASSED - advance confirmed level!
                 self.exam_passes[topic_idx] += 1
+                self.confirmed_level[topic_idx] = target_level
                 self.exam_eligible[topic_idx] = False
                 self.exam_cooldown[topic_idx] = 0
 
                 # If passed L10, topic is graduated
-                if target_level >= self.max_level:
+                graduated = target_level >= self.max_level
+                if graduated:
                     self.topic_graduated[topic_idx] = True
                     self.topic_mastered[topic_idx] = True
 
@@ -748,25 +763,23 @@ class TopicConfidenceTracker(nn.Module):
                     'new_level': target_level,
                     'xp_lost': 0.0,
                     'cooldown': 0,
-                    'graduated': target_level >= self.max_level
+                    'graduated': graduated
                 }
             else:
-                # FAILED - XP penalty and cooldown
-                # Lose 25-50% of current level's XP based on how badly failed
-                fail_severity = (threshold - score) / threshold  # 0-1, higher = worse
-                penalty_rate = 0.25 + 0.25 * fail_severity  # 25-50%
+                # FAILED - flat 25% XP penalty and cooldown
+                penalty_rate = 0.25
 
-                # XP in current level = current_xp - previous_threshold
-                prev_threshold = self.xp_threshold(current_level)
+                # XP above confirmed level threshold
+                confirmed_threshold = self.xp_threshold(confirmed)
                 current_xp = self.topic_xp[topic_idx].item()
-                level_xp = current_xp - prev_threshold
+                excess_xp = current_xp - confirmed_threshold
 
-                xp_lost = level_xp * penalty_rate
+                xp_lost = excess_xp * penalty_rate
                 self.topic_xp[topic_idx] -= xp_lost
-                self.topic_xp[topic_idx].clamp_(min=prev_threshold)  # Don't drop below level start
+                self.topic_xp[topic_idx].clamp_(min=confirmed_threshold)  # Don't drop below confirmed level
 
-                # Cooldown scales with level (higher level = longer wait)
-                cooldown = max(1, current_level)  # 1-10 epochs
+                # Cooldown scales with target level (higher = longer wait)
+                cooldown = max(1, target_level)  # 1-10 epochs
                 self.exam_cooldown[topic_idx] = cooldown
                 self.exam_eligible[topic_idx] = False
 
@@ -774,7 +787,7 @@ class TopicConfidenceTracker(nn.Module):
                     'passed': False,
                     'score': score,
                     'threshold': threshold,
-                    'new_level': current_level,  # No change
+                    'new_level': confirmed,  # No change
                     'xp_lost': xp_lost,
                     'cooldown': cooldown,
                     'graduated': False
@@ -790,6 +803,7 @@ class TopicConfidenceTracker(nn.Module):
         """Get exam statistics for a topic."""
         self._init_exam_state()
         return {
+            'confirmed_level': self.confirmed_level[topic_idx].item(),
             'eligible': self.exam_eligible[topic_idx].item(),
             'cooldown': self.exam_cooldown[topic_idx].item(),
             'graduated': self.topic_graduated[topic_idx].item(),
@@ -882,24 +896,28 @@ class TopicConfidenceTracker(nn.Module):
                 new_graduated = torch.zeros(new_size, dtype=torch.bool, device=device)
                 new_attempts = torch.zeros(new_size, dtype=torch.long, device=device)
                 new_passes = torch.zeros(new_size, dtype=torch.long, device=device)
+                new_confirmed = torch.zeros(new_size, dtype=torch.long, device=device)
 
                 new_eligible[:self.n_topics] = self.exam_eligible
                 new_cooldown[:self.n_topics] = self.exam_cooldown
                 new_graduated[:self.n_topics] = self.topic_graduated
                 new_attempts[:self.n_topics] = self.exam_attempts
                 new_passes[:self.n_topics] = self.exam_passes
+                new_confirmed[:self.n_topics] = self.confirmed_level
 
                 del self.exam_eligible
                 del self.exam_cooldown
                 del self.topic_graduated
                 del self.exam_attempts
                 del self.exam_passes
+                del self.confirmed_level
 
                 self.register_buffer('exam_eligible', new_eligible)
                 self.register_buffer('exam_cooldown', new_cooldown)
                 self.register_buffer('topic_graduated', new_graduated)
                 self.register_buffer('exam_attempts', new_attempts)
                 self.register_buffer('exam_passes', new_passes)
+                self.register_buffer('confirmed_level', new_confirmed)
 
             self.n_topics = new_size
 

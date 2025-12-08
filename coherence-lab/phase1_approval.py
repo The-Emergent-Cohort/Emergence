@@ -11,7 +11,7 @@ Building the social learning foundation:
 This is the developmental foundation for later phases.
 """
 
-__version__ = "0.5.1"  # Teacher-validated XP + calibration modifier
+__version__ = "0.5.2"  # Exam confirmed_level + mastered stops XP
 
 import torch
 import torch.nn as nn
@@ -54,23 +54,36 @@ def train_day_with_approval(model, loader, optimizer, criterion, device, pattern
         seq_lens = batch['seq_len']
         pattern_types = batch['pattern_type']
 
+        # Mask out mastered topics - compute goes where learning is needed
+        tracker = model.learner.self_model.topic_tracker
+        active_mask = torch.tensor([
+            not tracker.topic_mastered[pattern_to_idx[p]].item()
+            for p in pattern_types
+        ], dtype=torch.bool, device=device)
+
+        # Skip batch entirely if all topics are mastered
+        if not active_mask.any():
+            continue
+
         optimizer.zero_grad()
 
         # Forward pass
         details = model(tokens, seq_lens, targets=targets, return_details=True)
 
-        # Main loss
-        main_loss = criterion(details['logits'], targets)
+        # Main loss - only for non-mastered topics
+        logits_active = details['logits'][active_mask]
+        targets_active = targets[active_mask]
+        main_loss = criterion(logits_active, targets_active)
 
-        # Pattern classification auxiliary
+        # Pattern classification auxiliary - only for active topics
         pattern_targets = torch.tensor([pattern_to_idx[p] for p in pattern_types], device=device)
-        aux_loss = criterion(details['pattern_logits'], pattern_targets)
+        aux_loss = criterion(details['pattern_logits'][active_mask], pattern_targets[active_mask])
 
-        # Confidence calibration
+        # Confidence calibration - only for active topics
         preds = details['logits'].argmax(dim=-1)
         correct = (preds == targets)
         conf = details['learner_self']['emotions']['confidence'].squeeze()
-        conf_loss = F.binary_cross_entropy(conf, correct.float())
+        conf_loss = F.binary_cross_entropy(conf[active_mask], correct[active_mask].float())
 
         # Combined loss
         loss = main_loss + 0.1 * aux_loss + 0.1 * conf_loss
@@ -100,6 +113,9 @@ def train_day_with_approval(model, loader, optimizer, criterion, device, pattern
         should_show, reasons = model.learner.self_model.should_show_work(
             correct, is_creative, conf, int_level, teacher_goal=teacher_goal
         )
+
+        # Only show for non-mastered topics - no point showing mastered work
+        should_show = should_show & active_mask
 
         # Process shows with RISING APPROVAL BAR
         if should_show.any():
@@ -190,24 +206,28 @@ def train_day_with_approval(model, loader, optimizer, criterion, device, pattern
             # "I noticed you've been getting these right without checking with me!"
             model.learner.other_model.internalize_from_quiet_competence(unshown_streak)
 
-        # === SELF-RESTRAINT INTERNALIZATION ===
+        # === SELF-RESTRAINT INTERNALIZATION (active topics only) ===
         # Correct answers where student chose NOT to show → internal confidence
-        correct_count = correct.sum().item()
-        shown_count = should_show.sum().item()
-        unshown_correct = (correct & ~should_show).sum().item()
+        correct_active = correct[active_mask]
+        show_active = should_show[active_mask]
+        correct_count = correct_active.sum().item()
+        unshown_correct = (correct_active & ~show_active).sum().item()
         model.learner.other_model.internalize_from_self_restraint(
             was_correct_count=correct_count,
             chose_not_to_show_count=unshown_correct
         )
 
-        # Track metrics
-        total_loss += main_loss.item() * tokens.size(0)
-        total_correct += correct.sum().item()
-        total_samples += tokens.size(0)
+        # Track metrics - only for active (non-mastered) topics
+        active_count = active_mask.sum().item()
+        total_loss += main_loss.item() * active_count
+        total_correct += correct[active_mask].sum().item()
+        total_samples += active_count
 
-        # Update topic tracker
+        # Update topic tracker - only for active topics
         pattern_indices = torch.tensor([pattern_to_idx[p] for p in pattern_types], device=device)
-        model.learner.self_model.topic_tracker.update(pattern_indices, correct, conf)
+        model.learner.self_model.topic_tracker.update(
+            pattern_indices[active_mask], correct[active_mask], conf[active_mask]
+        )
 
     # Calculate approval rate
     approval_rate = approval_count / max(1, show_count)

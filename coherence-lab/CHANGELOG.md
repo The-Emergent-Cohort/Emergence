@@ -1,5 +1,21 @@
 # Coherence Lab Changelog
 
+## [0.5.2] - 2024-12-08
+### Fixed
+- **Exam system uses confirmed_level**: Exams now gate on exam-verified level, not XP-level
+  - XP gets you eligible to test, but must pass to advance confirmed_level
+  - Fixes bug where XP-level hitting L10 caused "already at max" false negative
+- **Flat 25% exam failure penalty**: Simplified from 25-50% variable
+### Changed
+- **Mastered topics excluded from training**: Compute goes where learning is needed
+  - Topics with `topic_mastered=True` skip loss computation, shows, and tracker updates
+  - Batches with all mastered topics are skipped entirely
+  - No more XP accumulation on graduated/mastered topics
+- **Systems module extraction**: Reusable components in `systems/`
+  - `progression.py`: XP/level tracking (standalone)
+  - `examination.py`: Exam logic (standalone)
+  - `logging.py`: Standardized output formatting
+
 ## [0.5.1] - 2024-12-08
 ### Changed
 - **Teacher-validated XP**: Removed auto-XP from practice
