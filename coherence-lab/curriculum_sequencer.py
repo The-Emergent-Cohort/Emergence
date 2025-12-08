@@ -327,24 +327,32 @@ class CurriculumSequencer:
 
             # === LEVEL-UP EXAMS ===
             # Run level exams for all training topics
+            # Allow multiple level-ups per topic per epoch (keep going until fail or not eligible)
             level_exam_results = []
             all_training_topics = active_topics + maintenance_topics
             topics_that_leveled = set()
 
             for topic_name in all_training_topics:
                 idx = self.topic_to_idx[topic_name]
-                if self.tracker.check_exam_eligible(idx):
-                    current_level = self.tracker.get_level(idx)
-                    exam_size = self.tracker.get_exam_size(current_level + 1)
+                exam_attempt = 0
+                max_attempts = 15  # Safety limit (L1->L10 = 9 attempts max)
+
+                # Keep taking exams while eligible (allows rapid level-up when performance supports it)
+                while self.tracker.check_exam_eligible(idx) and exam_attempt < max_attempts:
+                    # Use confirmed_level for exam progression, not XP-level
+                    confirmed = self.tracker.confirmed_level[idx].item() if hasattr(self.tracker, 'confirmed_level') else self.tracker.get_level(idx)
+                    exam_size = self.tracker.get_exam_size(confirmed + 1)
 
                     correct, total = exam_fn(
                         model, topic_name, exam_size,
-                        seed=epoch * 1000 + idx, device=device
+                        seed=epoch * 1000 + idx + exam_attempt * 100, device=device
                     )
 
                     result = self.tracker.take_exam(idx, correct, total)
                     result['topic'] = topic_name
+                    result['from_level'] = confirmed
                     level_exam_results.append(result)
+                    exam_attempt += 1
 
                     # Track stuckness based on exam results
                     if hasattr(self.tracker, 'record_level_up'):
@@ -353,6 +361,7 @@ class CurriculumSequencer:
                             topics_that_leveled.add(topic_name)
                         else:
                             self.tracker.record_exam_failure(idx)
+                            break  # Stop on failure
 
             # === STUCKNESS TRACKING ===
             # Tick stuckness for active topics that didn't level up

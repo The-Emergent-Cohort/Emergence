@@ -562,17 +562,22 @@ def main(args):
         print(f"\n  Section patterns:")
         for pt in active_topics:
             acc = eval_metrics['per_pattern'].get(pt, 0)
-            level = tracker.get_level(pattern_to_idx[pt])
+            # Use confirmed_level for display (exam-verified)
+            confirmed = tracker.confirmed_level[pattern_to_idx[pt]].item() if hasattr(tracker, 'confirmed_level') else tracker.get_level(pattern_to_idx[pt])
             xp, _, progress, _ = tracker.get_xp_info(pattern_to_idx[pt])
-            level_bar = "█" * level + ("░" if progress > 0.5 else "") + "·" * (10 - level - (1 if progress > 0.5 else 0))
-            ready = "READY" if level >= 5 else ""
-            print(f"    {pt:15s}: {acc:.1%} L{level:2d} {level_bar} ({xp:.0f}xp) {ready}")
+            level_bar = "█" * confirmed + ("░" if progress > 0.5 else "") + "·" * (10 - confirmed - (1 if progress > 0.5 else 0))
+            ready = "MASTERED" if confirmed >= 10 else ""
+            print(f"    {pt:15s}: {acc:.1%} L{confirmed:2d} {level_bar} ({xp:.0f}xp) {ready}")
 
         # Display level exams
         if record['level_exams']:
             print("  Level exams:")
             for r in record['level_exams']:
-                status = f"-> L{r['new_level']}" if r['passed'] else f"(cooldown {r['cooldown']})"
+                from_lvl = r.get('from_level', r['new_level'] - 1 if r['passed'] else r['new_level'])
+                if r['passed']:
+                    status = f"L{from_lvl}->L{r['new_level']}"
+                else:
+                    status = f"L{from_lvl}->L{from_lvl+1} FAIL (cd:{r['cooldown']})"
                 symbol = "✓" if r['passed'] else "✗"
                 print(f"    {r['topic']:15s}: {r['score']:.0%} {symbol} {status}")
 
