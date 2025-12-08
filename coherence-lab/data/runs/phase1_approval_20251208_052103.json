@@ -1,0 +1,1497 @@
+{
+  "script": "phase1_approval.py",
+  "version": "0.5.13",
+  "run_id": "20251208_052103",
+  "best_acc": 0.9825,
+  "final_trust": 0.9933071732521057,
+  "final_internalization": 0.9933071732521057,
+  "epochs_completed": 8,
+  "curriculum_topics": [
+    "alternating",
+    "repeating",
+    "incrementing",
+    "fixed_offset",
+    "periodic_repeat"
+  ],
+  "args": {
+    "data_dir": "data",
+    "n_train": 20000,
+    "n_val": 2000,
+    "batch_size": 64,
+    "lr": 0.001,
+    "epochs": 100,
+    "d_model": 64,
+    "n_heads": 4,
+    "n_think_steps": 5
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "train_acc": 0.44995,
+      "train_loss": 1.8687295768737793,
+      "val_acc": 0.6635,
+      "show_rate": 0.0995,
+      "approval_rate": 1.0,
+      "show_reasons": {
+        "creative": 0,
+        "streak": 1102,
+        "validation": 887,
+        "spontaneous": 1
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.9999997615814209,
+      "per_pattern": {
+        "alternating": 0.44472361809045224,
+        "repeating": 1.0,
+        "incrementing": 0.7321428571428571,
+        "fixed_offset": 0.7893462469733656,
+        "periodic_repeat": 0.30851063829787234
+      },
+      "teacher_goal": 3,
+      "student_goal_estimate": 3.0,
+      "teacher_impressedness": 0.20000000298023224,
+      "goal_calibration_rate": 0.5,
+      "topic_calibration": {
+        "alternating": {
+          "accuracy": 0.18345558643341064,
+          "confidence": 0.6066765785217285,
+          "gap": -0.42322099208831787,
+          "status": "overconfident",
+          "streak": 0,
+          "best_streak": 7,
+          "mastered": false,
+          "xp": 169.35406494140625,
+          "level": 4,
+          "level_progress": 0.10393405490451389,
+          "xp_high": 169.35406494140625
+        },
+        "repeating": {
+          "accuracy": 0.9999997615814209,
+          "confidence": 0.658488392829895,
+          "gap": 0.3415113687515259,
+          "status": "guessing",
+          "streak": 288,
+          "best_streak": 1690,
+          "mastered": true,
+          "xp": 145.25,
+          "level": 3,
+          "level_progress": 0.7892857142857143,
+          "xp_high": 145.25
+        },
+        "incrementing": {
+          "accuracy": 0.42646944522857666,
+          "confidence": 0.6471615433692932,
+          "gap": -0.22069209814071655,
+          "status": "overconfident",
+          "streak": 0,
+          "best_streak": 13,
+          "mastered": false,
+          "xp": 151.79164123535156,
+          "level": 3,
+          "level_progress": 0.8827377319335937,
+          "xp_high": 151.79164123535156
+        },
+        "fixed_offset": {
+          "accuracy": 0.4788573980331421,
+          "confidence": 0.6569337844848633,
+          "gap": -0.1780763864517212,
+          "status": "overconfident",
+          "streak": 0,
+          "best_streak": 15,
+          "mastered": false,
+          "xp": 143.5416717529297,
+          "level": 3,
+          "level_progress": 0.7648810250418526,
+          "xp_high": 143.5416717529297
+        },
+        "periodic_repeat": {
+          "accuracy": 0.49132195115089417,
+          "confidence": 0.5606040358543396,
+          "gap": -0.06928208470344543,
+          "status": "calibrated",
+          "streak": 4,
+          "best_streak": 5,
+          "mastered": false,
+          "xp": 162.9790802001953,
+          "level": 4,
+          "level_progress": 0.03310089111328125,
+          "xp_high": 162.9790802001953
+        }
+      },
+      "total_xp": 772.9164428710938,
+      "avg_level": 3.4000000953674316,
+      "exams": [
+        {
+          "passed": false,
+          "score": 0.5625,
+          "threshold": 0.75,
+          "new_level": 0,
+          "xp_lost": 169.35406494140625,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "alternating",
+          "target_level": 5
+        },
+        {
+          "passed": true,
+          "score": 1.0,
+          "threshold": 0.75,
+          "new_level": 1,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "repeating",
+          "target_level": 4
+        },
+        {
+          "passed": false,
+          "score": 0.5,
+          "threshold": 0.75,
+          "new_level": 0,
+          "xp_lost": 151.79164123535156,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "incrementing",
+          "target_level": 4
+        },
+        {
+          "passed": true,
+          "score": 0.8125,
+          "threshold": 0.75,
+          "new_level": 1,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "fixed_offset",
+          "target_level": 4
+        },
+        {
+          "passed": false,
+          "score": 0.3125,
+          "threshold": 0.75,
+          "new_level": 0,
+          "xp_lost": 162.9790802001953,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "periodic_repeat",
+          "target_level": 5
+        },
+        {
+          "passed": true,
+          "score": 1.0,
+          "threshold": 0.75,
+          "new_level": 2,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "repeating",
+          "target_level": 4
+        },
+        {
+          "passed": true,
+          "score": 0.8125,
+          "threshold": 0.75,
+          "new_level": 2,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "fixed_offset",
+          "target_level": 4
+        },
+        {
+          "passed": true,
+          "score": 1.0,
+          "threshold": 0.75,
+          "new_level": 3,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "repeating",
+          "target_level": 4
+        },
+        {
+          "passed": false,
+          "score": 0.6875,
+          "threshold": 0.75,
+          "new_level": 2,
+          "xp_lost": 66.92708969116211,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "fixed_offset",
+          "target_level": 4
+        }
+      ]
+    },
+    {
+      "epoch": 2,
+      "train_acc": 0.71405,
+      "train_loss": 0.9012862115859985,
+      "val_acc": 0.7805,
+      "show_rate": 0.18755,
+      "approval_rate": 1.0,
+      "show_reasons": {
+        "creative": 1670,
+        "streak": 2081,
+        "validation": 0,
+        "spontaneous": 0
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.9999997615814209,
+      "per_pattern": {
+        "alternating": 0.5276381909547738,
+        "repeating": 1.0,
+        "incrementing": 0.9770408163265306,
+        "fixed_offset": 0.9612590799031477,
+        "periodic_repeat": 0.39893617021276595
+      },
+      "teacher_goal": 3,
+      "student_goal_estimate": 3.0,
+      "teacher_impressedness": 1.0,
+      "goal_calibration_rate": 0.5,
+      "topic_calibration": {
+        "alternating": {
+          "accuracy": 0.5262435078620911,
+          "confidence": 0.649368166923523,
+          "gap": -0.12312465906143188,
+          "status": "overconfident",
+          "streak": 0,
+          "best_streak": 10,
+          "mastered": false,
+          "xp": 255.2956085205078,
+          "level": 5,
+          "level_progress": 0.04814189564098011,
+          "xp_high": 255.2956085205078
+        },
+        "repeating": {
+          "accuracy": 0.9999997615814209,
+          "confidence": 0.824169933795929,
+          "gap": 0.17582982778549194,
+          "status": "guessing",
+          "streak": 1301,
+          "best_streak": 2123,
+          "mastered": true,
+          "xp": 244.8125,
+          "level": 4,
+          "level_progress": 0.9423611111111111,
+          "xp_high": 244.8125
+        },
+        "incrementing": {
+          "accuracy": 0.8397705554962158,
+          "confidence": 0.9105821847915649,
+          "gap": -0.07081162929534912,
+          "status": "calibrated",
+          "streak": 1,
+          "best_streak": 55,
+          "mastered": false,
+          "xp": 732.3028564453125,
+          "level": 8,
+          "level_progress": 0.5429579790900735,
+          "xp_high": 732.3028564453125
+        },
+        "fixed_offset": {
+          "accuracy": 0.9999327063560486,
+          "confidence": 0.918920636177063,
+          "gap": 0.0810120701789856,
+          "status": "calibrated",
+          "streak": 71,
+          "best_streak": 71,
+          "mastered": false,
+          "xp": 764.1935424804688,
+          "level": 8,
+          "level_progress": 0.7305502498851103,
+          "xp_high": 764.1935424804688
+        },
+        "periodic_repeat": {
+          "accuracy": 0.26029568910598755,
+          "confidence": 0.5372704267501831,
+          "gap": -0.27697473764419556,
+          "status": "overconfident",
+          "streak": 1,
+          "best_streak": 9,
+          "mastered": false,
+          "xp": 268.2497863769531,
+          "level": 5,
+          "level_progress": 0.16590714888139205,
+          "xp_high": 268.2497863769531
+        }
+      },
+      "total_xp": 2264.854248046875,
+      "avg_level": 6.0,
+      "exams": [
+        {
+          "passed": false,
+          "score": 0.4375,
+          "threshold": 0.75,
+          "new_level": 0,
+          "xp_lost": 255.2956085205078,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "alternating",
+          "target_level": 6
+        },
+        {
+          "passed": true,
+          "score": 1.0,
+          "threshold": 0.8,
+          "new_level": 4,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "repeating",
+          "target_level": 5
+        },
+        {
+          "passed": true,
+          "score": 0.96875,
+          "threshold": 0.75,
+          "new_level": 1,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "incrementing",
+          "target_level": 9
+        },
+        {
+          "passed": true,
+          "score": 0.9375,
+          "threshold": 0.75,
+          "new_level": 3,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "fixed_offset",
+          "target_level": 9
+        },
+        {
+          "passed": false,
+          "score": 0.375,
+          "threshold": 0.75,
+          "new_level": 0,
+          "xp_lost": 268.2497863769531,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "periodic_repeat",
+          "target_level": 6
+        },
+        {
+          "passed": true,
+          "score": 0.9375,
+          "threshold": 0.75,
+          "new_level": 2,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "incrementing",
+          "target_level": 9
+        },
+        {
+          "passed": true,
+          "score": 0.96875,
+          "threshold": 0.8,
+          "new_level": 4,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "fixed_offset",
+          "target_level": 9
+        },
+        {
+          "passed": true,
+          "score": 1.0,
+          "threshold": 0.75,
+          "new_level": 3,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "incrementing",
+          "target_level": 9
+        },
+        {
+          "passed": true,
+          "score": 0.96875,
+          "threshold": 0.8,
+          "new_level": 5,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "fixed_offset",
+          "target_level": 9
+        },
+        {
+          "passed": true,
+          "score": 1.0,
+          "threshold": 0.8,
+          "new_level": 4,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "incrementing",
+          "target_level": 9
+        },
+        {
+          "passed": true,
+          "score": 0.9375,
+          "threshold": 0.8,
+          "new_level": 6,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "fixed_offset",
+          "target_level": 9
+        },
+        {
+          "passed": true,
+          "score": 1.0,
+          "threshold": 0.8,
+          "new_level": 5,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "incrementing",
+          "target_level": 9
+        },
+        {
+          "passed": true,
+          "score": 0.96875,
+          "threshold": 0.85,
+          "new_level": 7,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "fixed_offset",
+          "target_level": 9
+        },
+        {
+          "passed": true,
+          "score": 0.96875,
+          "threshold": 0.8,
+          "new_level": 6,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "incrementing",
+          "target_level": 9
+        },
+        {
+          "passed": true,
+          "score": 0.96875,
+          "threshold": 0.85,
+          "new_level": 8,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "fixed_offset",
+          "target_level": 9
+        },
+        {
+          "passed": true,
+          "score": 1.0,
+          "threshold": 0.85,
+          "new_level": 7,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "incrementing",
+          "target_level": 9
+        },
+        {
+          "passed": true,
+          "score": 1.0,
+          "threshold": 0.85,
+          "new_level": 8,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "incrementing",
+          "target_level": 9
+        }
+      ]
+    },
+    {
+      "epoch": 3,
+      "train_acc": 0.80625,
+      "train_loss": 0.6053003427505493,
+      "val_acc": 0.8475,
+      "show_rate": 0.27635,
+      "approval_rate": 1.0,
+      "show_reasons": {
+        "creative": 3513,
+        "streak": 2014,
+        "validation": 0,
+        "spontaneous": 0
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.9999997615814209,
+      "per_pattern": {
+        "alternating": 0.6934673366834171,
+        "repeating": 1.0,
+        "incrementing": 0.9744897959183674,
+        "fixed_offset": 0.9975786924939467,
+        "periodic_repeat": 0.5425531914893617
+      },
+      "teacher_goal": 3,
+      "student_goal_estimate": 3.0,
+      "teacher_impressedness": 1.0,
+      "goal_calibration_rate": 0.5,
+      "topic_calibration": {
+        "alternating": {
+          "accuracy": 0.6340510845184326,
+          "confidence": 0.7779923677444458,
+          "gap": -0.14394128322601318,
+          "status": "overconfident",
+          "streak": 0,
+          "best_streak": 16,
+          "mastered": false,
+          "xp": 351.7922668457031,
+          "level": 5,
+          "level_progress": 0.9253842440518466,
+          "xp_high": 351.7922668457031
+        },
+        "repeating": {
+          "accuracy": 0.9999997615814209,
+          "confidence": 0.9152646660804749,
+          "gap": 0.08473509550094604,
+          "status": "calibrated",
+          "streak": 222,
+          "best_streak": 2123,
+          "mastered": true,
+          "xp": 574.082275390625,
+          "level": 7,
+          "level_progress": 0.5605485026041667,
+          "xp_high": 574.082275390625
+        },
+        "incrementing": {
+          "accuracy": 0.9995973110198975,
+          "confidence": 0.9767363667488098,
+          "gap": 0.022860944271087646,
+          "status": "calibrated",
+          "streak": 53,
+          "best_streak": 115,
+          "mastered": true,
+          "xp": 1538.0802001953125,
+          "level": 10,
+          "level_progress": 1.0,
+          "xp_high": 1538.0802001953125
+        },
+        "fixed_offset": {
+          "accuracy": 0.9762363433837891,
+          "confidence": 0.9746835827827454,
+          "gap": 0.0015527606010437012,
+          "status": "calibrated",
+          "streak": 16,
+          "best_streak": 108,
+          "mastered": true,
+          "xp": 1507.1156005859375,
+          "level": 10,
+          "level_progress": 1.0,
+          "xp_high": 1507.1156005859375
+        },
+        "periodic_repeat": {
+          "accuracy": 0.6876662969589233,
+          "confidence": 0.6670242547988892,
+          "gap": 0.02064204216003418,
+          "status": "calibrated",
+          "streak": 2,
+          "best_streak": 10,
+          "mastered": false,
+          "xp": 343.2216796875,
+          "level": 5,
+          "level_progress": 0.847469815340909,
+          "xp_high": 343.2216796875
+        }
+      },
+      "total_xp": 4314.2919921875,
+      "avg_level": 7.400000095367432,
+      "exams": [
+        {
+          "passed": true,
+          "score": 0.8125,
+          "threshold": 0.75,
+          "new_level": 1,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "alternating",
+          "target_level": 6
+        },
+        {
+          "passed": true,
+          "score": 1.0,
+          "threshold": 0.8,
+          "new_level": 5,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "repeating",
+          "target_level": 8
+        },
+        {
+          "passed": true,
+          "score": 0.984375,
+          "threshold": 0.85,
+          "new_level": 9,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "incrementing",
+          "target_level": 11
+        },
+        {
+          "passed": true,
+          "score": 0.984375,
+          "threshold": 0.85,
+          "new_level": 9,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "fixed_offset",
+          "target_level": 11
+        },
+        {
+          "passed": false,
+          "score": 0.4375,
+          "threshold": 0.75,
+          "new_level": 0,
+          "xp_lost": 343.2216796875,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "periodic_repeat",
+          "target_level": 6
+        },
+        {
+          "passed": false,
+          "score": 0.5625,
+          "threshold": 0.75,
+          "new_level": 1,
+          "xp_lost": 341.7922668457031,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "alternating",
+          "target_level": 6
+        },
+        {
+          "passed": true,
+          "score": 1.0,
+          "threshold": 0.8,
+          "new_level": 6,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "repeating",
+          "target_level": 8
+        },
+        {
+          "passed": true,
+          "score": 0.984375,
+          "threshold": 0.9,
+          "new_level": 10,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": true,
+          "topic": "incrementing",
+          "target_level": 11
+        },
+        {
+          "passed": true,
+          "score": 0.984375,
+          "threshold": 0.9,
+          "new_level": 10,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": true,
+          "topic": "fixed_offset",
+          "target_level": 11
+        },
+        {
+          "passed": true,
+          "score": 1.0,
+          "threshold": 0.85,
+          "new_level": 7,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "repeating",
+          "target_level": 8
+        }
+      ]
+    },
+    {
+      "epoch": 4,
+      "train_acc": 0.85745,
+      "train_loss": 0.33573073806762693,
+      "val_acc": 0.9205,
+      "show_rate": 0.1023,
+      "approval_rate": 1.0,
+      "show_reasons": {
+        "creative": 758,
+        "streak": 1288,
+        "validation": 0,
+        "spontaneous": 0
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.9999997615814209,
+      "per_pattern": {
+        "alternating": 0.8668341708542714,
+        "repeating": 1.0,
+        "incrementing": 1.0,
+        "fixed_offset": 0.9297820823244553,
+        "periodic_repeat": 0.7952127659574468
+      },
+      "teacher_goal": 3,
+      "student_goal_estimate": 3.0,
+      "teacher_impressedness": 1.0,
+      "goal_calibration_rate": 0.5,
+      "topic_calibration": {
+        "alternating": {
+          "accuracy": 0.9184516668319702,
+          "confidence": 0.8401426076889038,
+          "gap": 0.0783090591430664,
+          "status": "calibrated",
+          "streak": 7,
+          "best_streak": 37,
+          "mastered": false,
+          "xp": 401.3254699707031,
+          "level": 6,
+          "level_progress": 0.31788823054387016,
+          "xp_high": 401.3254699707031
+        },
+        "repeating": {
+          "accuracy": 0.9999997615814209,
+          "confidence": 0.9493023157119751,
+          "gap": 0.0506974458694458,
+          "status": "calibrated",
+          "streak": 1207,
+          "best_streak": 2123,
+          "mastered": true,
+          "xp": 915.1753540039062,
+          "level": 9,
+          "level_progress": 0.5535544947574013,
+          "xp_high": 915.1753540039062
+        },
+        "incrementing": {
+          "accuracy": 0.9992803931236267,
+          "confidence": 0.9498392939567566,
+          "gap": 0.04944109916687012,
+          "status": "calibrated",
+          "streak": 55,
+          "best_streak": 115,
+          "mastered": true,
+          "xp": 1538.0802001953125,
+          "level": 10,
+          "level_progress": 1.0,
+          "xp_high": 1538.0802001953125
+        },
+        "fixed_offset": {
+          "accuracy": 0.6799076795578003,
+          "confidence": 0.9258931875228882,
+          "gap": -0.2459855079650879,
+          "status": "overconfident",
+          "streak": 1,
+          "best_streak": 108,
+          "mastered": true,
+          "xp": 1507.1156005859375,
+          "level": 10,
+          "level_progress": 1.0,
+          "xp_high": 1507.1156005859375
+        },
+        "periodic_repeat": {
+          "accuracy": 0.7909685373306274,
+          "confidence": 0.7440951466560364,
+          "gap": 0.046873390674591064,
+          "status": "calibrated",
+          "streak": 6,
+          "best_streak": 35,
+          "mastered": false,
+          "xp": 353.7756652832031,
+          "level": 5,
+          "level_progress": 0.9434151389382103,
+          "xp_high": 353.7756652832031
+        }
+      },
+      "total_xp": 4715.47265625,
+      "avg_level": 8.0,
+      "exams": [
+        {
+          "passed": true,
+          "score": 0.84375,
+          "threshold": 0.75,
+          "new_level": 2,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "alternating",
+          "target_level": 7
+        },
+        {
+          "passed": true,
+          "score": 1.0,
+          "threshold": 0.85,
+          "new_level": 8,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "repeating",
+          "target_level": 10
+        },
+        {
+          "passed": false,
+          "score": 0.6875,
+          "threshold": 0.75,
+          "new_level": 0,
+          "xp_lost": 353.7756652832031,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "periodic_repeat",
+          "target_level": 6
+        },
+        {
+          "passed": true,
+          "score": 0.96875,
+          "threshold": 0.75,
+          "new_level": 3,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "alternating",
+          "target_level": 7
+        },
+        {
+          "passed": true,
+          "score": 1.0,
+          "threshold": 0.85,
+          "new_level": 9,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "repeating",
+          "target_level": 10
+        },
+        {
+          "passed": true,
+          "score": 0.8125,
+          "threshold": 0.8,
+          "new_level": 4,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "alternating",
+          "target_level": 7
+        },
+        {
+          "passed": true,
+          "score": 0.8125,
+          "threshold": 0.8,
+          "new_level": 5,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "alternating",
+          "target_level": 7
+        },
+        {
+          "passed": true,
+          "score": 0.8125,
+          "threshold": 0.8,
+          "new_level": 6,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "alternating",
+          "target_level": 7
+        }
+      ]
+    },
+    {
+      "epoch": 5,
+      "train_acc": 0.8986,
+      "train_loss": 0.2072850477039814,
+      "val_acc": 0.9135,
+      "show_rate": 0.09235,
+      "approval_rate": 1.0,
+      "show_reasons": {
+        "creative": 1025,
+        "streak": 822,
+        "validation": 0,
+        "spontaneous": 0
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.9999997615814209,
+      "per_pattern": {
+        "alternating": 0.9522613065326633,
+        "repeating": 1.0,
+        "incrementing": 0.8979591836734694,
+        "fixed_offset": 0.8353510895883777,
+        "periodic_repeat": 0.8776595744680851
+      },
+      "teacher_goal": 3,
+      "student_goal_estimate": 3.0,
+      "teacher_impressedness": 1.0,
+      "goal_calibration_rate": 0.5,
+      "topic_calibration": {
+        "alternating": {
+          "accuracy": 0.9867737889289856,
+          "confidence": 0.8990752100944519,
+          "gap": 0.08769857883453369,
+          "status": "calibrated",
+          "streak": 24,
+          "best_streak": 51,
+          "mastered": false,
+          "xp": 736.1654663085938,
+          "level": 8,
+          "level_progress": 0.5656792135799632,
+          "xp_high": 736.1654663085938
+        },
+        "repeating": {
+          "accuracy": 0.9999997615814209,
+          "confidence": 0.9765186905860901,
+          "gap": 0.02348107099533081,
+          "status": "calibrated",
+          "streak": 5200,
+          "best_streak": 5200,
+          "mastered": true,
+          "xp": 1149.67333984375,
+          "level": 10,
+          "level_progress": 1.0,
+          "xp_high": 1149.67333984375
+        },
+        "incrementing": {
+          "accuracy": 0.9354851841926575,
+          "confidence": 0.9444106817245483,
+          "gap": -0.00892549753189087,
+          "status": "calibrated",
+          "streak": 6,
+          "best_streak": 115,
+          "mastered": true,
+          "xp": 1538.0802001953125,
+          "level": 10,
+          "level_progress": 1.0,
+          "xp_high": 1538.0802001953125
+        },
+        "fixed_offset": {
+          "accuracy": 0.9039455056190491,
+          "confidence": 0.903315544128418,
+          "gap": 0.0006299614906311035,
+          "status": "calibrated",
+          "streak": 7,
+          "best_streak": 108,
+          "mastered": true,
+          "xp": 1507.1156005859375,
+          "level": 10,
+          "level_progress": 1.0,
+          "xp_high": 1507.1156005859375
+        },
+        "periodic_repeat": {
+          "accuracy": 0.876645565032959,
+          "confidence": 0.8168395161628723,
+          "gap": 0.05980604887008667,
+          "status": "calibrated",
+          "streak": 4,
+          "best_streak": 35,
+          "mastered": false,
+          "xp": 470.6296691894531,
+          "level": 6,
+          "level_progress": 0.8509974553034856,
+          "xp_high": 470.6296691894531
+        }
+      },
+      "total_xp": 5401.66455078125,
+      "avg_level": 8.800000190734863,
+      "exams": [
+        {
+          "passed": true,
+          "score": 0.90625,
+          "threshold": 0.85,
+          "new_level": 7,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "alternating",
+          "target_level": 9
+        },
+        {
+          "passed": true,
+          "score": 1.0,
+          "threshold": 0.9,
+          "new_level": 10,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": true,
+          "topic": "repeating",
+          "target_level": 11
+        },
+        {
+          "passed": true,
+          "score": 0.96875,
+          "threshold": 0.75,
+          "new_level": 1,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "periodic_repeat",
+          "target_level": 7
+        },
+        {
+          "passed": true,
+          "score": 1.0,
+          "threshold": 0.85,
+          "new_level": 8,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "alternating",
+          "target_level": 9
+        },
+        {
+          "passed": true,
+          "score": 0.84375,
+          "threshold": 0.75,
+          "new_level": 2,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "periodic_repeat",
+          "target_level": 7
+        },
+        {
+          "passed": true,
+          "score": 0.90625,
+          "threshold": 0.75,
+          "new_level": 3,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "periodic_repeat",
+          "target_level": 7
+        },
+        {
+          "passed": true,
+          "score": 0.90625,
+          "threshold": 0.8,
+          "new_level": 4,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "periodic_repeat",
+          "target_level": 7
+        },
+        {
+          "passed": true,
+          "score": 0.875,
+          "threshold": 0.8,
+          "new_level": 5,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "periodic_repeat",
+          "target_level": 7
+        },
+        {
+          "passed": true,
+          "score": 0.90625,
+          "threshold": 0.8,
+          "new_level": 6,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "periodic_repeat",
+          "target_level": 7
+        }
+      ]
+    },
+    {
+      "epoch": 6,
+      "train_acc": 0.9348,
+      "train_loss": 0.12462109649181366,
+      "val_acc": 0.969,
+      "show_rate": 0.04665,
+      "approval_rate": 1.0,
+      "show_reasons": {
+        "creative": 416,
+        "streak": 517,
+        "validation": 0,
+        "spontaneous": 0
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.9999997615814209,
+      "per_pattern": {
+        "alternating": 0.9849246231155779,
+        "repeating": 1.0,
+        "incrementing": 0.9795918367346939,
+        "fixed_offset": 0.9588377723970944,
+        "periodic_repeat": 0.9175531914893617
+      },
+      "teacher_goal": 3,
+      "student_goal_estimate": 3.0,
+      "teacher_impressedness": 1.0,
+      "goal_calibration_rate": 0.5,
+      "topic_calibration": {
+        "alternating": {
+          "accuracy": 0.9812073707580566,
+          "confidence": 0.9547261595726013,
+          "gap": 0.026481211185455322,
+          "status": "calibrated",
+          "streak": 16,
+          "best_streak": 90,
+          "mastered": false,
+          "xp": 936.5302734375,
+          "level": 9,
+          "level_progress": 0.6659488075657894,
+          "xp_high": 936.5302734375
+        },
+        "repeating": {
+          "accuracy": 0.9999997615814209,
+          "confidence": 0.9849110245704651,
+          "gap": 0.01508873701095581,
+          "status": "calibrated",
+          "streak": 2228,
+          "best_streak": 6964,
+          "mastered": true,
+          "xp": 1149.67333984375,
+          "level": 10,
+          "level_progress": 1.0,
+          "xp_high": 1149.67333984375
+        },
+        "incrementing": {
+          "accuracy": 0.9381245374679565,
+          "confidence": 0.9570632576942444,
+          "gap": -0.018938720226287842,
+          "status": "calibrated",
+          "streak": 9,
+          "best_streak": 115,
+          "mastered": true,
+          "xp": 1538.0802001953125,
+          "level": 10,
+          "level_progress": 1.0,
+          "xp_high": 1538.0802001953125
+        },
+        "fixed_offset": {
+          "accuracy": 0.9630781412124634,
+          "confidence": 0.9495655298233032,
+          "gap": 0.013512611389160156,
+          "status": "calibrated",
+          "streak": 15,
+          "best_streak": 108,
+          "mastered": true,
+          "xp": 1507.1156005859375,
+          "level": 10,
+          "level_progress": 1.0,
+          "xp_high": 1507.1156005859375
+        },
+        "periodic_repeat": {
+          "accuracy": 0.9415391683578491,
+          "confidence": 0.9030689597129822,
+          "gap": 0.03847020864486694,
+          "status": "calibrated",
+          "streak": 15,
+          "best_streak": 60,
+          "mastered": false,
+          "xp": 696.0100708007812,
+          "level": 8,
+          "level_progress": 0.32947100471047797,
+          "xp_high": 696.0100708007812
+        }
+      },
+      "total_xp": 5827.40966796875,
+      "avg_level": 9.40000057220459,
+      "exams": [
+        {
+          "passed": true,
+          "score": 1.0,
+          "threshold": 0.85,
+          "new_level": 9,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "alternating",
+          "target_level": 10
+        },
+        {
+          "passed": true,
+          "score": 0.875,
+          "threshold": 0.85,
+          "new_level": 7,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "periodic_repeat",
+          "target_level": 9
+        },
+        {
+          "passed": true,
+          "score": 0.90625,
+          "threshold": 0.85,
+          "new_level": 8,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "periodic_repeat",
+          "target_level": 9
+        }
+      ]
+    },
+    {
+      "epoch": 7,
+      "train_acc": 0.94135,
+      "train_loss": 0.09797207364439964,
+      "val_acc": 0.97,
+      "show_rate": 0.03805,
+      "approval_rate": 1.0,
+      "show_reasons": {
+        "creative": 380,
+        "streak": 381,
+        "validation": 0,
+        "spontaneous": 0
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.9999997615814209,
+      "per_pattern": {
+        "alternating": 0.9698492462311558,
+        "repeating": 1.0,
+        "incrementing": 0.9821428571428571,
+        "fixed_offset": 0.9418886198547215,
+        "periodic_repeat": 0.9547872340425532
+      },
+      "teacher_goal": 3,
+      "student_goal_estimate": 3.0,
+      "teacher_impressedness": 1.0,
+      "goal_calibration_rate": 0.5,
+      "topic_calibration": {
+        "alternating": {
+          "accuracy": 0.996944785118103,
+          "confidence": 0.9552755355834961,
+          "gap": 0.041669249534606934,
+          "status": "calibrated",
+          "streak": 34,
+          "best_streak": 127,
+          "mastered": true,
+          "xp": 1091.5361328125,
+          "level": 10,
+          "level_progress": 1.0,
+          "xp_high": 1091.5361328125
+        },
+        "repeating": {
+          "accuracy": 0.9999997615814209,
+          "confidence": 0.9753204584121704,
+          "gap": 0.02467930316925049,
+          "status": "calibrated",
+          "streak": 6221,
+          "best_streak": 6964,
+          "mastered": true,
+          "xp": 1149.67333984375,
+          "level": 10,
+          "level_progress": 1.0,
+          "xp_high": 1149.67333984375
+        },
+        "incrementing": {
+          "accuracy": 0.9619259238243103,
+          "confidence": 0.9421458840370178,
+          "gap": 0.01978003978729248,
+          "status": "calibrated",
+          "streak": 10,
+          "best_streak": 115,
+          "mastered": true,
+          "xp": 1538.0802001953125,
+          "level": 10,
+          "level_progress": 1.0,
+          "xp_high": 1538.0802001953125
+        },
+        "fixed_offset": {
+          "accuracy": 0.9421850442886353,
+          "confidence": 0.9436169266700745,
+          "gap": -0.001431882381439209,
+          "status": "calibrated",
+          "streak": 9,
+          "best_streak": 108,
+          "mastered": true,
+          "xp": 1507.1156005859375,
+          "level": 10,
+          "level_progress": 1.0,
+          "xp_high": 1507.1156005859375
+        },
+        "periodic_repeat": {
+          "accuracy": 0.9893430471420288,
+          "confidence": 0.8945670127868652,
+          "gap": 0.09477603435516357,
+          "status": "calibrated",
+          "streak": 23,
+          "best_streak": 69,
+          "mastered": false,
+          "xp": 872.001953125,
+          "level": 9,
+          "level_progress": 0.32632606907894735,
+          "xp_high": 872.001953125
+        }
+      },
+      "total_xp": 6158.4072265625,
+      "avg_level": 9.800000190734863,
+      "exams": [
+        {
+          "passed": true,
+          "score": 0.984375,
+          "threshold": 0.9,
+          "new_level": 10,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": true,
+          "topic": "alternating",
+          "target_level": 11
+        },
+        {
+          "passed": true,
+          "score": 0.96875,
+          "threshold": 0.85,
+          "new_level": 9,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "periodic_repeat",
+          "target_level": 10
+        }
+      ]
+    },
+    {
+      "epoch": 8,
+      "train_acc": 0.9606,
+      "train_loss": 0.06013994194418192,
+      "val_acc": 0.9825,
+      "show_rate": 0.0212,
+      "approval_rate": 1.0,
+      "show_reasons": {
+        "creative": 251,
+        "streak": 173,
+        "validation": 0,
+        "spontaneous": 0
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.9999997615814209,
+      "per_pattern": {
+        "alternating": 0.9773869346733668,
+        "repeating": 1.0,
+        "incrementing": 0.9897959183673469,
+        "fixed_offset": 0.9927360774818402,
+        "periodic_repeat": 0.949468085106383
+      },
+      "teacher_goal": 12,
+      "student_goal_estimate": 4.800000190734863,
+      "teacher_impressedness": 1.0,
+      "goal_calibration_rate": 0.0,
+      "topic_calibration": {
+        "alternating": {
+          "accuracy": 0.9717185497283936,
+          "confidence": 0.9576528072357178,
+          "gap": 0.014065742492675781,
+          "status": "calibrated",
+          "streak": 17,
+          "best_streak": 141,
+          "mastered": true,
+          "xp": 1091.5361328125,
+          "level": 10,
+          "level_progress": 1.0,
+          "xp_high": 1091.5361328125
+        },
+        "repeating": {
+          "accuracy": 0.9999997615814209,
+          "confidence": 0.984140932559967,
+          "gap": 0.015858829021453857,
+          "status": "calibrated",
+          "streak": 340,
+          "best_streak": 6964,
+          "mastered": true,
+          "xp": 1149.67333984375,
+          "level": 10,
+          "level_progress": 1.0,
+          "xp_high": 1149.67333984375
+        },
+        "incrementing": {
+          "accuracy": 0.9998379945755005,
+          "confidence": 0.9729576706886292,
+          "gap": 0.026880323886871338,
+          "status": "calibrated",
+          "streak": 61,
+          "best_streak": 200,
+          "mastered": true,
+          "xp": 1538.0802001953125,
+          "level": 10,
+          "level_progress": 1.0,
+          "xp_high": 1538.0802001953125
+        },
+        "fixed_offset": {
+          "accuracy": 0.9999589323997498,
+          "confidence": 0.96233069896698,
+          "gap": 0.037628233432769775,
+          "status": "calibrated",
+          "streak": 75,
+          "best_streak": 139,
+          "mastered": true,
+          "xp": 1507.1156005859375,
+          "level": 10,
+          "level_progress": 1.0,
+          "xp_high": 1507.1156005859375
+        },
+        "periodic_repeat": {
+          "accuracy": 0.9999400973320007,
+          "confidence": 0.9176714420318604,
+          "gap": 0.08226865530014038,
+          "status": "calibrated",
+          "streak": 72,
+          "best_streak": 112,
+          "mastered": true,
+          "xp": 1090.6904296875,
+          "level": 10,
+          "level_progress": 1.0,
+          "xp_high": 1090.6904296875
+        }
+      },
+      "total_xp": 6377.095703125,
+      "avg_level": 10.0,
+      "exams": [
+        {
+          "passed": true,
+          "score": 0.953125,
+          "threshold": 0.9,
+          "new_level": 10,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": true,
+          "topic": "periodic_repeat",
+          "target_level": 11
+        }
+      ],
+      "final_exam": [
+        {
+          "topic": "alternating",
+          "score": 0.96875,
+          "passed": true
+        },
+        {
+          "topic": "repeating",
+          "score": 1.0,
+          "passed": true
+        },
+        {
+          "topic": "incrementing",
+          "score": 1.0,
+          "passed": true
+        },
+        {
+          "topic": "fixed_offset",
+          "score": 1.0,
+          "passed": true
+        },
+        {
+          "topic": "periodic_repeat",
+          "score": 0.96875,
+          "passed": true
+        }
+      ]
+    }
+  ]
+}
