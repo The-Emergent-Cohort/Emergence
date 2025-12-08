@@ -218,14 +218,15 @@ def main(args):
     print(f"Device: {device}")
 
     # Easy patterns for foundation building
-    pattern_types = ['alternating', 'repeating', 'incrementing', 'fixed_offset']
+    # periodic_repeat added to prep for long_range (teaches "look back N positions")
+    pattern_types = ['alternating', 'repeating', 'incrementing', 'fixed_offset', 'periodic_repeat']
     pattern_to_idx = {p: i for i, p in enumerate(pattern_types)}
     print(f"Pattern types: {pattern_types}")
 
     # Generate data
     print("\nGenerating easy pattern data...")
-    train_data = PatternDataset(n_examples=args.n_train, seed=42)
-    val_data = PatternDataset(n_examples=args.n_val, seed=123)
+    train_data = PatternDataset(n_examples=args.n_train, seed=42, pattern_types=pattern_types)
+    val_data = PatternDataset(n_examples=args.n_val, seed=123, pattern_types=pattern_types)
 
     train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
     val_loader = DataLoader(val_data, batch_size=args.batch_size, collate_fn=collate_fn)
@@ -286,7 +287,7 @@ def main(args):
             'goal_calibration_rate': train_metrics['goal_calibration_rate']
         })
 
-        print(f"\nDay {day} (Epoch {epoch:2d})")
+        print(f"\nDay {day} (Epoch {epoch:2d})", flush=True)
         print(f"  Train: loss={train_metrics['loss']:.4f}, acc={train_metrics['accuracy']:.1%}")
         print(f"  Val: acc={val_metrics['accuracy']:.1%}")
         print(f"  Shows: {train_metrics['show_rate']:.1%} of answers shown to teacher")
@@ -299,6 +300,7 @@ def main(args):
             acc = val_metrics['per_pattern'].get(pt, 0)
             status = "O" if acc >= 0.95 else ("o" if acc >= 0.85 else ".")
             print(f"    {pt:15s}: {acc:.1%} {status}")
+        import sys; sys.stdout.flush()
 
         if val_metrics['accuracy'] > best_acc:
             best_acc = val_metrics['accuracy']

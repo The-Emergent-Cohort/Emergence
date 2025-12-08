@@ -660,18 +660,19 @@ class SelfModel(nn.Module):
 
             elif proposal_type == 'adjust_show_rate':
                 # Adjust how often we show work
-                self.show_calibration += magnitude * 0.1
+                self.show_calibration.add_(magnitude * 0.1).clamp_(0.0, 1.0)
 
             elif proposal_type == 'reset_topic':
                 # Reset tracking for confused topic
                 if hasattr(self.topic_tracker, 'topic_accuracy'):
+                    # Indexed assignment works for tensor elements
                     self.topic_tracker.topic_accuracy[topic_idx] = 0.5
                     self.topic_tracker.topic_confidence[topic_idx] = 0.5
                     self.topic_tracker.topic_count[topic_idx] = 0
 
             elif proposal_type == 'consolidate_learning':
                 # Mark learning as consolidated - increase calibration confidence
-                self.show_calibration = min(1.0, self.show_calibration + 0.1)
+                self.show_calibration.add_(0.1).clamp_(max=1.0)
 
             elif proposal_type == 'request_unknown':
                 # This is a request for help - no self-modification
@@ -990,8 +991,8 @@ class RelationalLearner(nn.Module):
             nn.Linear(d_model, vocab_size)
         )
 
-        # Pattern classifier (auxiliary)
-        self.pattern_head = nn.Linear(d_model, 4)
+        # Pattern classifier (auxiliary) - 5 types now with periodic_repeat
+        self.pattern_head = nn.Linear(d_model, 5)
 
     def perceive(self, tokens, seq_lens=None):
         """Perceive the world (encode sequence)."""
@@ -2565,13 +2566,30 @@ class RelationalSystem(nn.Module):
 # =============================================================================
 
 class PatternDataset(Dataset):
-    def __init__(self, n_examples=50000, vocab_size=26, seed=None):
+    """
+    Pattern dataset for Phase 1 training.
+
+    Pattern types:
+    - alternating: [a,b,a,b,...] → look back 2
+    - repeating: [a,a,a,...] → look back 1
+    - incrementing: [1,2,3,4,...] → look back 1, add 1
+    - fixed_offset: [2,5,8,11,...] → look back 1, add k
+    - periodic_repeat: [a,b,c,a,b,c,...] → look back period (3-4)
+
+    Use pattern_types parameter to control which patterns are included.
+    """
+    def __init__(self, n_examples=50000, vocab_size=26, seed=None,
+                 pattern_types=None):
         if seed:
             random.seed(seed)
         self.vocab_size = vocab_size
+        # Default to original 4 patterns for backward compatibility
+        if pattern_types is None:
+            pattern_types = ['alternating', 'repeating', 'incrementing', 'fixed_offset']
+        self.pattern_types = pattern_types
         self.examples = []
         for _ in range(n_examples):
-            pattern_type = random.choice(['alternating', 'repeating', 'incrementing', 'fixed_offset'])
+            pattern_type = random.choice(self.pattern_types)
             self.examples.append(self._generate(pattern_type))
 
     def _generate(self, pt):
@@ -2590,12 +2608,37 @@ class PatternDataset(Dataset):
             start = random.randint(0, max(0, self.vocab_size - length - 1))
             seq = [start + i for i in range(length)]
             target = start + length
-        else:  # fixed_offset
+        elif pt == 'fixed_offset':
             length = random.randint(3, 5)
             k = random.randint(1, 3)
             start = random.randint(0, max(0, self.vocab_size - k * length - 1))
             seq = [start + i * k for i in range(length)]
             target = start + length * k
+        elif pt == 'periodic_repeat':
+            # Pattern repeats with period 3-4: [a,b,c,a,b,c,a,b,c,...]
+            # Teaches: "look back N positions" - prep for long_range
+            period = random.randint(3, 4)
+            base = random.sample(range(self.vocab_size), period)
+            # Target length 6-10 to stay safely under max_len=12
+            target_len = random.randint(6, 10)
+            # Build sequence by repeating base pattern
+            full_cycles = target_len // period
+            extra = target_len % period
+            if extra == 0:
+                # Ensure we're mid-cycle (not at boundary) for better learning
+                extra = random.randint(1, period - 1)
+                full_cycles = max(1, full_cycles - 1)
+            seq = (base * full_cycles) + base[:extra]
+            # Target is what comes next in the cycle
+            target = base[extra % period]
+        else:
+            raise ValueError(f"Unknown pattern type: {pt}")
+
+        # Validate target is in bounds
+        if target < 0 or target >= self.vocab_size:
+            raise ValueError(f"Target {target} out of bounds for vocab_size {self.vocab_size} "
+                           f"in pattern type {pt}. seq={seq}")
+
         return {'sequence': seq, 'target': target, 'pattern_type': pt}
 
     def __len__(self):

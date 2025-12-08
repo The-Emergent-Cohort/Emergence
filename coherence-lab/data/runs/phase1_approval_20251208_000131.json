@@ -1,0 +1,301 @@
+{
+  "script": "phase1_approval.py",
+  "run_id": "20251208_000131",
+  "best_acc": 0.984,
+  "final_trust": 0.9933071732521057,
+  "final_internalization": 0.9933071732521057,
+  "epochs_completed": 10,
+  "args": {
+    "data_dir": "data",
+    "n_train": 20000,
+    "n_val": 2000,
+    "batch_size": 64,
+    "lr": 0.001,
+    "epochs": 10,
+    "d_model": 64,
+    "n_heads": 4,
+    "n_think_steps": 5
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "train_acc": 0.4344,
+      "train_loss": 1.9117696147918701,
+      "val_acc": 0.659,
+      "show_rate": 0.2048,
+      "approval_rate": 1.0,
+      "show_reasons": {
+        "creative": 3461,
+        "streak": 0,
+        "validation": 633,
+        "spontaneous": 2
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.8495219945907593,
+      "per_pattern": {
+        "alternating": 0.4623115577889447,
+        "repeating": 1.0,
+        "incrementing": 0.7168367346938775,
+        "fixed_offset": 0.7312348668280871,
+        "periodic_repeat": 0.34574468085106386
+      },
+      "teacher_goal": 9,
+      "student_goal_estimate": 8.858732223510742,
+      "teacher_impressedness": 1.0,
+      "goal_calibration_rate": 0.2
+    },
+    {
+      "epoch": 2,
+      "train_acc": 0.7001,
+      "train_loss": 0.9539935585975647,
+      "val_acc": 0.768,
+      "show_rate": 0.30125,
+      "approval_rate": 1.0,
+      "show_reasons": {
+        "creative": 6022,
+        "streak": 3,
+        "validation": 0,
+        "spontaneous": 0
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.939180850982666,
+      "per_pattern": {
+        "alternating": 0.550251256281407,
+        "repeating": 1.0,
+        "incrementing": 0.9311224489795918,
+        "fixed_offset": 0.9322033898305084,
+        "periodic_repeat": 0.3882978723404255
+      },
+      "teacher_goal": 9,
+      "student_goal_estimate": 8.872859001159668,
+      "teacher_impressedness": 1.0,
+      "goal_calibration_rate": 0.2727272727272727
+    },
+    {
+      "epoch": 3,
+      "train_acc": 0.78135,
+      "train_loss": 0.6562425889968873,
+      "val_acc": 0.801,
+      "show_rate": 0.343,
+      "approval_rate": 1.0,
+      "show_reasons": {
+        "creative": 6850,
+        "streak": 8,
+        "validation": 2,
+        "spontaneous": 0
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.9636458158493042,
+      "per_pattern": {
+        "alternating": 0.5577889447236181,
+        "repeating": 1.0,
+        "incrementing": 0.9846938775510204,
+        "fixed_offset": 1.0,
+        "periodic_repeat": 0.425531914893617
+      },
+      "teacher_goal": 9,
+      "student_goal_estimate": 8.897016525268555,
+      "teacher_impressedness": 1.0,
+      "goal_calibration_rate": 0.38461538461538464
+    },
+    {
+      "epoch": 4,
+      "train_acc": 0.8224,
+      "train_loss": 0.5174119966506958,
+      "val_acc": 0.8485,
+      "show_rate": 0.40775,
+      "approval_rate": 1.0,
+      "show_reasons": {
+        "creative": 8146,
+        "streak": 9,
+        "validation": 0,
+        "spontaneous": 0
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.9754445552825928,
+      "per_pattern": {
+        "alternating": 0.6959798994974874,
+        "repeating": 1.0,
+        "incrementing": 1.0,
+        "fixed_offset": 1.0,
+        "periodic_repeat": 0.5159574468085106
+      },
+      "teacher_goal": 9,
+      "student_goal_estimate": 8.924925804138184,
+      "teacher_impressedness": 1.0,
+      "goal_calibration_rate": 0.5
+    },
+    {
+      "epoch": 5,
+      "train_acc": 0.8761,
+      "train_loss": 0.3776119368553162,
+      "val_acc": 0.9085,
+      "show_rate": 0.44335,
+      "approval_rate": 1.0,
+      "show_reasons": {
+        "creative": 8860,
+        "streak": 6,
+        "validation": 0,
+        "spontaneous": 1
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.9818200469017029,
+      "per_pattern": {
+        "alternating": 0.8542713567839196,
+        "repeating": 1.0,
+        "incrementing": 0.9872448979591837,
+        "fixed_offset": 0.9854721549636803,
+        "periodic_repeat": 0.6968085106382979
+      },
+      "teacher_goal": 9,
+      "student_goal_estimate": 8.939189910888672,
+      "teacher_impressedness": 1.0,
+      "goal_calibration_rate": 0.5555555555555556
+    },
+    {
+      "epoch": 6,
+      "train_acc": 0.9235,
+      "train_loss": 0.2516475332260132,
+      "val_acc": 0.9505,
+      "show_rate": 0.46135,
+      "approval_rate": 1.0,
+      "show_reasons": {
+        "creative": 9218,
+        "streak": 9,
+        "validation": 0,
+        "spontaneous": 0
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.9857010841369629,
+      "per_pattern": {
+        "alternating": 0.9296482412060302,
+        "repeating": 1.0,
+        "incrementing": 1.0,
+        "fixed_offset": 1.0,
+        "periodic_repeat": 0.8111702127659575
+      },
+      "teacher_goal": 9,
+      "student_goal_estimate": 8.955669403076172,
+      "teacher_impressedness": 1.0,
+      "goal_calibration_rate": 0.6190476190476191
+    },
+    {
+      "epoch": 7,
+      "train_acc": 0.9491,
+      "train_loss": 0.16669400247335434,
+      "val_acc": 0.957,
+      "show_rate": 0.4812,
+      "approval_rate": 1.0,
+      "show_reasons": {
+        "creative": 9615,
+        "streak": 9,
+        "validation": 0,
+        "spontaneous": 0
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.9883052110671997,
+      "per_pattern": {
+        "alternating": 0.9346733668341709,
+        "repeating": 1.0,
+        "incrementing": 1.0,
+        "fixed_offset": 1.0,
+        "periodic_repeat": 0.8404255319148937
+      },
+      "teacher_goal": 9,
+      "student_goal_estimate": 8.967682838439941,
+      "teacher_impressedness": 1.0,
+      "goal_calibration_rate": 0.6666666666666666
+    },
+    {
+      "epoch": 8,
+      "train_acc": 0.9652,
+      "train_loss": 0.12105587777793407,
+      "val_acc": 0.98,
+      "show_rate": 0.46325,
+      "approval_rate": 1.0,
+      "show_reasons": {
+        "creative": 9247,
+        "streak": 18,
+        "validation": 0,
+        "spontaneous": 0
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.9900496006011963,
+      "per_pattern": {
+        "alternating": 0.964824120603015,
+        "repeating": 1.0,
+        "incrementing": 1.0,
+        "fixed_offset": 1.0,
+        "periodic_repeat": 0.9308510638297872
+      },
+      "teacher_goal": 9,
+      "student_goal_estimate": 8.98282527923584,
+      "teacher_impressedness": 1.0,
+      "goal_calibration_rate": 0.7333333333333333
+    },
+    {
+      "epoch": 9,
+      "train_acc": 0.97595,
+      "train_loss": 0.08518516140282154,
+      "val_acc": 0.9785,
+      "show_rate": 0.4973,
+      "approval_rate": 1.0,
+      "show_reasons": {
+        "creative": 9934,
+        "streak": 12,
+        "validation": 0,
+        "spontaneous": 0
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.9914231300354004,
+      "per_pattern": {
+        "alternating": 0.9673366834170855,
+        "repeating": 1.0,
+        "incrementing": 1.0,
+        "fixed_offset": 0.9903147699757869,
+        "periodic_repeat": 0.9308510638297872
+      },
+      "teacher_goal": 9,
+      "student_goal_estimate": 8.98873233795166,
+      "teacher_impressedness": 1.0,
+      "goal_calibration_rate": 0.7647058823529411
+    },
+    {
+      "epoch": 10,
+      "train_acc": 0.9772,
+      "train_loss": 0.07858631477653981,
+      "val_acc": 0.984,
+      "show_rate": 0.4525,
+      "approval_rate": 1.0,
+      "show_reasons": {
+        "creative": 9021,
+        "streak": 29,
+        "validation": 0,
+        "spontaneous": 0
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.9923800826072693,
+      "per_pattern": {
+        "alternating": 0.9673366834170855,
+        "repeating": 1.0,
+        "incrementing": 1.0,
+        "fixed_offset": 0.9975786924939467,
+        "periodic_repeat": 0.9521276595744681
+      },
+      "teacher_goal": 9,
+      "student_goal_estimate": 8.996070861816406,
+      "teacher_impressedness": 1.0,
+      "goal_calibration_rate": 0.8181818181818182
+    }
+  ]
+}
