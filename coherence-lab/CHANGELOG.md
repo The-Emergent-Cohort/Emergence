@@ -1,5 +1,19 @@
 # Coherence Lab Changelog
 
+## [0.4.0] - 2024-12-08
+### Added
+- **XP (Experience Points) System**: Per-topic skill tracking with geometric leveling
+  - Correct answers: +1 XP (base accumulation)
+  - Creative shows (correct): +5 XP (validated insight)
+  - Creative shows (wrong): -3 XP (overconfidence cost - self-competition)
+  - Streak shows: +streak_length/5 XP (consistency bonus)
+  - Validation shows: 0 XP (neutral - asking for help is fine)
+  - Level thresholds: N² × 10 (L1=10, L2=40, L3=90, L4=160... L10=1000)
+  - Early levels are quick, mastery requires sustained proof
+  - XP can go down (but not below 0) - honest self-assessment
+- **Visual level display**: `L 5 █████░····` shows level + progress to next
+- **Total XP and average level** displayed per epoch
+
 ## [0.3.5] - 2024-12-08
 ### Fixed
 - **Student goal estimate clamp**: Was capped at 10, now caps at 100 (mastery)

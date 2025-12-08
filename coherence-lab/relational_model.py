@@ -357,6 +357,16 @@ class TopicConfidenceTracker(nn.Module):
 
     "I think I'm 65% good at fibonacci, but I'm scoring 75%...
      so ~10% of my right answers are probably guesses, not understanding."
+
+    Also tracks XP (experience points) per topic with geometric leveling:
+    - Correct answers: +1 XP
+    - Streak shows (correct): +streak_length bonus
+    - Creative shows (correct): +5 XP (validated insight)
+    - Creative shows (wrong): -3 XP (overconfidence cost)
+    - Validation shows: 0 XP (neutral - asking for help is fine)
+
+    Level thresholds are geometric: level N requires N² * 10 XP
+    This means early levels are quick, mastery requires sustained proof.
     """
 
     def __init__(self, n_topics=10, ema_alpha=0.1):
@@ -375,6 +385,11 @@ class TopicConfidenceTracker(nn.Module):
         self.register_buffer('topic_best_streak', torch.zeros(n_topics, dtype=torch.long))
         self.register_buffer('topic_mastered', torch.zeros(n_topics, dtype=torch.bool))
         self.mastery_threshold = 100  # 10x starting goal
+
+        # Per-topic XP tracking
+        self.register_buffer('topic_xp', torch.zeros(n_topics))
+        self.register_buffer('topic_xp_high', torch.zeros(n_topics))  # High water mark
+        self.max_level = 10  # Mastery level
 
     def update(self, topic_idx, was_correct, predicted_confidence):
         """
@@ -424,6 +439,10 @@ class TopicConfidenceTracker(nn.Module):
                     # Check for mastery
                     if self.topic_streak[idx] >= self.mastery_threshold:
                         self.topic_mastered[idx] = True
+                    # Basic XP for correct answer
+                    self.topic_xp[idx] += 1
+                    if self.topic_xp[idx] > self.topic_xp_high[idx]:
+                        self.topic_xp_high[idx] = self.topic_xp[idx].clone()
                 else:
                     self.topic_streak[idx] = 0  # Reset on error
 
@@ -502,6 +521,88 @@ class TopicConfidenceTracker(nn.Module):
         """Get list of topic indices that haven't achieved mastery yet."""
         return (~self.topic_mastered).nonzero(as_tuple=True)[0].tolist()
 
+    # =========================================================================
+    # XP (Experience Points) System
+    # =========================================================================
+
+    def xp_threshold(self, level):
+        """XP required to reach a given level. Geometric scaling: N² * 10."""
+        return level * level * 10
+
+    def get_level(self, topic_idx):
+        """Get current level for a topic based on XP."""
+        xp = self.topic_xp[topic_idx].item() if isinstance(topic_idx, int) else self.topic_xp[topic_idx]
+        if isinstance(xp, torch.Tensor):
+            xp = xp.item()
+
+        # Find highest level where threshold <= xp
+        level = 0
+        for lvl in range(1, self.max_level + 1):
+            if xp >= self.xp_threshold(lvl):
+                level = lvl
+            else:
+                break
+        return level
+
+    def get_xp_info(self, topic_idx):
+        """
+        Get XP info for a topic: (xp, level, progress_to_next, xp_high).
+
+        progress_to_next is 0.0-1.0 showing how close to next level.
+        """
+        xp = self.topic_xp[topic_idx].item() if isinstance(topic_idx, int) else self.topic_xp[topic_idx].item()
+        xp_high = self.topic_xp_high[topic_idx].item() if isinstance(topic_idx, int) else self.topic_xp_high[topic_idx].item()
+
+        level = self.get_level(topic_idx)
+
+        if level >= self.max_level:
+            progress = 1.0  # Maxed out
+        else:
+            current_threshold = self.xp_threshold(level)
+            next_threshold = self.xp_threshold(level + 1)
+            xp_in_level = xp - current_threshold
+            xp_needed = next_threshold - current_threshold
+            progress = xp_in_level / xp_needed if xp_needed > 0 else 0.0
+
+        return xp, level, progress, xp_high
+
+    def award_xp(self, topic_idx, amount, reason=None):
+        """
+        Award (or deduct) XP for a topic.
+
+        Suggested amounts:
+        - Correct answer: +1 (handled in update())
+        - Streak show (correct): +streak_length
+        - Creative show (correct): +5
+        - Creative show (wrong): -3
+        - Validation show: 0
+
+        XP cannot go below 0.
+        """
+        with torch.no_grad():
+            if isinstance(topic_idx, int):
+                self.topic_xp[topic_idx] += amount
+                self.topic_xp[topic_idx].clamp_(min=0)
+                if self.topic_xp[topic_idx] > self.topic_xp_high[topic_idx]:
+                    self.topic_xp_high[topic_idx] = self.topic_xp[topic_idx].clone()
+            else:
+                self.topic_xp[topic_idx] += amount
+                self.topic_xp.clamp_(min=0)
+                mask = self.topic_xp > self.topic_xp_high
+                self.topic_xp_high[mask] = self.topic_xp[mask]
+
+    def get_total_xp(self):
+        """Get total XP across all topics."""
+        return self.topic_xp.sum().item()
+
+    def get_average_level(self):
+        """Get average level across all active topics (count > 0)."""
+        active = self.topic_count > 0
+        if not active.any():
+            return 0.0
+        levels = torch.tensor([self.get_level(i) for i in range(self.n_topics)])
+        return levels[active].float().mean().item()
+
     def get_adjusted_confidence(self, topic_idx, raw_confidence):
         """
         Adjust raw prediction confidence based on topic calibration.
@@ -566,6 +667,19 @@ class TopicConfidenceTracker(nn.Module):
             self.register_buffer('topic_streak', new_streak)
             self.register_buffer('topic_best_streak', new_best_streak)
             self.register_buffer('topic_mastered', new_mastered)
+
+            # Expand XP buffers
+            new_xp = torch.zeros(new_size, device=device)
+            new_xp_high = torch.zeros(new_size, device=device)
+
+            new_xp[:self.n_topics] = self.topic_xp
+            new_xp_high[:self.n_topics] = self.topic_xp_high
+
+            del self.topic_xp
+            del self.topic_xp_high
+
+            self.register_buffer('topic_xp', new_xp)
+            self.register_buffer('topic_xp_high', new_xp_high)
 
             self.n_topics = new_size
 
