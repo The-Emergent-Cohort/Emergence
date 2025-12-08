@@ -1,77 +1,77 @@
 {
   "topics": {
     "0": {
-      "name": "alternating",
-      "origin": "curriculum",
-      "created_epoch": null,
-      "metadata": {}
-    },
-    "1": {
-      "name": "repeating",
-      "origin": "curriculum",
-      "created_epoch": null,
-      "metadata": {}
-    },
-    "2": {
-      "name": "incrementing",
-      "origin": "curriculum",
-      "created_epoch": null,
-      "metadata": {}
-    },
-    "3": {
-      "name": "fixed_offset",
-      "origin": "curriculum",
-      "created_epoch": null,
-      "metadata": {}
-    },
-    "4": {
-      "name": "periodic_repeat",
-      "origin": "curriculum",
-      "created_epoch": null,
-      "metadata": {}
-    },
-    "5": {
       "name": "counting",
       "origin": "curriculum",
       "created_epoch": null,
       "metadata": {}
     },
-    "6": {
+    "1": {
+      "name": "incrementing",
+      "origin": "curriculum",
+      "created_epoch": null,
+      "metadata": {}
+    },
+    "2": {
       "name": "modular",
       "origin": "curriculum",
       "created_epoch": null,
       "metadata": {}
     },
-    "7": {
+    "3": {
       "name": "staircase",
       "origin": "curriculum",
       "created_epoch": null,
       "metadata": {}
     },
+    "4": {
+      "name": "repeating",
+      "origin": "curriculum",
+      "created_epoch": null,
+      "metadata": {}
+    },
+    "5": {
+      "name": "alternating",
+      "origin": "curriculum",
+      "created_epoch": null,
+      "metadata": {}
+    },
+    "6": {
+      "name": "periodic_repeat",
+      "origin": "curriculum",
+      "created_epoch": null,
+      "metadata": {}
+    },
+    "7": {
+      "name": "indexed_lookup",
+      "origin": "curriculum",
+      "created_epoch": null,
+      "metadata": {}
+    },
     "8": {
-      "name": "geometric",
+      "name": "fixed_offset",
       "origin": "curriculum",
       "created_epoch": null,
       "metadata": {}
     },
     "9": {
-      "name": "indexed_lookup",
+      "name": "geometric",
       "origin": "curriculum",
       "created_epoch": null,
       "metadata": {}
     }
   },
   "name_to_id": {
-    "alternating": 0,
-    "repeating": 1,
-    "incrementing": 2,
-    "fixed_offset": 3,
-    "periodic_repeat": 4,
-    "counting": 5,
-    "modular": 6,
-    "staircase": 7,
-    "geometric": 8,
-    "indexed_lookup": 9
+    "counting": 0,
+    "incrementing": 1,
+    "modular": 2,
+    "staircase": 3,
+    "repeating": 4,
+    "alternating": 5,
+    "periodic_repeat": 6,
+    "indexed_lookup": 7,
+    "fixed_offset": 8,
+    "geometric": 9
   },
   "next_id": 10
 }
