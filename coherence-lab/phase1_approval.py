@@ -762,7 +762,7 @@ if __name__ == '__main__':
     parser.add_argument('--n-val', type=int, default=2000)
     parser.add_argument('--batch-size', type=int, default=64)
     parser.add_argument('--lr', type=float, default=1e-3)
-    parser.add_argument('--epochs', type=int, default=500)  # High ceiling - stops naturally on completion
+    parser.add_argument('--epochs', type=int, default=len(get_all_patterns()) * 100)  # ~100 per topic, stops on completion
     parser.add_argument('--d-model', type=int, default=64)
     parser.add_argument('--n-heads', type=int, default=4)
     parser.add_argument('--n-think-steps', type=int, default=5)
