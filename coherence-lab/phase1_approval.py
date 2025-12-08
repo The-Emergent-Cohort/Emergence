@@ -11,7 +11,7 @@ Building the social learning foundation:
 This is the developmental foundation for later phases.
 """
 
-__version__ = "0.5.10"  # Final comprehensive exam
+__version__ = "0.5.11"  # No artificial epoch limit
 
 import torch
 import torch.nn as nn
@@ -590,7 +590,7 @@ if __name__ == '__main__':
     parser.add_argument('--n-val', type=int, default=2000)
     parser.add_argument('--batch-size', type=int, default=64)
     parser.add_argument('--lr', type=float, default=1e-3)
-    parser.add_argument('--epochs', type=int, default=10)
+    parser.add_argument('--epochs', type=int, default=100)  # Run until complete, break manually if stuck
     parser.add_argument('--d-model', type=int, default=64)
     parser.add_argument('--n-heads', type=int, default=4)
     parser.add_argument('--n-think-steps', type=int, default=5)

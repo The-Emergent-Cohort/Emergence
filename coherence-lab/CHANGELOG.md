@@ -1,5 +1,12 @@
 # Coherence Lab Changelog
 
+## [0.5.11] - 2024-12-08
+### Changed
+- **No artificial epoch limit**: Default epochs raised from 10 to 100
+  - Let the system run until complete, break manually if stuck
+  - Some topics genuinely need more time - don't cut them off arbitrarily
+  - User can always Ctrl+C if it looks looped
+
 ## [0.5.10] - 2024-12-08
 ### Added
 - **Final comprehensive exam**: After all topics graduate individually (L10), must pass final
