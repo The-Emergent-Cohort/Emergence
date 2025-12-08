@@ -1,5 +1,16 @@
 # Coherence Lab Changelog
 
+## [0.4.1] - 2024-12-08
+### Added
+- **XP Scaling Formula**: `actual_xp = base × difficulty / level`
+  - Prevents low-level farming: grinding easy content gives diminishing returns
+  - Topic difficulties: alternating=1.0, repeating=1.0, incrementing=1.5, fixed_offset=2.0, periodic_repeat=2.5
+  - Level scaling: L5 on easy topic gets 1/5th base XP
+- **Farming Detection**: Teacher penalizes wasting time on mastered easy topics
+  - If level >= 4 AND difficulty <= 1.5 AND showing validation/spontaneous: -2 XP
+  - "You already know this. Move on."
+  - Note: Penalties are NOT scaled (always hurt the same)
+
 ## [0.4.0] - 2024-12-08
 ### Added
 - **XP (Experience Points) System**: Per-topic skill tracking with geometric leveling
