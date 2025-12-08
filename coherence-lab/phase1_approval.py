@@ -22,7 +22,7 @@ import json
 from datetime import datetime
 
 from relational_model import (
-    RelationalSystem, PatternDataset, collate_fn, evaluate
+    RelationalSystem, PatternDataset, collate_fn, evaluate, DynamicTopicRegistry
 )
 
 
@@ -244,6 +244,16 @@ def main(args):
     n_params = sum(p.numel() for p in model.parameters())
     print(f"Parameters: {n_params:,}")
 
+    # === DYNAMIC TOPIC REGISTRY ===
+    # Create registry with Phase 1 curriculum patterns
+    registry_path = Path(args.data_dir) / 'topic_registry.json'
+    print("\nCreating topic registry with Phase 1 curriculum patterns")
+    topic_registry = DynamicTopicRegistry(pattern_types)
+    print(f"  Initialized with {len(topic_registry)} curriculum topics")
+
+    # Attach registry to model
+    model.set_topic_registry(topic_registry)
+
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     criterion = nn.CrossEntropyLoss()
 
@@ -309,6 +319,9 @@ def main(args):
                 'epoch': epoch,
                 'val_acc': best_acc
             }, Path(args.data_dir) / 'phase1_approval_best.pt')
+            # Save topic registry with checkpoint
+            topic_registry.save(registry_path)
+            print(f"  [Registry saved: {len(topic_registry)} topics]")
 
         # Check mastery - easy patterns should be ~100%
         all_good = all(val_metrics['per_pattern'].get(pt, 0) >= 0.95 for pt in pattern_types)
@@ -321,6 +334,11 @@ def main(args):
     print(f"Best accuracy: {best_acc:.1%}")
     print(f"Final trust: {trust:.1%}")
     print(f"Final internalization: {int_level:.1%}")
+
+    # Final registry save and report
+    topic_registry.save(registry_path)
+    print(f"\nTopic registry saved: {registry_path}")
+    print(f"  Total topics: {len(topic_registry)} curriculum patterns")
     print("=" * 70)
 
     # Save log
@@ -331,6 +349,7 @@ def main(args):
         'final_trust': trust,
         'final_internalization': int_level,
         'epochs_completed': len(history),
+        'curriculum_topics': [topic_registry.get_name(i) for i in range(len(topic_registry))],
         'args': vars(args),
         'history': history
     }
