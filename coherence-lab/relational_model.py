@@ -442,12 +442,8 @@ class TopicConfidenceTracker(nn.Module):
                     # Check for mastery
                     if self.topic_streak[idx] >= self.mastery_threshold:
                         self.topic_mastered[idx] = True
-                    # Basic XP for correct answer (scaled by 1/level)
-                    level = max(1, self.get_level(idx))
-                    scaled_xp = 1.0 / level
-                    self.topic_xp[idx] += scaled_xp
-                    if self.topic_xp[idx] > self.topic_xp_high[idx]:
-                        self.topic_xp_high[idx] = self.topic_xp[idx].clone()
+                    # NOTE: No auto-XP for practice. XP comes from teacher validation.
+                    # This ensures leveling requires engagement, not just grinding.
                 else:
                     self.topic_streak[idx] = 0  # Reset on error
 
@@ -575,15 +571,16 @@ class TopicConfidenceTracker(nn.Module):
         """
         Award (or deduct) XP for a topic, scaled by level.
 
-        Formula: actual_xp = base_amount / max(1, current_level)
+        Formula: actual_xp = base_amount / max(1, current_level) * calibration_modifier
 
         Pure RPG-style level scaling:
         - L1 on any topic: full XP (it's hard for you)
         - L5 on any topic: 1/5th XP (it's trivial now)
         - Penalties are NOT scaled (always hurt the same)
 
-        The "difficulty" is your level relationship to the content,
-        not a static property of the topic. When XP dries up, move on.
+        Calibration modifier:
+        - Calibrated: 100% (knows what and why)
+        - Guessing/Overconfident: 75% ("let's make sure")
 
         XP cannot go below 0.
         """
@@ -591,9 +588,14 @@ class TopicConfidenceTracker(nn.Module):
             if isinstance(topic_idx, int):
                 level = max(1, self.get_level(topic_idx))
 
-                # Scale positive XP by 1/level; penalties stay fixed
+                # Check calibration - uncalibrated gets 75%
+                acc, conf, gap = self.get_calibration(topic_idx)
+                is_calibrated = abs(gap) <= 0.1
+                calibration_mod = 1.0 if is_calibrated else 0.75
+
+                # Scale positive XP by 1/level and calibration; penalties stay fixed
                 if amount > 0:
-                    scaled_amount = amount / level
+                    scaled_amount = amount / level * calibration_mod
                 else:
                     scaled_amount = amount  # Penalties not scaled
 

@@ -1,5 +1,15 @@
 # Coherence Lab Changelog
 
+## [0.5.1] - 2024-12-08
+### Changed
+- **Teacher-validated XP**: Removed auto-XP from practice
+  - Practice alone doesn't level you up - must engage with teacher
+  - XP only comes from shows: creative, streak, validation
+- **Calibration modifier**: Uncalibrated topics get 75% XP
+  - If teacher thinks you're "guessing" or "overconfident", XP reduced
+  - Not a punishment, just "let's make sure you understand"
+- **Validation shows now +1 XP**: Asking for help = engaging = rewarded
+
 ## [0.5.0] - 2024-12-08
 ### Added
 - **Examination System**: Level transitions require passing an exam

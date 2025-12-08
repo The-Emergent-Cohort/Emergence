@@ -11,7 +11,7 @@ Building the social learning foundation:
 This is the developmental foundation for later phases.
 """
 
-__version__ = "0.5.0"  # Examination system for level transitions
+__version__ = "0.5.1"  # Teacher-validated XP + calibration modifier
 
 import torch
 import torch.nn as nn
@@ -147,7 +147,11 @@ def train_day_with_approval(model, loader, optimizer, criterion, device, pattern
                     if was_correct_item:
                         streak_len = model.learner.self_model.topic_tracker.topic_streak[topic_idx].item()
                         model.learner.self_model.topic_tracker.award_xp(topic_idx, max(1, streak_len // 5))  # Streak bonus
-                # validation and spontaneous: 0 XP (neutral) - unless farming
+                elif reason == 'validation':
+                    # Asking teacher for help = engaging with learning = +1 XP
+                    if was_correct_item:
+                        model.learner.self_model.topic_tracker.award_xp(topic_idx, 1)
+                # spontaneous: 0 XP (neutral)
 
                 # Internalize - weighted by how impressed teacher was
                 if correct[idx]:
