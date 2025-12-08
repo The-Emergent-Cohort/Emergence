@@ -2314,9 +2314,11 @@ class RelationalTeacher(nn.Module):
         """
         with torch.no_grad():
             # Update perceived competence (EMA of correctness)
-            self.total_observed += 1
-            if was_correct.any():
-                self.correct_observed += 1
+            # Count ALL items, not just batches
+            batch_size = was_correct.numel()
+            correct_count = was_correct.sum().item()
+            self.total_observed += batch_size
+            self.correct_observed += correct_count
             obs_rate = self.correct_observed.float() / self.total_observed.float()
             self.perceived_competence = 0.95 * self.perceived_competence + 0.05 * obs_rate
 
