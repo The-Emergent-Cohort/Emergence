@@ -669,23 +669,23 @@ class SelfModel(nn.Module):
 
                 reason = None
 
-                # Creative and correct → always worth showing
-                # (But later, we might distinguish "truly creative" vs "just different")
-                if is_creative[i] and was_correct[i]:
-                    reason = 'creative'
+                # === PRIORITY: Competence > Creativity > Validation > Spontaneous ===
+                # Streak (proven consistency) must be checked FIRST
+                # Otherwise creative catches everything and streak never triggers
 
-                # Streak meets goal - time to show!
-                # This is the negotiated/set goal from teacher
-                elif self.streak_count >= streak_threshold and was_correct[i]:
+                # 1. Streak meets goal - COMPETENCE (the graduation signal)
+                if self.streak_count >= streak_threshold and was_correct[i]:
                     reason = 'streak'
 
-                # Uncertain but correct → seeking validation
-                # Early: show when not sure (confidence < 0.5)
-                # Later: only show when VERY unsure (threshold drops)
+                # 2. Creative and correct - genuinely novel approach
+                elif is_creative[i] and was_correct[i]:
+                    reason = 'creative'
+
+                # 3. Uncertain but correct → seeking validation
                 elif was_correct[i] and confidence[i] < validation_conf_threshold:
                     reason = 'validation'
 
-                # Spontaneous showing - decreases rapidly with internalization
+                # 4. Spontaneous - random chance, decreases with internalization
                 elif was_correct[i]:
                     if torch.rand(1).item() < spontaneous_rate:
                         reason = 'spontaneous'
