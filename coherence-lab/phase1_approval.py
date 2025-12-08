@@ -11,7 +11,7 @@ Building the social learning foundation:
 This is the developmental foundation for later phases.
 """
 
-__version__ = "0.5.16"  # Display shows confirmed level, not XP level
+__version__ = "0.5.17"  # Level-scaled creativity threshold
 
 import torch
 import torch.nn as nn
@@ -107,9 +107,19 @@ def train_day_with_approval(model, loader, optimizer, criterion, device, pattern
         # Detect TRUE creativity: novel approach + high confidence
         # "It's only creative if you know WHY it worked"
         # Just doing something different and getting lucky isn't creativity
+        # LEVEL-SCALED: Higher level = higher bar for "creative"
+        # L0: 0.5 threshold (encourage exploration), L10: 0.9 (only truly novel)
         is_creative = torch.zeros(tokens.size(0), dtype=torch.bool, device=device)
         if details.get('process_eval') is not None and details['process_eval'].get('creativity') is not None:
-            novel_approach = details['process_eval']['creativity'].squeeze() > 0.5
+            # Get per-topic creativity thresholds based on confirmed level
+            confirmed_levels = torch.tensor([
+                tracker.confirmed_level[pattern_to_idx[p]].item()
+                for p in pattern_types
+            ], device=device)
+            creativity_thresholds = 0.5 + (confirmed_levels / 10.0) * 0.4  # L0: 0.5, L10: 0.9
+
+            creativity_scores = details['process_eval']['creativity'].squeeze()
+            novel_approach = creativity_scores > creativity_thresholds
             knew_why = conf.squeeze() > 0.8  # Must be confident it would work
             is_creative = novel_approach & knew_why
 
