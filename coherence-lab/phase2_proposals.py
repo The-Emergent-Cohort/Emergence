@@ -181,9 +181,18 @@ def train_day_with_proposals(model, loader, optimizer, criterion, device, patter
 
         # Detect TRUE creativity: novel approach + high confidence
         # "It's only creative if you know WHY it worked"
+        # v0.5.17: Level-scaled creativity threshold (L0: 0.5, L10: 0.9)
         is_creative = torch.zeros(tokens.size(0), dtype=torch.bool, device=device)
         if details.get('process_eval') is not None and details['process_eval'].get('creativity') is not None:
-            novel_approach = details['process_eval']['creativity'].squeeze() > 0.5
+            # Get per-topic creativity thresholds based on confirmed level
+            confirmed_levels = torch.tensor([
+                tracker.confirmed_level[pattern_to_idx[p]].item()
+                for p in pattern_types
+            ], device=device)
+            creativity_thresholds = 0.5 + (confirmed_levels / 10.0) * 0.4  # L0: 0.5, L10: 0.9
+
+            creativity_scores = details['process_eval']['creativity'].squeeze()
+            novel_approach = creativity_scores > creativity_thresholds
             knew_why = conf.squeeze() > 0.8  # Must be confident it would work
             is_creative = novel_approach & knew_why
 
