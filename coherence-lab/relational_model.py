@@ -311,6 +311,26 @@ class TopicConfidenceTracker(nn.Module):
             return (gap < -threshold).any().item()
         return gap < -threshold
 
+    def is_competent(self, topic_idx, threshold=0.75):
+        """
+        Returns True if actually competent on this topic.
+
+        Competence = high accuracy. This gates whether "creativity" on this
+        topic is genuine insight vs random variation.
+
+        You earn the right to be creative by demonstrating competence first.
+        """
+        acc, _, _ = self.get_calibration(topic_idx)
+        if isinstance(acc, torch.Tensor):
+            return acc.item() >= threshold
+        return acc >= threshold
+
+    def get_topic_accuracy(self, topic_idx):
+        """Get raw accuracy for a topic."""
+        if isinstance(topic_idx, int):
+            return self.topic_accuracy[topic_idx].item()
+        return self.topic_accuracy[topic_idx]
+
     def get_adjusted_confidence(self, topic_idx, raw_confidence):
         """
         Adjust raw prediction confidence based on topic calibration.
@@ -1241,8 +1261,18 @@ class ProposalEvaluator(nn.Module):
 
         Returns:
             evaluation dict with decision and guidance
+
+        === IMPORTANT: Domain-appropriate evaluation ===
+        Some proposals are harmful when the student isn't competent:
+        - "consolidate_learning" when guessing = locking in confusion
+        - "adjust_confidence" up when guessing = reinforcing miscalibration
+        - "adjust_show_rate" down when guessing = hiding problems
+
+        These get redirected with guidance to master basics first.
         """
         justification = proposal['justification']
+        proposal_type = proposal['type_name'][0]
+        topic_idx = proposal['topic_idx'][0].item()
 
         # Handle batch dimension
         if learner_state.dim() == 1:
@@ -1252,13 +1282,48 @@ class ProposalEvaluator(nn.Module):
 
         combined = torch.cat([justification, learner_state], dim=-1)
 
-        # Get decision
+        # === RULE-BASED SAFETY CHECK ===
+        # Before neural evaluation, check for harmful proposals
+        force_redirect = False
+        redirect_reason = None
+
+        if topic_calibration is not None:
+            # Get topic names and find accuracy for the proposed topic
+            topic_names = list(topic_calibration.keys())
+            if topic_idx < len(topic_names):
+                topic_name = topic_names[topic_idx]
+                topic_acc = topic_calibration.get(topic_name, {}).get('accuracy', 0)
+                competence_threshold = 0.75
+
+                # Harmful proposals when not competent
+                if topic_acc < competence_threshold:
+                    harmful_when_guessing = [
+                        'consolidate_learning',  # Locking in confusion
+                        'adjust_confidence',     # Reinforcing bad calibration
+                    ]
+                    if proposal_type in harmful_when_guessing:
+                        force_redirect = True
+                        redirect_reason = f"Still learning {topic_name} ({topic_acc:.0%}) - master basics first"
+
+                    # Reducing show rate when guessing hides problems
+                    if proposal_type == 'adjust_show_rate':
+                        magnitude = proposal['magnitude'].item() if isinstance(proposal['magnitude'], torch.Tensor) else proposal['magnitude']
+                        if magnitude < 0:  # Proposing to show LESS
+                            force_redirect = True
+                            redirect_reason = f"Keep showing {topic_name} work ({topic_acc:.0%}) - teacher can help"
+
+        # Get neural network decision (unless overridden)
         decision_logits = self.proposal_evaluator(combined)
         decision_probs = F.softmax(decision_logits, dim=-1)
         decision_idx = decision_probs.argmax(dim=-1)
 
         decisions = ['approve', 'modify', 'redirect']
-        decision_name = decisions[decision_idx[0].item()]
+
+        if force_redirect:
+            decision_name = 'redirect'
+            decision_idx = torch.tensor([2], device=learner_state.device)
+        else:
+            decision_name = decisions[decision_idx[0].item()]
 
         # Generate modified magnitude if needed
         modified_magnitude = proposal['magnitude']
@@ -1278,7 +1343,8 @@ class ProposalEvaluator(nn.Module):
             'modified_magnitude': modified_magnitude,
             'guidance': guidance,
             'approval_score': approval_score,
-            'is_approved': decision_name in ['approve', 'modify']
+            'is_approved': decision_name in ['approve', 'modify'],
+            'redirect_reason': redirect_reason
         }
 
 
@@ -1475,7 +1541,8 @@ class ProcessEvaluator(nn.Module):
         """Score how efficient the reasoning path was."""
         return self.efficiency_scorer(path_encoding)
 
-    def full_evaluation(self, states_history, confidence, was_correct, pattern_type_idx):
+    def full_evaluation(self, states_history, confidence, was_correct, pattern_type_idx,
+                        topic_accuracy=None):
         """
         Complete process evaluation.
 
@@ -1484,6 +1551,10 @@ class ProcessEvaluator(nn.Module):
             - habit_scores: breakdown of reasoning quality
             - efficiency_score: how direct was the path
             - recommendations: what should teacher reward/discourage
+
+        topic_accuracy: if provided, gates creativity rewards. Creativity is only
+        meaningful when you're competent at the topic. Being "creative" when
+        guessing is just random variation, not insight.
         """
         path_encoding = self.encode_reasoning_path(states_history)
         if path_encoding is None:
@@ -1500,8 +1571,17 @@ class ProcessEvaluator(nn.Module):
         self.update_history(habits)
 
         # Generate recommendations
+        # Creativity is only rewarded when competent (accuracy >= 75%)
+        # "Creative" guessing is just random variation, not insight
+        is_creative = (creativity > 0.7) & was_correct
+        if topic_accuracy is not None:
+            competence_threshold = 0.75
+            is_competent = topic_accuracy >= competence_threshold
+            # Only reward creativity when competent at this topic
+            is_creative = is_creative & is_competent
+
         recommendations = {
-            'reward_creativity': (creativity > 0.7) & was_correct,
+            'reward_creativity': is_creative,
             'warn_lucky_guess': habits['lucky_guess'] > 0.5,
             'warn_rote': habits['rote_pattern'] > 0.5,
             'warn_overconfident': habits['overconfident'] > 0.5,
@@ -1758,14 +1838,19 @@ class RelationalTeacher(nn.Module):
             'unshown_streak': self.unshown_streak.item()
         }
 
-    def evaluate_learner_process(self, states_history, confidence, was_correct, pattern_type_idx):
+    def evaluate_learner_process(self, states_history, confidence, was_correct, pattern_type_idx,
+                                  topic_accuracy=None):
         """
         Full evaluation of HOW the learner arrived at their answer.
 
         This is the meta-level teaching that shapes thinking patterns.
+
+        topic_accuracy: gates whether "creativity" is genuine insight (competent)
+        or random variation (guessing). You earn the right to be creative.
         """
         return self.process_evaluator.full_evaluation(
-            states_history, confidence, was_correct, pattern_type_idx
+            states_history, confidence, was_correct, pattern_type_idx,
+            topic_accuracy=topic_accuracy
         )
 
     def decide_intervention(self, learner_emotions, process_eval=None):
@@ -1912,11 +1997,16 @@ class RelationalSystem(nn.Module):
             # Get pattern type index (use 0 as default for mixed batches)
             pattern_idx = 0  # Could be expanded for per-example
 
+            # Get topic accuracy to gate creativity rewards
+            # Creativity is only meaningful when competent at the topic
+            topic_accuracy = self.learner.self_model.topic_tracker.get_topic_accuracy(pattern_idx)
+
             process_eval = self.teacher.evaluate_learner_process(
                 learner_output['states_history'],
                 confidence,
                 was_correct,
-                pattern_idx
+                pattern_idx,
+                topic_accuracy=topic_accuracy
             )
 
         # Teacher decides on intervention (now with process info)

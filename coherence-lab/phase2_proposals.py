@@ -433,12 +433,26 @@ def main(args):
                 'val_acc': best_acc
             }, Path(args.data_dir) / 'phase2_proposals_best.pt')
 
-        # Check mastery - requires accuracy AND calibration
+        # Check mastery - requires accuracy AND calibration at high level
         all_accurate = all(val_metrics['per_pattern'].get(pt, 0) >= 0.90 for pt in pattern_types)
-        all_calibrated = all(topic_calibration.get(pt, {}).get('status') == 'calibrated' for pt in pattern_types)
 
-        # Can't graduate if still guessing or overconfident on any topic
-        uncalibrated = [pt for pt in pattern_types if topic_calibration.get(pt, {}).get('status') != 'calibrated']
+        # Calibration requires BOTH status='calibrated' AND actual competence
+        # Being "calibrated" at 50% accuracy = knowing you're guessing, not mastery
+        def is_truly_calibrated(pt):
+            cal = topic_calibration.get(pt, {})
+            return (cal.get('status') == 'calibrated' and
+                    cal.get('accuracy', 0) >= 0.80)  # Must be competent, not just calibrated
+
+        all_calibrated = all(is_truly_calibrated(pt) for pt in pattern_types)
+
+        # Identify problems: uncalibrated OR calibrated-but-guessing
+        problems = []
+        for pt in pattern_types:
+            cal = topic_calibration.get(pt, {})
+            if cal.get('status') != 'calibrated':
+                problems.append(f"{pt} ({cal.get('status', 'unknown')})")
+            elif cal.get('accuracy', 0) < 0.80:
+                problems.append(f"{pt} (calibrated but only {cal.get('accuracy', 0):.0%} - still learning)")
 
         if all_accurate and val_metrics['accuracy'] >= 0.90:
             if all_calibrated:
@@ -448,8 +462,8 @@ def main(args):
                 print(f"    Proposal success rate: {prop_success:.1%}")
                 break
             else:
-                # Accurate but not calibrated - teacher notices guessing
-                print(f"\n  [Teacher notes: Still guessing on {uncalibrated} - not ready to graduate]")
+                # Accurate but not truly calibrated
+                print(f"\n  [Teacher notes: Not ready to graduate - {problems}]")
 
     print("\n" + "=" * 70)
     print(f"Best accuracy: {best_acc:.1%}")
