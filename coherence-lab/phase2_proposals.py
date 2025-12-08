@@ -663,6 +663,127 @@ def main(args):
             print(f"    {pt:18s}: {acc:.1%} {acc_symbol} {cal_symbol} L{level:2d} {level_bar} ({xp:.0f}xp) {streak_info}")
         import sys; sys.stdout.flush()
 
+        # === EXAMINATION SYSTEM (from Phase 1) ===
+        # Take exams until you fail - first failure stops you for this epoch
+        tracker = model.learner.self_model.topic_tracker
+
+        exam_results = []
+        failed_this_epoch = set()  # Topics that failed - done for this epoch
+        exam_round = 0
+        any_advanced = True
+        while any_advanced:
+            any_advanced = False
+            for pattern_name, idx in pattern_to_idx.items():
+                if idx in failed_this_epoch:
+                    continue  # Already failed this epoch, wait for next
+                if tracker.check_exam_eligible(idx):
+                    # Generate exam batch for this topic
+                    current_level = tracker.get_level(idx)
+                    target_level = current_level + 1
+                    exam_size = tracker.get_exam_size(target_level)
+
+                    # Create exam problems (fresh generation, not from training data)
+                    # Use HardPatternDataset for Phase 2's harder patterns
+                    class SinglePatternDataset(Dataset):
+                        """Exam dataset for a single pattern type."""
+                        def __init__(self, n_examples, seed, pattern_type):
+                            random.seed(seed)
+                            self.examples = []
+                            for _ in range(n_examples):
+                                self.examples.append(self._generate(pattern_type))
+
+                        def _generate(self, pt):
+                            vocab_size = 26
+                            if pt == 'compositional':
+                                length = random.randint(4, 8)
+                                start = random.randint(0, 10)
+                                if random.random() < 0.5:
+                                    k = random.randint(1, 3)
+                                    seq = [start + (i // 2) * k + (i % 2) for i in range(length)]
+                                else:
+                                    k1, k2 = random.randint(1, 2), random.randint(2, 4)
+                                    seq = [start + (i % 2) * k1 + (i // 2) * k2 for i in range(length)]
+                                target = seq[-1] + (seq[-1] - seq[-2]) if len(seq) >= 2 else seq[-1] + 1
+                            elif pt == 'long_range':
+                                length = random.randint(6, 10)
+                                period = random.randint(2, 4)
+                                base = [random.randint(0, 10) for _ in range(period)]
+                                seq = [base[i % period] + (i // period) for i in range(length)]
+                                target = base[length % period] + (length // period)
+                            else:  # fibonacci_like
+                                length = random.randint(4, 7)
+                                a, b = random.randint(1, 5), random.randint(1, 5)
+                                seq = [a, b]
+                                for _ in range(length - 2):
+                                    seq.append(seq[-1] + seq[-2])
+                                target = seq[-1] + seq[-2]
+                            seq = [min(x, vocab_size - 1) for x in seq]
+                            target = min(target, vocab_size - 1)
+                            return {'sequence': seq, 'target': target, 'pattern_type': pt}
+
+                        def __len__(self):
+                            return len(self.examples)
+
+                        def __getitem__(self, idx):
+                            ex = self.examples[idx]
+                            padded = ex['sequence'] + [0] * (12 - len(ex['sequence']))
+                            return {
+                                'sequence': torch.tensor(padded[:12], dtype=torch.long),
+                                'target': torch.tensor(ex['target'], dtype=torch.long),
+                                'seq_len': len(ex['sequence']),
+                                'pattern_type': ex['pattern_type']
+                            }
+
+                    exam_data = SinglePatternDataset(
+                        n_examples=exam_size,
+                        seed=epoch * 1000 + idx + exam_round * 100,
+                        pattern_type=pattern_name
+                    )
+                    exam_loader = DataLoader(exam_data, batch_size=exam_size, collate_fn=collate_fn)
+
+                    # Run exam (no gradient, just evaluation)
+                    model.eval()
+                    correct_count = 0
+                    for batch in exam_loader:
+                        tokens = batch['tokens'].to(device)
+                        targets = batch['target'].to(device)
+                        seq_lens = batch['seq_len']
+                        with torch.no_grad():
+                            details = model(tokens, seq_lens, targets=targets, return_details=True)
+                            preds = details['logits'].argmax(dim=-1)
+                            correct_count += (preds == targets).sum().item()
+                    model.train()
+
+                    # Take the exam
+                    result = tracker.take_exam(idx, correct_count, exam_size)
+                    result['topic'] = pattern_name
+                    result['target_level'] = target_level
+                    exam_results.append(result)
+
+                    if result['passed']:
+                        any_advanced = True  # Keep going if anyone passed
+                    else:
+                        failed_this_epoch.add(idx)  # Done for this epoch
+            exam_round += 1
+
+        # Display exam results
+        if exam_results:
+            print("  Exams:")
+            for r in exam_results:
+                if r['passed']:
+                    status = f"Ready for L{r['new_level']}"
+                    if r['graduated']:
+                        status += " - GRADUATED!"
+                    print(f"    {r['topic']:18s}: {r['score']:.0%} >= {r['threshold']:.0%} - {status}")
+                else:
+                    print(f"    {r['topic']:18s}: {r['score']:.0%} < {r['threshold']:.0%} - More practice needed (cooldown: {r['cooldown']} epochs)")
+            history[-1]['exams'] = exam_results
+
+        # Count graduated topics
+        graduated_count = sum(1 for idx in pattern_to_idx.values() if tracker.get_exam_stats(idx)['graduated'])
+        if graduated_count > 0:
+            print(f"  Graduated: {graduated_count}/{len(pattern_types)} topics")
+
         if val_metrics['accuracy'] > best_acc:
             best_acc = val_metrics['accuracy']
             torch.save({
