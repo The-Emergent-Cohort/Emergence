@@ -1,5 +1,13 @@
 # Coherence Lab Changelog
 
+## [0.5.10] - 2024-12-08
+### Added
+- **Final comprehensive exam**: After all topics graduate individually (L10), must pass final
+  - Tests all topics together (32 problems each, 90% threshold)
+  - Any topic that fails gets kicked back to L7, must rebuild
+  - Phase 1 only completes when ALL topics pass final in same epoch
+  - No more "graduate individually and done" - prove it all together
+
 ## [0.5.9] - 2024-12-08
 ### Changed
 - **No XP cap**: XP accumulates freely during epoch
