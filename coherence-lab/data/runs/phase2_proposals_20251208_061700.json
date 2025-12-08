@@ -1,0 +1,543 @@
+{
+  "script": "phase2_proposals.py",
+  "run_id": "20251208_061700",
+  "phase1_checkpoint": "data\\phase1_approval_best.pt",
+  "phase1_val_acc": 0.9825,
+  "best_acc": 0.96525,
+  "final_trust": 0.9933071732521057,
+  "final_internalization": 0.9933071732521057,
+  "final_proposal_success_rate": 1.0,
+  "epochs_completed": 4,
+  "early_stop_reason": "Phase 2 complete - all topics accurate and calibrated",
+  "emerged_topics": [
+    {
+      "id": 5,
+      "name": "emerged_meta_5",
+      "epoch": 2,
+      "category": "meta"
+    },
+    {
+      "id": 6,
+      "name": "emerged_meta_6",
+      "epoch": 2,
+      "category": "meta"
+    },
+    {
+      "id": 7,
+      "name": "emerged_meta_7",
+      "epoch": 3,
+      "category": "meta"
+    },
+    {
+      "id": 8,
+      "name": "emerged_meta_8",
+      "epoch": 3,
+      "category": "meta"
+    }
+  ],
+  "total_topics": 9,
+  "args": {
+    "data_dir": "data",
+    "n_train": 40000,
+    "n_val": 4000,
+    "batch_size": 64,
+    "lr": 0.001,
+    "epochs": 15,
+    "d_model": 64,
+    "n_heads": 4,
+    "n_think_steps": 5,
+    "fresh": false
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "train_acc": 0.658225,
+      "train_loss": 1.0669585716247558,
+      "val_acc": 0.824,
+      "show_rate": 0.38215,
+      "approval_rate": 1.0,
+      "perceived_competence": 0.8043606877326965,
+      "approval_threshold": 0.7021825313568115,
+      "impressedness": 1.0,
+      "current_goal": 100,
+      "student_goal_estimate": 99.16423034667969,
+      "student_goal_calibration": 0.28,
+      "proposals": {
+        "total": 0,
+        "approved": 0,
+        "modified": 0,
+        "redirected": 0,
+        "by_type": {}
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.977404773235321,
+      "proposal_success_rate": 0.5,
+      "per_pattern": {
+        "compositional": 0.902746844840386,
+        "long_range": 0.5844444444444444,
+        "fibonacci_like": 0.9907904834996163
+      },
+      "topic_calibration": {
+        "compositional": {
+          "accuracy": 0.7970434427261353,
+          "confidence": 0.8348259329795837,
+          "gap": -0.037782490253448486,
+          "status": "calibrated",
+          "streak": 0,
+          "best_streak": 100,
+          "xp": 3914.830810546875,
+          "level": 0,
+          "level_progress": 1.0
+        },
+        "long_range": {
+          "accuracy": 0.5859056115150452,
+          "confidence": 0.5666330456733704,
+          "gap": 0.019272565841674805,
+          "status": "calibrated",
+          "streak": 0,
+          "best_streak": 100,
+          "xp": 1443.1099853515625,
+          "level": 0,
+          "level_progress": 1.0
+        },
+        "fibonacci_like": {
+          "accuracy": 0.9999997615814209,
+          "confidence": 0.9857802987098694,
+          "gap": 0.014219462871551514,
+          "status": "calibrated",
+          "streak": 87,
+          "best_streak": 100,
+          "xp": 6982.830078125,
+          "level": 0,
+          "level_progress": 1.0
+        }
+      },
+      "exams": [
+        {
+          "passed": true,
+          "score": 0.890625,
+          "threshold": 0.75,
+          "new_level": 1,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "compositional",
+          "target_level": 11
+        },
+        {
+          "passed": false,
+          "score": 0.6875,
+          "threshold": 0.75,
+          "new_level": 0,
+          "xp_lost": 1443.1099853515625,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "long_range",
+          "target_level": 11
+        },
+        {
+          "passed": true,
+          "score": 0.984375,
+          "threshold": 0.75,
+          "new_level": 1,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "fibonacci_like",
+          "target_level": 11
+        },
+        {
+          "passed": true,
+          "score": 0.828125,
+          "threshold": 0.75,
+          "new_level": 2,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "compositional",
+          "target_level": 11
+        },
+        {
+          "passed": true,
+          "score": 1.0,
+          "threshold": 0.75,
+          "new_level": 2,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "fibonacci_like",
+          "target_level": 11
+        },
+        {
+          "passed": true,
+          "score": 0.890625,
+          "threshold": 0.75,
+          "new_level": 3,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "compositional",
+          "target_level": 11
+        },
+        {
+          "passed": true,
+          "score": 1.0,
+          "threshold": 0.75,
+          "new_level": 3,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "fibonacci_like",
+          "target_level": 11
+        },
+        {
+          "passed": true,
+          "score": 0.859375,
+          "threshold": 0.8,
+          "new_level": 4,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "compositional",
+          "target_level": 11
+        },
+        {
+          "passed": true,
+          "score": 0.953125,
+          "threshold": 0.8,
+          "new_level": 4,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "fibonacci_like",
+          "target_level": 11
+        },
+        {
+          "passed": true,
+          "score": 0.921875,
+          "threshold": 0.8,
+          "new_level": 5,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "compositional",
+          "target_level": 11
+        },
+        {
+          "passed": true,
+          "score": 0.953125,
+          "threshold": 0.8,
+          "new_level": 5,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "fibonacci_like",
+          "target_level": 11
+        },
+        {
+          "passed": true,
+          "score": 0.84375,
+          "threshold": 0.8,
+          "new_level": 6,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "compositional",
+          "target_level": 11
+        },
+        {
+          "passed": true,
+          "score": 1.0,
+          "threshold": 0.8,
+          "new_level": 6,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "fibonacci_like",
+          "target_level": 11
+        },
+        {
+          "passed": false,
+          "score": 0.828125,
+          "threshold": 0.85,
+          "new_level": 6,
+          "xp_lost": 3554.830810546875,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "compositional",
+          "target_level": 11
+        },
+        {
+          "passed": true,
+          "score": 1.0,
+          "threshold": 0.85,
+          "new_level": 7,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "fibonacci_like",
+          "target_level": 11
+        },
+        {
+          "passed": true,
+          "score": 1.0,
+          "threshold": 0.85,
+          "new_level": 8,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "fibonacci_like",
+          "target_level": 11
+        },
+        {
+          "passed": true,
+          "score": 0.984375,
+          "threshold": 0.85,
+          "new_level": 9,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "fibonacci_like",
+          "target_level": 11
+        },
+        {
+          "passed": true,
+          "score": 0.984375,
+          "threshold": 0.9,
+          "new_level": 10,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": true,
+          "topic": "fibonacci_like",
+          "target_level": 11
+        }
+      ]
+    },
+    {
+      "epoch": 2,
+      "train_acc": 0.835875,
+      "train_loss": 0.43393232560157774,
+      "val_acc": 0.90925,
+      "show_rate": 0.0199,
+      "approval_rate": 1.0,
+      "perceived_competence": 0.8087394833564758,
+      "approval_threshold": 0.704359233379364,
+      "impressedness": 1.0,
+      "current_goal": 100,
+      "student_goal_estimate": 99.16423034667969,
+      "student_goal_calibration": 0.28,
+      "proposals": {
+        "total": 2,
+        "approved": 0,
+        "modified": 1,
+        "redirected": 1,
+        "by_type": {
+          "propose_novel": 1,
+          "reset_topic": 1
+        }
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.9778410792350769,
+      "proposal_success_rate": 1.0,
+      "per_pattern": {
+        "compositional": 0.9606533036377134,
+        "long_range": 0.7918518518518518,
+        "fibonacci_like": 0.977743668457406
+      },
+      "topic_calibration": {
+        "compositional": {
+          "accuracy": 0.9998897314071655,
+          "confidence": 0.9543522596359253,
+          "gap": 0.045537471771240234,
+          "status": "calibrated",
+          "streak": 68,
+          "best_streak": 100,
+          "xp": 360.0,
+          "level": 6,
+          "level_progress": 0.0
+        },
+        "long_range": {
+          "accuracy": 0.8695043921470642,
+          "confidence": 0.7609730958938599,
+          "gap": 0.10853129625320435,
+          "status": "guessing",
+          "streak": 3,
+          "best_streak": 100,
+          "xp": 708.168701171875,
+          "level": 0,
+          "level_progress": 1.0
+        },
+        "fibonacci_like": {
+          "accuracy": 0.9079801440238953,
+          "confidence": 0.9834935069084167,
+          "gap": -0.07551336288452148,
+          "status": "calibrated",
+          "streak": 8,
+          "best_streak": 100,
+          "xp": 6982.830078125,
+          "level": 10,
+          "level_progress": 1.0
+        }
+      },
+      "exams": [
+        {
+          "passed": true,
+          "score": 0.875,
+          "threshold": 0.75,
+          "new_level": 1,
+          "xp_lost": 0.0,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "long_range",
+          "target_level": 9
+        },
+        {
+          "passed": false,
+          "score": 0.71875,
+          "threshold": 0.75,
+          "new_level": 1,
+          "xp_lost": 698.168701171875,
+          "cooldown": 0,
+          "graduated": false,
+          "topic": "long_range",
+          "target_level": 9
+        }
+      ]
+    },
+    {
+      "epoch": 3,
+      "train_acc": 0.89375,
+      "train_loss": 0.2640937071442604,
+      "val_acc": 0.93475,
+      "show_rate": 0.000125,
+      "approval_rate": 1.0,
+      "perceived_competence": 0.8200469017028809,
+      "approval_threshold": 0.7099652886390686,
+      "impressedness": 0.8700000047683716,
+      "current_goal": 100,
+      "student_goal_estimate": 99.24781036376953,
+      "student_goal_calibration": 0.3076923076923077,
+      "proposals": {
+        "total": 3,
+        "approved": 0,
+        "modified": 1,
+        "redirected": 2,
+        "by_type": {
+          "propose_novel": 2,
+          "reset_topic": 1
+        }
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.9778439998626709,
+      "proposal_success_rate": 1.0,
+      "per_pattern": {
+        "compositional": 0.977728285077951,
+        "long_range": 0.8533333333333334,
+        "fibonacci_like": 0.9746738296239448
+      },
+      "topic_calibration": {
+        "compositional": {
+          "accuracy": 0.998104453086853,
+          "confidence": 0.9621511101722717,
+          "gap": 0.0359533429145813,
+          "status": "calibrated",
+          "streak": 40,
+          "best_streak": 100,
+          "xp": 376.6667175292969,
+          "level": 6,
+          "level_progress": 0.12820551945612982
+        },
+        "long_range": {
+          "accuracy": 0.7037011384963989,
+          "confidence": 0.8023926019668579,
+          "gap": -0.09869146347045898,
+          "status": "calibrated",
+          "streak": 2,
+          "best_streak": 100,
+          "xp": 10.0,
+          "level": 1,
+          "level_progress": 0.0
+        },
+        "fibonacci_like": {
+          "accuracy": 0.9923271536827087,
+          "confidence": 0.9825314283370972,
+          "gap": 0.009795725345611572,
+          "status": "calibrated",
+          "streak": 25,
+          "best_streak": 100,
+          "xp": 6982.830078125,
+          "level": 10,
+          "level_progress": 1.0
+        }
+      }
+    },
+    {
+      "epoch": 4,
+      "train_acc": 0.924375,
+      "train_loss": 0.19312086661458017,
+      "val_acc": 0.96525,
+      "show_rate": 0.000275,
+      "approval_rate": 1.0,
+      "perceived_competence": 0.8322997689247131,
+      "approval_threshold": 0.7158278226852417,
+      "impressedness": 0.7000000476837158,
+      "current_goal": 100,
+      "student_goal_estimate": 99.64022827148438,
+      "student_goal_calibration": 0.45454545454545453,
+      "proposals": {
+        "total": 0,
+        "approved": 0,
+        "modified": 0,
+        "redirected": 0,
+        "by_type": {}
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.9778500199317932,
+      "proposal_success_rate": 1.0,
+      "per_pattern": {
+        "compositional": 0.9896065330363771,
+        "long_range": 0.9074074074074074,
+        "fibonacci_like": 1.0
+      },
+      "topic_calibration": {
+        "compositional": {
+          "accuracy": 0.9999783039093018,
+          "confidence": 0.9460831880569458,
+          "gap": 0.05389511585235596,
+          "status": "calibrated",
+          "streak": 81,
+          "best_streak": 100,
+          "xp": 413.33349609375,
+          "level": 6,
+          "level_progress": 0.4102576622596154
+        },
+        "long_range": {
+          "accuracy": 0.8165643811225891,
+          "confidence": 0.849619448184967,
+          "gap": -0.03305506706237793,
+          "status": "calibrated",
+          "streak": 0,
+          "best_streak": 100,
+          "xp": 10.0,
+          "level": 1,
+          "level_progress": 0.0
+        },
+        "fibonacci_like": {
+          "accuracy": 0.9952871799468994,
+          "confidence": 0.9887992143630981,
+          "gap": 0.0064879655838012695,
+          "status": "calibrated",
+          "streak": 29,
+          "best_streak": 100,
+          "xp": 6982.830078125,
+          "level": 10,
+          "level_progress": 1.0
+        }
+      }
+    }
+  ]
+}
