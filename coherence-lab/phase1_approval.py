@@ -202,7 +202,8 @@ def train_day_with_approval(model, loader, optimizer, criterion, device, pattern
         'teacher_goal': model.teacher.current_goal.item(),
         'student_goal_estimate': model.learner.self_model.goal_estimate.item(),
         'teacher_impressedness': model.teacher.impressedness.item(),
-        'goal_calibration_rate': goal_cal_rate
+        'goal_calibration_rate': goal_cal_rate,
+        'highest_goal_achieved': approval_metrics['highest_goal_achieved']
     }
 
 
@@ -320,7 +321,8 @@ def main(args):
         print(f"  Show reasons: {train_metrics['show_reasons']}")
         print(f"  Internalization: {int_level:.1%}, Trust: {trust:.1%}")
         print(f"  Rising bars: competence={train_metrics['perceived_competence']:.1%}, threshold={train_metrics['approval_threshold']:.1%}")
-        print(f"  Goals: teacher={train_metrics['teacher_goal']}, student_est={train_metrics['student_goal_estimate']:.1f}, impressed={train_metrics['teacher_impressedness']:.0%}")
+        highest = train_metrics['highest_goal_achieved']
+        print(f"  Goals: current={train_metrics['teacher_goal']}, best={highest}, student_est={train_metrics['student_goal_estimate']:.1f}, impressed={train_metrics['teacher_impressedness']:.0%}")
         print("  Per-pattern (accuracy [calibration]):")
         for pt in pattern_types:
             acc = val_metrics['per_pattern'].get(pt, 0)
@@ -353,16 +355,27 @@ def main(args):
 
         all_calibrated = all(is_truly_calibrated(pt) for pt in pattern_types)
 
+        # Graduation requires surpassing your best - prove it wasn't luck
+        current_goal = train_metrics['teacher_goal']
+        highest_achieved = train_metrics['highest_goal_achieved']
+        surpassed_best = current_goal > highest_achieved and highest_achieved >= 5
+
         if all_accurate and val_metrics['accuracy'] >= 0.98:
-            if all_calibrated:
+            if all_calibrated and surpassed_best:
                 print(f"\n*** Phase 1 complete! Approval-seeking foundation built. ***")
                 print(f"    Trust: {trust:.1%}, Internalization: {int_level:.1%}")
                 print(f"    All topics calibrated - student knows WHY it works!")
+                print(f"    Surpassed best streak: {current_goal} > {highest_achieved}")
                 break
             else:
-                # Still learning the "why"
-                uncalibrated = [pt for pt in pattern_types if not is_truly_calibrated(pt)]
-                print(f"  [Accurate but not calibrated: {uncalibrated}]")
+                # Still learning
+                issues = []
+                if not all_calibrated:
+                    uncalibrated = [pt for pt in pattern_types if not is_truly_calibrated(pt)]
+                    issues.append(f"uncalibrated: {uncalibrated}")
+                if not surpassed_best:
+                    issues.append(f"needs to surpass best ({highest_achieved})")
+                print(f"  [Not ready: {', '.join(issues)}]")
 
     print("\n" + "=" * 70)
     print(f"Best accuracy: {best_acc:.1%}")
