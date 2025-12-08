@@ -796,7 +796,7 @@ class SelfModel(nn.Module):
             adjustment = (conf - 0.5) * 1.0  # ±0.5 based on confidence
 
             proposed = int(round(base + adjustment))
-            proposed = max(2, min(10, proposed))  # Clamp to reasonable range
+            proposed = max(2, min(100, proposed))  # Clamp to mastery range
 
             self.goal_proposals_made += 1
             return proposed
@@ -827,8 +827,8 @@ class SelfModel(nn.Module):
                 delta = (final_goal - self.goal_estimate.item()) * lr
 
             self.goal_estimate += delta
-            # Keep estimate in reasonable range
-            self.goal_estimate.clamp_(2.0, 10.0)
+            # Keep estimate in mastery range
+            self.goal_estimate.clamp_(2.0, 100.0)
 
     def get_goal_calibration_rate(self):
         """How well calibrated are our goal proposals?"""
