@@ -1,5 +1,12 @@
 # Coherence Lab Changelog
 
+## [0.5.6] - 2024-12-08
+### Fixed
+- **Phase 1 completion requires graduation**: Was ending at 95% accuracy
+  - Now requires all topics to PASS L10 EXAM (true graduation)
+  - Removes old accuracy/calibration/goal checks
+  - Training continues until exam-proven mastery, not just high accuracy
+
 ## [0.5.5] - 2024-12-08
 ### Fixed
 - **Streak-mastered topics can now earn XP**: Was blocking XP on `topic_mastered`
