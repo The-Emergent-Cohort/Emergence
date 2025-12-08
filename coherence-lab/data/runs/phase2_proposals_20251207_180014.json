@@ -1,0 +1,282 @@
+{
+  "script": "phase2_proposals.py",
+  "run_id": "20251207_180014",
+  "phase1_checkpoint": "data\\phase1_approval_best.pt",
+  "phase1_val_acc": 0.991,
+  "best_acc": 0.98175,
+  "final_trust": 0.9933071732521057,
+  "final_internalization": 0.9933071732521057,
+  "final_proposal_success_rate": 1.0,
+  "epochs_completed": 5,
+  "early_stop_reason": "Phase 2 complete - all topics accurate and calibrated",
+  "args": {
+    "data_dir": "data",
+    "n_train": 80000,
+    "n_val": 8000,
+    "batch_size": 64,
+    "lr": 0.001,
+    "epochs": 15,
+    "d_model": 64,
+    "n_heads": 4,
+    "n_think_steps": 5,
+    "fresh": false
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "train_acc": 0.7102,
+      "train_loss": 0.8881853223085403,
+      "val_acc": 0.8285,
+      "show_rate": 0.499975,
+      "approval_rate": 1.0,
+      "perceived_competence": 0.999999463558197,
+      "approval_threshold": 0.7999997138977051,
+      "impressedness": 1.0,
+      "current_goal": 6,
+      "student_goal_estimate": 5.999998092651367,
+      "student_goal_calibration": 0.9940047961630696,
+      "proposals": {
+        "total": 0,
+        "approved": 0,
+        "modified": 0,
+        "redirected": 0,
+        "by_type": {}
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.9942959547042847,
+      "proposal_success_rate": 0.5,
+      "per_pattern": {
+        "compositional": 0.927546892239794,
+        "long_range": 0.5577719232216786,
+        "fibonacci_like": 1.0
+      },
+      "topic_calibration": {
+        "compositional": {
+          "accuracy": 0.9978923797607422,
+          "confidence": 0.843145489692688,
+          "gap": 0.1547468900680542,
+          "status": "guessing"
+        },
+        "long_range": {
+          "accuracy": 0.3950028717517853,
+          "confidence": 0.5543919205665588,
+          "gap": -0.15938904881477356,
+          "status": "overconfident"
+        },
+        "fibonacci_like": {
+          "accuracy": 0.9943600296974182,
+          "confidence": 0.9729636311531067,
+          "gap": 0.021396398544311523,
+          "status": "calibrated"
+        }
+      }
+    },
+    {
+      "epoch": 2,
+      "train_acc": 0.8704,
+      "train_loss": 0.3788293450474739,
+      "val_acc": 0.925625,
+      "show_rate": 0.5635625,
+      "approval_rate": 1.0,
+      "perceived_competence": 0.999999463558197,
+      "approval_threshold": 0.7999997138977051,
+      "impressedness": 1.0,
+      "current_goal": 6,
+      "student_goal_estimate": 5.999998092651367,
+      "student_goal_calibration": 0.9982841455044612,
+      "proposals": {
+        "total": 6,
+        "approved": 0,
+        "modified": 6,
+        "redirected": 0,
+        "by_type": {
+          "adjust_trust": 6
+        }
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.9964663982391357,
+      "proposal_success_rate": 1.0,
+      "per_pattern": {
+        "compositional": 0.9764619345347554,
+        "long_range": 0.8001505457282649,
+        "fibonacci_like": 1.0
+      },
+      "topic_calibration": {
+        "compositional": {
+          "accuracy": 0.9658759832382202,
+          "confidence": 0.9557839632034302,
+          "gap": 0.010092020034790039,
+          "status": "calibrated"
+        },
+        "long_range": {
+          "accuracy": 0.8182910084724426,
+          "confidence": 0.7814956307411194,
+          "gap": 0.03679537773132324,
+          "status": "calibrated"
+        },
+        "fibonacci_like": {
+          "accuracy": 0.9999303817749023,
+          "confidence": 0.9914005398750305,
+          "gap": 0.008529841899871826,
+          "status": "calibrated"
+        }
+      }
+    },
+    {
+      "epoch": 3,
+      "train_acc": 0.926325,
+      "train_loss": 0.21741550947725774,
+      "val_acc": 0.95575,
+      "show_rate": 0.6292,
+      "approval_rate": 1.0,
+      "perceived_competence": 0.999999463558197,
+      "approval_threshold": 0.7999997138977051,
+      "impressedness": 1.0,
+      "current_goal": 6,
+      "student_goal_estimate": 5.999998092651367,
+      "student_goal_calibration": 0.9991012043861226,
+      "proposals": {
+        "total": 0,
+        "approved": 0,
+        "modified": 0,
+        "redirected": 0,
+        "by_type": {}
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.9975225925445557,
+      "proposal_success_rate": 1.0,
+      "per_pattern": {
+        "compositional": 0.9911732254505333,
+        "long_range": 0.8757997741814076,
+        "fibonacci_like": 1.0
+      },
+      "topic_calibration": {
+        "compositional": {
+          "accuracy": 0.9241480231285095,
+          "confidence": 0.9640560746192932,
+          "gap": -0.03990805149078369,
+          "status": "calibrated"
+        },
+        "long_range": {
+          "accuracy": 0.9658603668212891,
+          "confidence": 0.8358590006828308,
+          "gap": 0.13000136613845825,
+          "status": "guessing"
+        },
+        "fibonacci_like": {
+          "accuracy": 0.9999667406082153,
+          "confidence": 0.9981904625892639,
+          "gap": 0.001776278018951416,
+          "status": "calibrated"
+        }
+      }
+    },
+    {
+      "epoch": 4,
+      "train_acc": 0.9503375,
+      "train_loss": 0.15189552149772645,
+      "val_acc": 0.97625,
+      "show_rate": 0.6314625,
+      "approval_rate": 1.0,
+      "perceived_competence": 0.999999463558197,
+      "approval_threshold": 0.7999997138977051,
+      "impressedness": 1.0,
+      "current_goal": 6,
+      "student_goal_estimate": 5.999998092651367,
+      "student_goal_calibration": 0.9994169096209913,
+      "proposals": {
+        "total": 6,
+        "approved": 0,
+        "modified": 6,
+        "redirected": 0,
+        "by_type": {
+          "adjust_trust": 6
+        }
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.9980942010879517,
+      "proposal_success_rate": 1.0,
+      "per_pattern": {
+        "compositional": 0.9926443545421111,
+        "long_range": 0.9360180654873917,
+        "fibonacci_like": 1.0
+      },
+      "topic_calibration": {
+        "compositional": {
+          "accuracy": 0.999925434589386,
+          "confidence": 0.9835819602012634,
+          "gap": 0.01634347438812256,
+          "status": "calibrated"
+        },
+        "long_range": {
+          "accuracy": 0.8012620210647583,
+          "confidence": 0.923996090888977,
+          "gap": -0.12273406982421875,
+          "status": "overconfident"
+        },
+        "fibonacci_like": {
+          "accuracy": 0.9999997615814209,
+          "confidence": 0.9970506429672241,
+          "gap": 0.0029491186141967773,
+          "status": "calibrated"
+        }
+      }
+    },
+    {
+      "epoch": 5,
+      "train_acc": 0.9599875,
+      "train_loss": 0.12492135618776083,
+      "val_acc": 0.98175,
+      "show_rate": 0.6135625,
+      "approval_rate": 1.0,
+      "perceived_competence": 0.999999463558197,
+      "approval_threshold": 0.7999997138977051,
+      "impressedness": 1.0,
+      "current_goal": 6,
+      "student_goal_estimate": 5.999998092651367,
+      "student_goal_calibration": 0.9995756238329655,
+      "proposals": {
+        "total": 6,
+        "approved": 0,
+        "modified": 6,
+        "redirected": 0,
+        "by_type": {
+          "adjust_trust": 6
+        }
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.9984434843063354,
+      "proposal_success_rate": 1.0,
+      "per_pattern": {
+        "compositional": 0.9874954027215889,
+        "long_range": 0.957847196085811,
+        "fibonacci_like": 1.0
+      },
+      "topic_calibration": {
+        "compositional": {
+          "accuracy": 0.9285750985145569,
+          "confidence": 0.9654699563980103,
+          "gap": -0.03689485788345337,
+          "status": "calibrated"
+        },
+        "long_range": {
+          "accuracy": 0.9023051857948303,
+          "confidence": 0.9281285405158997,
+          "gap": -0.025823354721069336,
+          "status": "calibrated"
+        },
+        "fibonacci_like": {
+          "accuracy": 0.9999997615814209,
+          "confidence": 0.9965851902961731,
+          "gap": 0.0034145712852478027,
+          "status": "calibrated"
+        }
+      }
+    }
+  ]
+}
