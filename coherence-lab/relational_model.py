@@ -502,7 +502,6 @@ class SelfModel(nn.Module):
                 # This is the negotiated/set goal from teacher
                 elif self.streak_count >= streak_threshold and was_correct[i]:
                     reason = 'streak'
-                    self.streak_count.zero_()  # Reset after showing
 
                 # Uncertain but correct → seeking validation
                 # Early: show when not sure (confidence < 0.5)
@@ -518,6 +517,8 @@ class SelfModel(nn.Module):
                 if reason is not None:
                     should_show[i] = True
                     show_reasons[i] = reason
+                    # Reset streak on ANY show - counting toward next goal
+                    self.streak_count.zero_()
 
         return should_show, show_reasons
 
@@ -1954,30 +1955,27 @@ class RelationalTeacher(nn.Module):
         """
         Update teacher impressedness after a show.
 
-        Impressedness decays with repeated similar shows (novelty wears off).
-        Resets/increases with genuinely impressive shows.
+        Impressedness ALWAYS decays slightly (novelty naturally wears off).
+        Creative or exceptional shows can boost it back up.
 
         Args:
             show_quality: 0-1 measure of how good this show was
             show_reason: why the student showed (creative, streak, validation, etc.)
         """
         with torch.no_grad():
-            quality_diff = show_quality - self.last_show_quality.item()
+            # Base decay - novelty always wears off, like a parent seeing the 50th drawing
+            self.shows_at_level += 1
+            base_decay = 0.02 * self.shows_at_level.item()
+            self.impressedness.sub_(base_decay).clamp_(min=0.2)
 
+            # But creative shows genuinely re-impress
             if show_reason == 'creative':
-                # Creative shows always refresh impressedness
-                self.impressedness.add_(0.2).clamp_(max=1.0)
-                self.shows_at_level.zero_()
-            elif quality_diff > 0.1:
-                # Noticeably better than before - impressive!
+                self.impressedness.add_(0.3).clamp_(max=1.0)
+                self.shows_at_level.zero_()  # Reset boredom counter
+            # Significant quality jumps also help (but less)
+            elif show_quality > self.last_show_quality.item() + 0.2:
                 self.impressedness.add_(0.1).clamp_(max=1.0)
-                self.shows_at_level.zero_()
-            elif abs(quality_diff) < 0.1:
-                # Similar to before - novelty wearing off
-                self.shows_at_level += 1
-                decay = 0.05 * self.shows_at_level.item()
-                self.impressedness.sub_(decay).clamp_(min=0.2)
-            # Worse than before doesn't decay impressedness (concern, not boredom)
+                # Don't reset counter - still getting used to this level
 
             self.last_show_quality.fill_(show_quality)
 
