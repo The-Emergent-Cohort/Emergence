@@ -1,5 +1,12 @@
 # Coherence Lab Changelog
 
+## [0.3.5] - 2024-12-08
+### Fixed
+- **Student goal estimate clamp**: Was capped at 10, now caps at 100 (mastery)
+  - Student couldn't learn goals above 10, but teacher could set up to 100
+  - This caused 32/10 disconnects where student fell behind teacher's expectations
+  - Now student can grow to match teacher throughout the learning journey
+
 ## [0.3.4] - 2024-12-08
 ### Added
 - **Per-topic streak display**: Epoch output now shows `streak:current/best` for each topic
