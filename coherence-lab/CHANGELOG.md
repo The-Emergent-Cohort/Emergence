@@ -1,5 +1,12 @@
 # Coherence Lab Changelog
 
+## [0.5.7] - 2024-12-08
+### Changed
+- **Multiple level-ups per epoch**: Topics can advance as far as they can prove
+  - Exam loop continues until topics fail or graduate
+  - Focuses compute on topics that need it (fast topics get out of the way)
+  - A topic at 100% accuracy can go L1→L10 in one epoch if it passes every exam
+
 ## [0.5.6] - 2024-12-08
 ### Fixed
 - **Phase 1 completion requires graduation**: Was ending at 95% accuracy
