@@ -605,7 +605,18 @@ class TopicConfidenceTracker(nn.Module):
                 else:
                     scaled_amount = amount  # Penalties not scaled
 
-                self.topic_xp[topic_idx] += scaled_amount
+                # Cap XP at next exam threshold (gated by confirmed_level)
+                # Must pass exam to exceed - no free leveling
+                self._init_exam_state()
+                confirmed = self.confirmed_level[topic_idx].item()
+                if confirmed < self.max_level:
+                    next_threshold = self.xp_threshold(confirmed + 1)
+                    new_xp = self.topic_xp[topic_idx] + scaled_amount
+                    self.topic_xp[topic_idx] = min(new_xp, next_threshold)
+                else:
+                    # At max confirmed level, no cap
+                    self.topic_xp[topic_idx] += scaled_amount
+
                 self.topic_xp[topic_idx].clamp_(min=0)
                 if self.topic_xp[topic_idx] > self.topic_xp_high[topic_idx]:
                     self.topic_xp_high[topic_idx] = self.topic_xp[topic_idx].clone()
@@ -766,7 +777,7 @@ class TopicConfidenceTracker(nn.Module):
                     'graduated': graduated
                 }
             else:
-                # FAILED - flat 25% XP penalty and cooldown
+                # FAILED - flat 25% XP penalty, cooldown, and streak reset
                 penalty_rate = 0.25
 
                 # XP above confirmed level threshold
@@ -777,6 +788,9 @@ class TopicConfidenceTracker(nn.Module):
                 xp_lost = excess_xp * penalty_rate
                 self.topic_xp[topic_idx] -= xp_lost
                 self.topic_xp[topic_idx].clamp_(min=confirmed_threshold)  # Don't drop below confirmed level
+
+                # Reset streak - failed exam means back to practice
+                self.topic_streak[topic_idx] = 0
 
                 # Cooldown scales with target level (higher = longer wait)
                 cooldown = max(1, target_level)  # 1-10 epochs

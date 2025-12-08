@@ -11,7 +11,7 @@ Building the social learning foundation:
 This is the developmental foundation for later phases.
 """
 
-__version__ = "0.5.2"  # Exam confirmed_level + mastered stops XP
+__version__ = "0.5.4"  # XP gated by exams + streak reset on fail
 
 import torch
 import torch.nn as nn
@@ -54,10 +54,11 @@ def train_day_with_approval(model, loader, optimizer, criterion, device, pattern
         seq_lens = batch['seq_len']
         pattern_types = batch['pattern_type']
 
-        # Mask out mastered topics - compute goes where learning is needed
+        # Mask out GRADUATED topics (exam-proven) - not just streak-mastered
+        # Failed exams should resume training, only true graduates can rest
         tracker = model.learner.self_model.topic_tracker
         active_mask = torch.tensor([
-            not tracker.topic_mastered[pattern_to_idx[p]].item()
+            not tracker.get_exam_stats(pattern_to_idx[p])['graduated']
             for p in pattern_types
         ], dtype=torch.bool, device=device)
 
@@ -158,7 +159,7 @@ def train_day_with_approval(model, loader, optimizer, criterion, device, pattern
                     if was_correct_item:
                         model.learner.self_model.topic_tracker.award_xp(topic_idx, 5)  # Validated insight
                     else:
-                        model.learner.self_model.topic_tracker.award_xp(topic_idx, -3)  # Overconfidence cost
+                        model.learner.self_model.topic_tracker.award_xp(topic_idx, -1)  # Gentle nudge - don't punish exploration
                 elif reason == 'streak':
                     if was_correct_item:
                         streak_len = model.learner.self_model.topic_tracker.topic_streak[topic_idx].item()
