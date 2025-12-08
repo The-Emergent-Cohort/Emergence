@@ -1,0 +1,628 @@
+{
+  "script": "phase1_approval.py",
+  "run_id": "20251208_011939",
+  "best_acc": 0.9845,
+  "final_trust": 0.9933071732521057,
+  "final_internalization": 0.9933071732521057,
+  "epochs_completed": 10,
+  "curriculum_topics": [
+    "alternating",
+    "repeating",
+    "incrementing",
+    "fixed_offset",
+    "periodic_repeat"
+  ],
+  "args": {
+    "data_dir": "data",
+    "n_train": 20000,
+    "n_val": 2000,
+    "batch_size": 64,
+    "lr": 0.001,
+    "epochs": 10,
+    "d_model": 64,
+    "n_heads": 4,
+    "n_think_steps": 5
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "train_acc": 0.4166,
+      "train_loss": 1.921565898513794,
+      "val_acc": 0.596,
+      "show_rate": 0.0466,
+      "approval_rate": 1.0,
+      "show_reasons": {
+        "creative": 0,
+        "streak": 11,
+        "validation": 920,
+        "spontaneous": 1
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.3221045136451721,
+      "per_pattern": {
+        "alternating": 0.5477386934673367,
+        "repeating": 1.0,
+        "incrementing": 0.5510204081632653,
+        "fixed_offset": 0.5205811138014528,
+        "periodic_repeat": 0.324468085106383
+      },
+      "teacher_goal": 9,
+      "student_goal_estimate": 8.999996185302734,
+      "teacher_impressedness": 0.30000001192092896,
+      "goal_calibration_rate": 0.9912568306010929,
+      "topic_calibration": {
+        "alternating": {
+          "accuracy": 0.5647193193435669,
+          "confidence": 0.604886531829834,
+          "gap": -0.04016721248626709,
+          "status": "calibrated"
+        },
+        "repeating": {
+          "accuracy": 0.9999997615814209,
+          "confidence": 0.6011820435523987,
+          "gap": 0.3988177180290222,
+          "status": "guessing"
+        },
+        "incrementing": {
+          "accuracy": 0.533174455165863,
+          "confidence": 0.5696431994438171,
+          "gap": -0.0364687442779541,
+          "status": "calibrated"
+        },
+        "fixed_offset": {
+          "accuracy": 0.49454277753829956,
+          "confidence": 0.5583024621009827,
+          "gap": -0.0637596845626831,
+          "status": "calibrated"
+        },
+        "periodic_repeat": {
+          "accuracy": 0.41358569264411926,
+          "confidence": 0.5912829041481018,
+          "gap": -0.17769721150398254,
+          "status": "overconfident"
+        }
+      }
+    },
+    {
+      "epoch": 2,
+      "train_acc": 0.67165,
+      "train_loss": 1.0109433421134948,
+      "val_acc": 0.7615,
+      "show_rate": 0.0485,
+      "approval_rate": 1.0,
+      "show_reasons": {
+        "creative": 834,
+        "streak": 136,
+        "validation": 0,
+        "spontaneous": 0
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.5256085991859436,
+      "per_pattern": {
+        "alternating": 0.5879396984924623,
+        "repeating": 1.0,
+        "incrementing": 0.9107142857142857,
+        "fixed_offset": 0.8837772397094431,
+        "periodic_repeat": 0.3882978723404255
+      },
+      "teacher_goal": 9,
+      "student_goal_estimate": 8.999996185302734,
+      "teacher_impressedness": 1.0,
+      "goal_calibration_rate": 0.9919678714859438,
+      "topic_calibration": {
+        "alternating": {
+          "accuracy": 0.8396530151367188,
+          "confidence": 0.6870439052581787,
+          "gap": 0.15260910987854004,
+          "status": "guessing"
+        },
+        "repeating": {
+          "accuracy": 0.9999997615814209,
+          "confidence": 0.7485647201538086,
+          "gap": 0.2514350414276123,
+          "status": "guessing"
+        },
+        "incrementing": {
+          "accuracy": 0.8740473985671997,
+          "confidence": 0.8055970072746277,
+          "gap": 0.06845039129257202,
+          "status": "calibrated"
+        },
+        "fixed_offset": {
+          "accuracy": 0.7902222275733948,
+          "confidence": 0.8166081309318542,
+          "gap": -0.026385903358459473,
+          "status": "calibrated"
+        },
+        "periodic_repeat": {
+          "accuracy": 0.4084453284740448,
+          "confidence": 0.5456655025482178,
+          "gap": -0.13722017407417297,
+          "status": "overconfident"
+        }
+      }
+    },
+    {
+      "epoch": 3,
+      "train_acc": 0.7811,
+      "train_loss": 0.6713381003379821,
+      "val_acc": 0.8395,
+      "show_rate": 0.3111,
+      "approval_rate": 1.0,
+      "show_reasons": {
+        "creative": 6199,
+        "streak": 23,
+        "validation": 0,
+        "spontaneous": 0
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.8893404006958008,
+      "per_pattern": {
+        "alternating": 0.7060301507537688,
+        "repeating": 1.0,
+        "incrementing": 0.9897959183673469,
+        "fixed_offset": 1.0,
+        "periodic_repeat": 0.46808510638297873
+      },
+      "teacher_goal": 9,
+      "student_goal_estimate": 8.999996185302734,
+      "teacher_impressedness": 1.0,
+      "goal_calibration_rate": 0.9920318725099602,
+      "topic_calibration": {
+        "alternating": {
+          "accuracy": 0.7013005614280701,
+          "confidence": 0.7387115955352783,
+          "gap": -0.03741103410720825,
+          "status": "calibrated"
+        },
+        "repeating": {
+          "accuracy": 0.9999997615814209,
+          "confidence": 0.8626456260681152,
+          "gap": 0.13735413551330566,
+          "status": "guessing"
+        },
+        "incrementing": {
+          "accuracy": 0.9551103711128235,
+          "confidence": 0.9284155368804932,
+          "gap": 0.026694834232330322,
+          "status": "calibrated"
+        },
+        "fixed_offset": {
+          "accuracy": 0.9715110063552856,
+          "confidence": 0.9283162951469421,
+          "gap": 0.043194711208343506,
+          "status": "calibrated"
+        },
+        "periodic_repeat": {
+          "accuracy": 0.334529846906662,
+          "confidence": 0.5870136022567749,
+          "gap": -0.2524837553501129,
+          "status": "overconfident"
+        }
+      }
+    },
+    {
+      "epoch": 4,
+      "train_acc": 0.8546,
+      "train_loss": 0.44081707425117495,
+      "val_acc": 0.8965,
+      "show_rate": 0.4365,
+      "approval_rate": 1.0,
+      "show_reasons": {
+        "creative": 8718,
+        "streak": 10,
+        "validation": 2,
+        "spontaneous": 0
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.9465713500976562,
+      "per_pattern": {
+        "alternating": 0.8316582914572864,
+        "repeating": 1.0,
+        "incrementing": 1.0,
+        "fixed_offset": 0.9903147699757869,
+        "periodic_repeat": 0.6382978723404256
+      },
+      "teacher_goal": 9,
+      "student_goal_estimate": 8.999996185302734,
+      "teacher_impressedness": 1.0,
+      "goal_calibration_rate": 0.9920556107249255,
+      "topic_calibration": {
+        "alternating": {
+          "accuracy": 0.6431653499603271,
+          "confidence": 0.810828685760498,
+          "gap": -0.1676633358001709,
+          "status": "overconfident"
+        },
+        "repeating": {
+          "accuracy": 0.9999997615814209,
+          "confidence": 0.9174939393997192,
+          "gap": 0.08250582218170166,
+          "status": "calibrated"
+        },
+        "incrementing": {
+          "accuracy": 0.9189095497131348,
+          "confidence": 0.9647184014320374,
+          "gap": -0.04580885171890259,
+          "status": "calibrated"
+        },
+        "fixed_offset": {
+          "accuracy": 0.9977404475212097,
+          "confidence": 0.9451997876167297,
+          "gap": 0.05254065990447998,
+          "status": "calibrated"
+        },
+        "periodic_repeat": {
+          "accuracy": 0.7453653216362,
+          "confidence": 0.7345222234725952,
+          "gap": 0.010843098163604736,
+          "status": "calibrated"
+        }
+      }
+    },
+    {
+      "epoch": 5,
+      "train_acc": 0.8985,
+      "train_loss": 0.3146974247932434,
+      "val_acc": 0.9275,
+      "show_rate": 0.5333,
+      "approval_rate": 1.0,
+      "show_reasons": {
+        "creative": 10659,
+        "streak": 7,
+        "validation": 0,
+        "spontaneous": 0
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.96728515625,
+      "per_pattern": {
+        "alternating": 0.8793969849246231,
+        "repeating": 1.0,
+        "incrementing": 1.0,
+        "fixed_offset": 1.0,
+        "periodic_repeat": 0.7420212765957447
+      },
+      "teacher_goal": 9,
+      "student_goal_estimate": 8.999996185302734,
+      "teacher_impressedness": 1.0,
+      "goal_calibration_rate": 0.9920792079207921,
+      "topic_calibration": {
+        "alternating": {
+          "accuracy": 0.7379357218742371,
+          "confidence": 0.8756781220436096,
+          "gap": -0.13774240016937256,
+          "status": "overconfident"
+        },
+        "repeating": {
+          "accuracy": 0.9999997615814209,
+          "confidence": 0.9666033983230591,
+          "gap": 0.033396363258361816,
+          "status": "calibrated"
+        },
+        "incrementing": {
+          "accuracy": 0.9999982714653015,
+          "confidence": 0.960824728012085,
+          "gap": 0.03917354345321655,
+          "status": "calibrated"
+        },
+        "fixed_offset": {
+          "accuracy": 0.9500824809074402,
+          "confidence": 0.9604849815368652,
+          "gap": -0.010402500629425049,
+          "status": "calibrated"
+        },
+        "periodic_repeat": {
+          "accuracy": 0.6609584093093872,
+          "confidence": 0.8117469549179077,
+          "gap": -0.1507885456085205,
+          "status": "overconfident"
+        }
+      }
+    },
+    {
+      "epoch": 6,
+      "train_acc": 0.9317,
+      "train_loss": 0.21619426503181458,
+      "val_acc": 0.96,
+      "show_rate": 0.61895,
+      "approval_rate": 1.0,
+      "show_reasons": {
+        "creative": 12379,
+        "streak": 0,
+        "validation": 0,
+        "spontaneous": 0
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.9774379134178162,
+      "per_pattern": {
+        "alternating": 0.9522613065326633,
+        "repeating": 1.0,
+        "incrementing": 0.9923469387755102,
+        "fixed_offset": 0.9975786924939467,
+        "periodic_repeat": 0.848404255319149
+      },
+      "teacher_goal": 9,
+      "student_goal_estimate": 8.999996185302734,
+      "teacher_impressedness": 1.0,
+      "goal_calibration_rate": 0.9920792079207921,
+      "topic_calibration": {
+        "alternating": {
+          "accuracy": 0.8696345090866089,
+          "confidence": 0.8834822773933411,
+          "gap": -0.013847768306732178,
+          "status": "calibrated"
+        },
+        "repeating": {
+          "accuracy": 0.9999997615814209,
+          "confidence": 0.9782257080078125,
+          "gap": 0.0217740535736084,
+          "status": "calibrated"
+        },
+        "incrementing": {
+          "accuracy": 0.9999629259109497,
+          "confidence": 0.9755279421806335,
+          "gap": 0.024434983730316162,
+          "status": "calibrated"
+        },
+        "fixed_offset": {
+          "accuracy": 0.998247504234314,
+          "confidence": 0.9795799851417542,
+          "gap": 0.018667519092559814,
+          "status": "calibrated"
+        },
+        "periodic_repeat": {
+          "accuracy": 0.7849752306938171,
+          "confidence": 0.80707848072052,
+          "gap": -0.02210325002670288,
+          "status": "calibrated"
+        }
+      }
+    },
+    {
+      "epoch": 7,
+      "train_acc": 0.9524,
+      "train_loss": 0.1583484607875347,
+      "val_acc": 0.9695,
+      "show_rate": 0.6609,
+      "approval_rate": 1.0,
+      "show_reasons": {
+        "creative": 13218,
+        "streak": 0,
+        "validation": 0,
+        "spontaneous": 0
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.9830531477928162,
+      "per_pattern": {
+        "alternating": 0.9547738693467337,
+        "repeating": 1.0,
+        "incrementing": 1.0,
+        "fixed_offset": 0.9927360774818402,
+        "periodic_repeat": 0.8936170212765957
+      },
+      "teacher_goal": 9,
+      "student_goal_estimate": 8.999996185302734,
+      "teacher_impressedness": 1.0,
+      "goal_calibration_rate": 0.9920792079207921,
+      "topic_calibration": {
+        "alternating": {
+          "accuracy": 0.8779454827308655,
+          "confidence": 0.9535568952560425,
+          "gap": -0.075611412525177,
+          "status": "calibrated"
+        },
+        "repeating": {
+          "accuracy": 0.9999997615814209,
+          "confidence": 0.9887632131576538,
+          "gap": 0.01123654842376709,
+          "status": "calibrated"
+        },
+        "incrementing": {
+          "accuracy": 0.9999915957450867,
+          "confidence": 0.9861340522766113,
+          "gap": 0.013857543468475342,
+          "status": "calibrated"
+        },
+        "fixed_offset": {
+          "accuracy": 0.9999997615814209,
+          "confidence": 0.9894082546234131,
+          "gap": 0.010591506958007812,
+          "status": "calibrated"
+        },
+        "periodic_repeat": {
+          "accuracy": 0.8514028787612915,
+          "confidence": 0.8972137570381165,
+          "gap": -0.04581087827682495,
+          "status": "calibrated"
+        }
+      }
+    },
+    {
+      "epoch": 8,
+      "train_acc": 0.96285,
+      "train_loss": 0.12084256954193115,
+      "val_acc": 0.9735,
+      "show_rate": 0.69345,
+      "approval_rate": 1.0,
+      "show_reasons": {
+        "creative": 13867,
+        "streak": 2,
+        "validation": 0,
+        "spontaneous": 0
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.9865622520446777,
+      "per_pattern": {
+        "alternating": 0.964824120603015,
+        "repeating": 1.0,
+        "incrementing": 0.9770408163265306,
+        "fixed_offset": 0.9903147699757869,
+        "periodic_repeat": 0.9308510638297872
+      },
+      "teacher_goal": 9,
+      "student_goal_estimate": 8.999996185302734,
+      "teacher_impressedness": 1.0,
+      "goal_calibration_rate": 0.9920792079207921,
+      "topic_calibration": {
+        "alternating": {
+          "accuracy": 0.9999558329582214,
+          "confidence": 0.9585861563682556,
+          "gap": 0.04136967658996582,
+          "status": "calibrated"
+        },
+        "repeating": {
+          "accuracy": 0.9999997615814209,
+          "confidence": 0.9888899326324463,
+          "gap": 0.01110982894897461,
+          "status": "calibrated"
+        },
+        "incrementing": {
+          "accuracy": 0.9999986290931702,
+          "confidence": 0.9660593271255493,
+          "gap": 0.03393930196762085,
+          "status": "calibrated"
+        },
+        "fixed_offset": {
+          "accuracy": 0.9982016682624817,
+          "confidence": 0.9704102277755737,
+          "gap": 0.02779144048690796,
+          "status": "calibrated"
+        },
+        "periodic_repeat": {
+          "accuracy": 0.9070296883583069,
+          "confidence": 0.8841738700866699,
+          "gap": 0.022855818271636963,
+          "status": "calibrated"
+        }
+      }
+    },
+    {
+      "epoch": 9,
+      "train_acc": 0.97185,
+      "train_loss": 0.09236947014033794,
+      "val_acc": 0.984,
+      "show_rate": 0.742,
+      "approval_rate": 1.0,
+      "show_reasons": {
+        "creative": 14840,
+        "streak": 0,
+        "validation": 0,
+        "spontaneous": 0
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.9889995455741882,
+      "per_pattern": {
+        "alternating": 0.9773869346733668,
+        "repeating": 1.0,
+        "incrementing": 1.0,
+        "fixed_offset": 1.0,
+        "periodic_repeat": 0.9388297872340425
+      },
+      "teacher_goal": 9,
+      "student_goal_estimate": 8.999996185302734,
+      "teacher_impressedness": 1.0,
+      "goal_calibration_rate": 0.9920792079207921,
+      "topic_calibration": {
+        "alternating": {
+          "accuracy": 0.9999103546142578,
+          "confidence": 0.9720162153244019,
+          "gap": 0.027894139289855957,
+          "status": "calibrated"
+        },
+        "repeating": {
+          "accuracy": 0.9999997615814209,
+          "confidence": 0.9939137697219849,
+          "gap": 0.006085991859436035,
+          "status": "calibrated"
+        },
+        "incrementing": {
+          "accuracy": 0.9999954700469971,
+          "confidence": 0.986703634262085,
+          "gap": 0.01329183578491211,
+          "status": "calibrated"
+        },
+        "fixed_offset": {
+          "accuracy": 0.9999997615814209,
+          "confidence": 0.9916887283325195,
+          "gap": 0.008311033248901367,
+          "status": "calibrated"
+        },
+        "periodic_repeat": {
+          "accuracy": 0.9713776707649231,
+          "confidence": 0.9215805530548096,
+          "gap": 0.049797117710113525,
+          "status": "calibrated"
+        }
+      }
+    },
+    {
+      "epoch": 10,
+      "train_acc": 0.97795,
+      "train_loss": 0.07225080797076225,
+      "val_acc": 0.9845,
+      "show_rate": 0.7599,
+      "approval_rate": 1.0,
+      "show_reasons": {
+        "creative": 15198,
+        "streak": 0,
+        "validation": 0,
+        "spontaneous": 0
+      },
+      "internalization": 0.9933071732521057,
+      "trust": 0.9933071732521057,
+      "show_calibration": 0.9907228946685791,
+      "per_pattern": {
+        "alternating": 0.9773869346733668,
+        "repeating": 1.0,
+        "incrementing": 1.0,
+        "fixed_offset": 1.0,
+        "periodic_repeat": 0.9414893617021277
+      },
+      "teacher_goal": 9,
+      "student_goal_estimate": 8.999996185302734,
+      "teacher_impressedness": 1.0,
+      "goal_calibration_rate": 0.9920792079207921,
+      "topic_calibration": {
+        "alternating": {
+          "accuracy": 0.977122962474823,
+          "confidence": 0.977577269077301,
+          "gap": -0.00045430660247802734,
+          "status": "calibrated"
+        },
+        "repeating": {
+          "accuracy": 0.9999997615814209,
+          "confidence": 0.9976919889450073,
+          "gap": 0.0023077726364135742,
+          "status": "calibrated"
+        },
+        "incrementing": {
+          "accuracy": 0.9999997615814209,
+          "confidence": 0.9905642867088318,
+          "gap": 0.009435474872589111,
+          "status": "calibrated"
+        },
+        "fixed_offset": {
+          "accuracy": 0.999997079372406,
+          "confidence": 0.9895561933517456,
+          "gap": 0.0104408860206604,
+          "status": "calibrated"
+        },
+        "periodic_repeat": {
+          "accuracy": 0.8371145129203796,
+          "confidence": 0.941102147102356,
+          "gap": -0.10398763418197632,
+          "status": "overconfident"
+        }
+      }
+    }
+  ]
+}

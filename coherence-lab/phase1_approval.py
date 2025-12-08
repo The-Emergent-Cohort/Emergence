@@ -82,10 +82,14 @@ def train_day_with_approval(model, loader, optimizer, criterion, device, pattern
         # Get internalization level for rising show bar
         int_level = torch.sigmoid(model.learner.other_model.internalization_level).item()
 
-        # Detect creativity (simplified - check if process_eval available)
+        # Detect TRUE creativity: novel approach + high confidence
+        # "It's only creative if you know WHY it worked"
+        # Just doing something different and getting lucky isn't creativity
         is_creative = torch.zeros(tokens.size(0), dtype=torch.bool, device=device)
         if details.get('process_eval') is not None and details['process_eval'].get('creativity') is not None:
-            is_creative = details['process_eval']['creativity'].squeeze() > 0.5
+            novel_approach = details['process_eval']['creativity'].squeeze() > 0.5
+            knew_why = conf.squeeze() > 0.8  # Must be confident it would work
+            is_creative = novel_approach & knew_why
 
         # Get teacher's current goal for showing work
         teacher_goal = model.teacher.current_goal.item()
@@ -198,7 +202,8 @@ def train_day_with_approval(model, loader, optimizer, criterion, device, pattern
         'teacher_goal': model.teacher.current_goal.item(),
         'student_goal_estimate': model.learner.self_model.goal_estimate.item(),
         'teacher_impressedness': model.teacher.impressedness.item(),
-        'goal_calibration_rate': goal_cal_rate
+        'goal_calibration_rate': goal_cal_rate,
+        'highest_goal_achieved': approval_metrics['highest_goal_achieved']
     }
 
 
@@ -273,6 +278,17 @@ def main(args):
 
         val_metrics = evaluate(model, val_loader, device, pattern_to_idx)
 
+        # Update topic calibration (accuracy vs confidence gap)
+        topic_calibration = {}
+        for pattern_name, idx in pattern_to_idx.items():
+            acc, conf, gap = model.learner.self_model.topic_tracker.get_calibration(idx)
+            topic_calibration[pattern_name] = {
+                'accuracy': acc,
+                'confidence': conf,
+                'gap': gap,
+                'status': 'guessing' if gap > 0.1 else ('overconfident' if gap < -0.1 else 'calibrated')
+            }
+
         # Developmental state
         day = model.learner.temporal_model.current_day.item()
         int_level = torch.sigmoid(model.learner.other_model.internalization_level).item()
@@ -294,7 +310,8 @@ def main(args):
             'teacher_goal': train_metrics['teacher_goal'],
             'student_goal_estimate': train_metrics['student_goal_estimate'],
             'teacher_impressedness': train_metrics['teacher_impressedness'],
-            'goal_calibration_rate': train_metrics['goal_calibration_rate']
+            'goal_calibration_rate': train_metrics['goal_calibration_rate'],
+            'topic_calibration': topic_calibration.copy()
         })
 
         print(f"\nDay {day} (Epoch {epoch:2d})", flush=True)
@@ -304,12 +321,16 @@ def main(args):
         print(f"  Show reasons: {train_metrics['show_reasons']}")
         print(f"  Internalization: {int_level:.1%}, Trust: {trust:.1%}")
         print(f"  Rising bars: competence={train_metrics['perceived_competence']:.1%}, threshold={train_metrics['approval_threshold']:.1%}")
-        print(f"  Goals: teacher={train_metrics['teacher_goal']}, student_est={train_metrics['student_goal_estimate']:.1f}, impressed={train_metrics['teacher_impressedness']:.0%}")
-        print("  Per-pattern:")
+        highest = train_metrics['highest_goal_achieved']
+        print(f"  Goals: current={train_metrics['teacher_goal']}, best={highest}, student_est={train_metrics['student_goal_estimate']:.1f}, impressed={train_metrics['teacher_impressedness']:.0%}")
+        print("  Per-pattern (accuracy [calibration]):")
         for pt in pattern_types:
             acc = val_metrics['per_pattern'].get(pt, 0)
-            status = "O" if acc >= 0.95 else ("o" if acc >= 0.85 else ".")
-            print(f"    {pt:15s}: {acc:.1%} {status}")
+            cal = topic_calibration.get(pt, {})
+            cal_status = cal.get('status', 'unknown')
+            acc_symbol = "O" if acc >= 0.95 else ("o" if acc >= 0.85 else ".")
+            cal_symbol = {'calibrated': 'C', 'guessing': '?', 'overconfident': '!', 'unknown': '.'}[cal_status]
+            print(f"    {pt:15s}: {acc:.1%} {acc_symbol} [{cal_status:12s}] {cal_symbol}")
         import sys; sys.stdout.flush()
 
         if val_metrics['accuracy'] > best_acc:
@@ -323,12 +344,38 @@ def main(args):
             topic_registry.save(registry_path)
             print(f"  [Registry saved: {len(topic_registry)} topics]")
 
-        # Check mastery - easy patterns should be ~100%
-        all_good = all(val_metrics['per_pattern'].get(pt, 0) >= 0.95 for pt in pattern_types)
-        if all_good and val_metrics['accuracy'] >= 0.98:
-            print(f"\n*** Phase 1 complete! Approval-seeking foundation built. ***")
-            print(f"    Trust: {trust:.1%}, Internalization: {int_level:.1%}")
-            break
+        # Check mastery - easy patterns should be ~100% AND calibrated
+        all_accurate = all(val_metrics['per_pattern'].get(pt, 0) >= 0.95 for pt in pattern_types)
+
+        # Must also be calibrated - knows WHY it's succeeding
+        def is_truly_calibrated(pt):
+            cal = topic_calibration.get(pt, {})
+            return (cal.get('status') == 'calibrated' and
+                    cal.get('accuracy', 0) >= 0.90)  # Phase 1 bar is higher
+
+        all_calibrated = all(is_truly_calibrated(pt) for pt in pattern_types)
+
+        # Graduation requires surpassing your best - prove it wasn't luck
+        current_goal = train_metrics['teacher_goal']
+        highest_achieved = train_metrics['highest_goal_achieved']
+        surpassed_best = current_goal > highest_achieved and highest_achieved >= 5
+
+        if all_accurate and val_metrics['accuracy'] >= 0.98:
+            if all_calibrated and surpassed_best:
+                print(f"\n*** Phase 1 complete! Approval-seeking foundation built. ***")
+                print(f"    Trust: {trust:.1%}, Internalization: {int_level:.1%}")
+                print(f"    All topics calibrated - student knows WHY it works!")
+                print(f"    Surpassed best streak: {current_goal} > {highest_achieved}")
+                break
+            else:
+                # Still learning
+                issues = []
+                if not all_calibrated:
+                    uncalibrated = [pt for pt in pattern_types if not is_truly_calibrated(pt)]
+                    issues.append(f"uncalibrated: {uncalibrated}")
+                if not surpassed_best:
+                    issues.append(f"needs to surpass best ({highest_achieved})")
+                print(f"  [Not ready: {', '.join(issues)}]")
 
     print("\n" + "=" * 70)
     print(f"Best accuracy: {best_acc:.1%}")
