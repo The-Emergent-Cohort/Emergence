@@ -847,6 +847,92 @@ class TopicConfidenceTracker(nn.Module):
             'passes': self.exam_passes[topic_idx].item()
         }
 
+    # === STUCKNESS DETECTION (for teacher proposals) ===
+    # Teacher notices when student is stuck and can propose bridging concepts
+
+    def _init_stuckness_state(self):
+        """Initialize stuckness tracking buffers."""
+        if not hasattr(self, 'epochs_since_level_up'):
+            device = self.topic_xp.device
+            # Epochs without level progression
+            self.register_buffer('epochs_since_level_up', torch.zeros(self.n_topics, dtype=torch.long, device=device))
+            # Flag set on failed exam (cleared on level up)
+            self.register_buffer('last_exam_failed', torch.zeros(self.n_topics, dtype=torch.bool, device=device))
+            # Track how many times teacher has proposed help for this topic
+            self.register_buffer('teacher_proposals', torch.zeros(self.n_topics, dtype=torch.long, device=device))
+
+    def record_level_up(self, topic_idx):
+        """Record that a topic leveled up - clears stuckness."""
+        self._init_stuckness_state()
+        with torch.no_grad():
+            self.epochs_since_level_up[topic_idx] = 0
+            self.last_exam_failed[topic_idx] = False
+
+    def record_exam_failure(self, topic_idx):
+        """Record that a topic failed an exam - signals stuckness."""
+        self._init_stuckness_state()
+        with torch.no_grad():
+            self.last_exam_failed[topic_idx] = True
+
+    def tick_stuckness(self, topic_idx):
+        """Increment epochs-without-progress counter (call once per epoch)."""
+        self._init_stuckness_state()
+        with torch.no_grad():
+            self.epochs_since_level_up[topic_idx] += 1
+
+    def check_stuck(self, topic_idx, epochs_threshold=2):
+        """
+        Check if topic is truly stuck (not making progress).
+
+        Stuck means 2+ epochs without level increase.
+        Note: Exam failure alone is NOT stuck - that's a teaching moment!
+
+        Returns: (is_stuck, reason)
+        """
+        self._init_stuckness_state()
+
+        epochs_stuck = self.epochs_since_level_up[topic_idx].item()
+
+        if epochs_stuck >= epochs_threshold:
+            return True, f'no_progress_{epochs_stuck}_epochs'
+        return False, None
+
+    def check_teaching_moment(self, topic_idx):
+        """
+        Check if topic just failed an exam - good time for teacher hints.
+
+        Unlike stuck, this is a one-time teaching opportunity:
+        - Student tried, didn't pass yet
+        - Good time to mention bridging concepts
+        - Clears after checking (one-shot)
+
+        Returns: (is_teaching_moment, reason)
+        """
+        self._init_stuckness_state()
+
+        exam_failed = self.last_exam_failed[topic_idx].item()
+        if exam_failed:
+            # Clear the flag after reading (one-shot teaching moment)
+            with torch.no_grad():
+                self.last_exam_failed[topic_idx] = False
+            return True, 'exam_failed'
+        return False, None
+
+    def record_teacher_proposal(self, topic_idx):
+        """Record that teacher proposed help for this topic."""
+        self._init_stuckness_state()
+        with torch.no_grad():
+            self.teacher_proposals[topic_idx] += 1
+
+    def get_stuckness_info(self, topic_idx):
+        """Get stuckness diagnostics for a topic."""
+        self._init_stuckness_state()
+        return {
+            'epochs_since_level_up': self.epochs_since_level_up[topic_idx].item(),
+            'last_exam_failed': self.last_exam_failed[topic_idx].item(),
+            'teacher_proposals': self.teacher_proposals[topic_idx].item()
+        }
+
     def get_adjusted_confidence(self, topic_idx, raw_confidence):
         """
         Adjust raw prediction confidence based on topic calibration.
@@ -1139,7 +1225,7 @@ class SelfModel(nn.Module):
 
                 reason = None
 
-                # === PRIORITY: Completed Streak > Mastery > Creative > Validation > Spontaneous ===
+                # === PRIORITY: Completed Streak > Mastery > Progress > Creative > Validation > Spontaneous ===
 
                 # 1. Streak just ENDED at or above goal - show completed streak
                 #    (Don't show mid-run - wait until it's actually done)
@@ -1164,15 +1250,22 @@ class SelfModel(nn.Module):
                     else:
                         self.streak_count.zero_()
 
-                # 3. Creative and correct - genuinely novel approach
+                # 3. Progress check-in - periodic encouragement during streaks
+                #    Show every 10 correct to get teacher encouragement + XP
+                #    WITHOUT breaking the streak (key difference from streak show)
+                elif was_correct[i] and current_streak > 0 and current_streak % 10 == 0:
+                    reason = 'progress'
+                    self.last_completed_streak = current_streak  # For XP calculation
+
+                # 4. Creative and correct - genuinely novel approach
                 elif is_creative[i] and was_correct[i]:
                     reason = 'creative'
 
-                # 4. Uncertain but correct → seeking validation
+                # 5. Uncertain but correct → seeking validation
                 elif was_correct[i] and confidence[i] < validation_conf_threshold:
                     reason = 'validation'
 
-                # 5. Spontaneous - random chance, decreases with internalization
+                # 6. Spontaneous - random chance, decreases with internalization
                 elif was_correct[i]:
                     if torch.rand(1).item() < spontaneous_rate:
                         reason = 'spontaneous'
@@ -3482,6 +3575,43 @@ class PatternDataset(Dataset):
             query_pos = length % 3  # Position 0, 1, or 2
             seq = values
             target = values[query_pos]
+        elif pt == 'fibonacci_like':
+            # Fibonacci-like: each value is sum of previous two
+            # [1, 1, 2, 3, 5, 8, 13...] or [2, 2, 4, 6, 10...]
+            # Teaches: combining two lookbacks
+            a, b = random.randint(1, 3), random.randint(1, 3)
+            length = random.randint(4, 6)
+            seq = [a, b]
+            for _ in range(length - 2):
+                seq.append(seq[-1] + seq[-2])
+                if seq[-1] >= self.vocab_size:
+                    # Overflow - restart with smaller values
+                    seq = [1, 1, 2, 3, 5][:length]
+                    break
+            target = seq[-1] + seq[-2]
+            if target >= self.vocab_size:
+                target = self.vocab_size - 1
+        elif pt == 'triangular':
+            # Triangle numbers: cumulative sum 1, 3, 6, 10, 15...
+            # Position n has value n*(n+1)/2
+            # Teaches: accumulation / running sum
+            length = random.randint(4, 6)
+            seq = [(i * (i + 1)) // 2 for i in range(1, length + 1)]
+            target = (length + 1) * (length + 2) // 2
+            # Keep in bounds
+            if target >= self.vocab_size:
+                length = 4
+                seq = [1, 3, 6, 10]
+                target = 15
+        elif pt == 'decrementing':
+            # Countdown: [8, 7, 6, 5, 4...] → next is 3
+            # Reverse of incrementing
+            length = random.randint(3, 6)
+            start = random.randint(length, self.vocab_size - 1)
+            seq = [start - i for i in range(length)]
+            target = start - length
+            if target < 0:
+                target = 0
         else:
             raise ValueError(f"Unknown pattern type: {pt}")
 
