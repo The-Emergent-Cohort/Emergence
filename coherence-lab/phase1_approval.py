@@ -11,7 +11,7 @@ Building the social learning foundation:
 This is the developmental foundation for later phases.
 """
 
-__version__ = "0.5.4"  # XP gated by exams + streak reset on fail
+__version__ = "0.5.7"  # Multiple level-ups per epoch
 
 import torch
 import torch.nn as nn
@@ -407,43 +407,52 @@ def main(args):
 
         # === EXAMINATION SYSTEM ===
         # Check for topics ready for level-up exams
+        # Allow multiple level-ups per epoch - keep testing until topics fail or graduate
         tracker = model.learner.self_model.topic_tracker
         tracker.tick_cooldowns()  # Decrement any cooldowns from failed exams
 
         exam_results = []
-        for pattern_name, idx in pattern_to_idx.items():
-            if tracker.check_exam_eligible(idx):
-                # Generate exam batch for this topic
-                current_level = tracker.get_level(idx)
-                target_level = current_level + 1
-                exam_size = tracker.get_exam_size(target_level)
+        exam_round = 0
+        any_advanced = True
+        while any_advanced:
+            any_advanced = False
+            for pattern_name, idx in pattern_to_idx.items():
+                if tracker.check_exam_eligible(idx):
+                    # Generate exam batch for this topic
+                    current_level = tracker.get_level(idx)
+                    target_level = current_level + 1
+                    exam_size = tracker.get_exam_size(target_level)
 
-                # Create exam problems (fresh generation, not from training data)
-                exam_data = PatternDataset(
-                    n_examples=exam_size,
-                    seed=epoch * 1000 + idx,  # Reproducible but different each epoch
-                    pattern_types=[pattern_name]  # Only this topic
-                )
-                exam_loader = DataLoader(exam_data, batch_size=exam_size, collate_fn=collate_fn)
+                    # Create exam problems (fresh generation, not from training data)
+                    exam_data = PatternDataset(
+                        n_examples=exam_size,
+                        seed=epoch * 1000 + idx + exam_round * 100,  # Different seed each round
+                        pattern_types=[pattern_name]  # Only this topic
+                    )
+                    exam_loader = DataLoader(exam_data, batch_size=exam_size, collate_fn=collate_fn)
 
-                # Run exam (no gradient, just evaluation)
-                model.eval()
-                correct_count = 0
-                for batch in exam_loader:
-                    tokens = batch['tokens'].to(device)
-                    targets = batch['target'].to(device)
-                    seq_lens = batch['seq_len']
-                    with torch.no_grad():
-                        details = model(tokens, seq_lens, targets=targets, return_details=True)
-                        preds = details['logits'].argmax(dim=-1)
-                        correct_count += (preds == targets).sum().item()
-                model.train()
+                    # Run exam (no gradient, just evaluation)
+                    model.eval()
+                    correct_count = 0
+                    for batch in exam_loader:
+                        tokens = batch['tokens'].to(device)
+                        targets = batch['target'].to(device)
+                        seq_lens = batch['seq_len']
+                        with torch.no_grad():
+                            details = model(tokens, seq_lens, targets=targets, return_details=True)
+                            preds = details['logits'].argmax(dim=-1)
+                            correct_count += (preds == targets).sum().item()
+                    model.train()
 
-                # Take the exam
-                result = tracker.take_exam(idx, correct_count, exam_size)
-                result['topic'] = pattern_name
-                result['target_level'] = target_level
-                exam_results.append(result)
+                    # Take the exam
+                    result = tracker.take_exam(idx, correct_count, exam_size)
+                    result['topic'] = pattern_name
+                    result['target_level'] = target_level
+                    exam_results.append(result)
+
+                    if result['passed']:
+                        any_advanced = True  # Keep going if anyone passed
+            exam_round += 1
 
         # Display exam results (formative, not judgmental)
         if exam_results:
@@ -475,38 +484,17 @@ def main(args):
             topic_registry.save(registry_path)
             print(f"  [Registry saved: {len(topic_registry)} topics]")
 
-        # Check mastery - easy patterns should be ~100% AND calibrated
-        all_accurate = all(val_metrics['per_pattern'].get(pt, 0) >= 0.95 for pt in pattern_types)
+        # Check graduation - all topics must pass L10 exam
+        all_graduated = all(
+            tracker.get_exam_stats(pattern_to_idx[pt])['graduated']
+            for pt in pattern_types
+        )
 
-        # Must also be calibrated - knows WHY it's succeeding
-        def is_truly_calibrated(pt):
-            cal = topic_calibration.get(pt, {})
-            return (cal.get('status') == 'calibrated' and
-                    cal.get('accuracy', 0) >= 0.90)  # Phase 1 bar is higher
-
-        all_calibrated = all(is_truly_calibrated(pt) for pt in pattern_types)
-
-        # Graduation requires surpassing your best - prove it wasn't luck
-        current_goal = train_metrics['teacher_goal']
-        highest_achieved = train_metrics['highest_goal_achieved']
-        surpassed_best = current_goal > highest_achieved and highest_achieved >= 5
-
-        if all_accurate and val_metrics['accuracy'] >= 0.98:
-            if all_calibrated and surpassed_best:
-                print(f"\n*** Phase 1 complete! Approval-seeking foundation built. ***")
-                print(f"    Trust: {trust:.1%}, Internalization: {int_level:.1%}")
-                print(f"    All topics calibrated - student knows WHY it works!")
-                print(f"    Surpassed best streak: {current_goal} > {highest_achieved}")
-                break
-            else:
-                # Still learning
-                issues = []
-                if not all_calibrated:
-                    uncalibrated = [pt for pt in pattern_types if not is_truly_calibrated(pt)]
-                    issues.append(f"uncalibrated: {uncalibrated}")
-                if not surpassed_best:
-                    issues.append(f"needs to surpass best ({highest_achieved})")
-                print(f"  [Not ready: {', '.join(issues)}]")
+        if all_graduated:
+            print(f"\n*** Phase 1 complete! All topics GRADUATED (passed L10 exam). ***")
+            print(f"    Trust: {trust:.1%}, Internalization: {int_level:.1%}")
+            print(f"    All topics exam-proven - ready for Phase 2!")
+            break
 
     print("\n" + "=" * 70)
     print(f"Best accuracy: {best_acc:.1%}")
