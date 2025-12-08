@@ -372,12 +372,21 @@ def main(args):
         eval_m = record.get('eval_metrics', {})
         for pt in pattern_types:
             pt_idx = pattern_to_idx[pt]
-            pattern_details[pt] = {
-                'accuracy': eval_m.get('per_pattern', {}).get(pt, 0),
-                'confirmed_level': tracker.confirmed_level[pt_idx].item() if hasattr(tracker, 'confirmed_level') else 0,
-                'xp': tracker.topic_xp[pt_idx].item(),
-                'best_streak': tracker.topic_best_streak[pt_idx].item(),
-            }
+            # Bounds check - tracker may have fewer topics than curriculum
+            if pt_idx < tracker.n_topics:
+                pattern_details[pt] = {
+                    'accuracy': eval_m.get('per_pattern', {}).get(pt, 0),
+                    'confirmed_level': tracker.confirmed_level[pt_idx].item() if hasattr(tracker, 'confirmed_level') and pt_idx < len(tracker.confirmed_level) else 0,
+                    'xp': tracker.topic_xp[pt_idx].item(),
+                    'best_streak': tracker.topic_best_streak[pt_idx].item(),
+                }
+            else:
+                pattern_details[pt] = {
+                    'accuracy': eval_m.get('per_pattern', {}).get(pt, 0),
+                    'confirmed_level': 0,
+                    'xp': 0,
+                    'best_streak': 0,
+                }
 
         log_record = {
             'session_id': session_id,

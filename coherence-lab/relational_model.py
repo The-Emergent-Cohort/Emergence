@@ -1719,13 +1719,14 @@ class RelationalLearner(nn.Module):
     """
 
     def __init__(self, vocab_size=26, d_model=64, max_seq_len=12,
-                 n_heads=4, n_think_steps=5, n_patterns=9):
+                 n_heads=4, n_think_steps=5, n_patterns=9, n_topics=10):
         super().__init__()
 
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.n_think_steps = n_think_steps
         self.n_patterns = n_patterns
+        self.n_topics = n_topics
 
         # Perception (world interaction)
         self.token_embed = nn.Embedding(vocab_size, d_model)
@@ -1735,8 +1736,8 @@ class RelationalLearner(nn.Module):
             dim_feedforward=d_model * 4, dropout=0.1, batch_first=True
         )
 
-        # Self-model
-        self.self_model = SelfModel(d_model)
+        # Self-model (needs n_topics for TopicConfidenceTracker)
+        self.self_model = SelfModel(d_model, n_topics=n_topics)
 
         # Other-model (for teacher)
         self.other_model = OtherModel(d_model)
@@ -3341,7 +3342,7 @@ class RelationalSystem(nn.Module):
         super().__init__()
 
         self.learner = RelationalLearner(
-            vocab_size, d_model, max_seq_len, n_heads, n_think_steps, n_patterns
+            vocab_size, d_model, max_seq_len, n_heads, n_think_steps, n_patterns, n_topics
         )
         self.teacher = RelationalTeacher(d_model)
 
