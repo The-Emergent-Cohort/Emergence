@@ -1,5 +1,13 @@
 # Coherence Lab Changelog
 
+## [0.3.1] - 2024-12-08
+### Fixed
+- **Goal runaway bug**: Compound scaling (1.25-1.50x) caused goals to explode 3→8→12→18→...→1000
+  - Changed to additive increments: +2 to +5 based on impressedness
+  - Now: 3→8→13→18→23→... (linear, controllable)
+- **Missing reset**: `set_new_goal` now resets `goals_met_count` to prevent immediate re-triggering
+- **Mastery cap**: Changed from 1000 to 100 everywhere (100 consecutive = mastery)
+
 ## [0.3.0] - 2024-12-08
 ### Fixed
 - **Overflow protection**: Added defensive clamping throughout goal-setting code

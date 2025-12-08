@@ -11,7 +11,7 @@ Building the social learning foundation:
 This is the developmental foundation for later phases.
 """
 
-__version__ = "0.3.0"  # Added overflow protection, per-topic tracking, scaled goal increments
+__version__ = "0.3.1"  # Fixed goal runaway: additive increments (+2 to +5), mastery cap at 100
 
 import torch
 import torch.nn as nn
@@ -153,8 +153,8 @@ def train_day_with_approval(model, loader, optimizer, criterion, device, pattern
                         model.learner.self_model.update_goal_estimate_from_feedback(negotiation_result)
                     else:
                         # Teacher directive: "Let's do X next time"
-                        # Defensive: clamp goal to valid range
-                        safe_goal = max(1, min(1000, int(goal_action['goal'])))
+                        # Mastery cap at 100
+                        safe_goal = max(1, min(100, int(goal_action['goal'])))
                         model.teacher.current_goal.fill_(safe_goal)
 
         # === TEACHER MONITORING (un-shown work) ===

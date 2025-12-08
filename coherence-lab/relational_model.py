@@ -2560,7 +2560,7 @@ class RelationalTeacher(nn.Module):
         with torch.no_grad():
             competence = self.perceived_competence.item()
 
-            # Base goal increases with competence - NO CAP
+            # Base goal increases with competence
             # Low competence (0.3): goal = 6
             # Medium competence (0.6): goal = 10
             # High competence (0.9): goal = 13-14
@@ -2569,17 +2569,18 @@ class RelationalTeacher(nn.Module):
             competence = max(0.0, min(1.0, competence))
             base_goal = 3 + int(12 * competence)
 
-            # Scale increment: 25-50% based on impressedness
-            # Impressed teacher pushes harder
+            # Additive increment: +2 to +5 based on impressedness
+            # (NOT compound scaling - that caused runaway goals)
             current = int(self.current_goal.item())
             impressedness = max(0.0, min(1.0, self.impressedness.item()))
-            scale_factor = 1.25 + 0.25 * impressedness  # 1.25 to 1.50
-            scaled_goal = int(current * scale_factor)
-            # Ensure at least +1 for very small goals
-            scaled_goal = max(scaled_goal, current + 1)
-            new_goal = max(scaled_goal, base_goal)
-            # Sanity cap at 1000 to avoid overflow issues
-            new_goal = min(new_goal, 1000)
+            increment = 2 + int(3 * impressedness)  # +2 to +5
+            new_goal = max(current + increment, base_goal)
+
+            # Mastery cap at 100 - that's the graduation bar
+            new_goal = min(new_goal, 100)
+
+            # Reset goals_met_count to prevent immediate re-triggering
+            self.goals_met_count.zero_()
 
             return {
                 'goal': new_goal,
@@ -2607,10 +2608,10 @@ class RelationalTeacher(nn.Module):
             competence = max(0.0, min(1.0, self.perceived_competence.item()))
             current = max(1, min(1000, int(self.current_goal.item())))
 
-            # What teacher thinks is appropriate - scale higher, capped at 1000
+            # What teacher thinks is appropriate - capped at mastery (100)
             expected = 3 + int(12 * competence)
             expected = max(current, expected)  # Don't go below current
-            expected = min(expected, 1000)  # Sanity cap
+            expected = min(expected, 100)  # Mastery cap
 
             # Tolerance: within 1 of expected is acceptable
             # But if student is very competent, push them to expected anyway
@@ -2624,8 +2625,8 @@ class RelationalTeacher(nn.Module):
                 else:
                     final_goal = student_proposal
 
-                # Sanity cap before fill
-                final_goal = max(1, min(1000, int(final_goal)))
+                # Mastery cap before fill
+                final_goal = max(1, min(100, int(final_goal)))
                 self.current_goal.fill_(final_goal)
                 self.goals_met_count.zero_()
                 self.impressedness.add_(0.1).clamp_(max=1.0)
@@ -2638,7 +2639,7 @@ class RelationalTeacher(nn.Module):
             elif diff < -1:
                 # Student proposing too low - counter up
                 # "Let's aim a bit higher - try X"
-                counter = max(1, min(1000, int(expected)))
+                counter = max(1, min(100, int(expected)))
                 self.current_goal.fill_(counter)
                 self.goals_met_count.zero_()
                 return {
@@ -2652,7 +2653,7 @@ class RelationalTeacher(nn.Module):
                 # "That's ambitious! Let's start with X"
                 counter = expected + 1  # Give a bit more than expected, but not their full ask
                 counter = min(counter, student_proposal - 1)  # At least 1 below their ask
-                counter = max(1, min(1000, int(counter)))  # Sanity cap
+                counter = max(1, min(100, int(counter)))  # Mastery cap
                 self.current_goal.fill_(counter)
                 self.goals_met_count.zero_()
                 return {
