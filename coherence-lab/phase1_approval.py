@@ -11,7 +11,7 @@ Building the social learning foundation:
 This is the developmental foundation for later phases.
 """
 
-__version__ = "0.5.11"  # No artificial epoch limit
+__version__ = "0.5.12"  # Anti-forgetting maintenance training
 
 import torch
 import torch.nn as nn
@@ -54,37 +54,43 @@ def train_day_with_approval(model, loader, optimizer, criterion, device, pattern
         seq_lens = batch['seq_len']
         pattern_types = batch['pattern_type']
 
-        # Mask out GRADUATED topics (exam-proven) - not just streak-mastered
-        # Failed exams should resume training, only true graduates can rest
+        # WEIGHTED TRAINING - graduated topics get maintenance training to prevent forgetting
+        # Active topics: full weight (1.0), Graduated topics: reduced weight (0.1)
+        # This focuses compute on struggling topics while maintaining knowledge
         tracker = model.learner.self_model.topic_tracker
-        active_mask = torch.tensor([
-            not tracker.get_exam_stats(pattern_to_idx[p])['graduated']
+        graduated_mask = torch.tensor([
+            tracker.get_exam_stats(pattern_to_idx[p])['graduated']
             for p in pattern_types
         ], dtype=torch.bool, device=device)
+        active_mask = ~graduated_mask
 
-        # Skip batch entirely if all topics are mastered
-        if not active_mask.any():
-            continue
+        # Create loss weights: 1.0 for active, 0.1 for graduated (maintenance)
+        loss_weights = torch.where(graduated_mask,
+                                   torch.tensor(0.1, device=device),
+                                   torch.tensor(1.0, device=device))
 
         optimizer.zero_grad()
 
-        # Forward pass
+        # Forward pass - ALL topics, not just active
         details = model(tokens, seq_lens, targets=targets, return_details=True)
 
-        # Main loss - only for non-mastered topics
-        logits_active = details['logits'][active_mask]
-        targets_active = targets[active_mask]
-        main_loss = criterion(logits_active, targets_active)
+        # Main loss - weighted by active/graduated status
+        # Use per-sample loss then apply weights
+        logits = details['logits']
+        per_sample_loss = F.cross_entropy(logits, targets, reduction='none')
+        main_loss = (per_sample_loss * loss_weights).mean()
 
-        # Pattern classification auxiliary - only for active topics
+        # Pattern classification auxiliary - all topics
         pattern_targets = torch.tensor([pattern_to_idx[p] for p in pattern_types], device=device)
-        aux_loss = criterion(details['pattern_logits'][active_mask], pattern_targets[active_mask])
+        aux_per_sample = F.cross_entropy(details['pattern_logits'], pattern_targets, reduction='none')
+        aux_loss = (aux_per_sample * loss_weights).mean()
 
-        # Confidence calibration - only for active topics
+        # Confidence calibration - all topics
         preds = details['logits'].argmax(dim=-1)
         correct = (preds == targets)
         conf = details['learner_self']['emotions']['confidence'].squeeze()
-        conf_loss = F.binary_cross_entropy(conf[active_mask], correct[active_mask].float())
+        conf_per_sample = F.binary_cross_entropy(conf, correct.float(), reduction='none')
+        conf_loss = (conf_per_sample * loss_weights).mean()
 
         # Combined loss
         loss = main_loss + 0.1 * aux_loss + 0.1 * conf_loss
@@ -218,16 +224,17 @@ def train_day_with_approval(model, loader, optimizer, criterion, device, pattern
             chose_not_to_show_count=unshown_correct
         )
 
-        # Track metrics - only for active (non-mastered) topics
+        # Track metrics - all topics now train, but report active progress
+        batch_size = tokens.size(0)
         active_count = active_mask.sum().item()
-        total_loss += main_loss.item() * active_count
-        total_correct += correct[active_mask].sum().item()
-        total_samples += active_count
+        total_loss += main_loss.item() * batch_size  # All contribute to loss
+        total_correct += correct.sum().item()  # Track all correct
+        total_samples += batch_size  # Count all samples
 
-        # Update topic tracker - only for active topics
+        # Update topic tracker - ALL topics to maintain accuracy tracking
         pattern_indices = torch.tensor([pattern_to_idx[p] for p in pattern_types], device=device)
         model.learner.self_model.topic_tracker.update(
-            pattern_indices[active_mask], correct[active_mask], conf[active_mask]
+            pattern_indices, correct, conf
         )
 
     # Calculate approval rate
