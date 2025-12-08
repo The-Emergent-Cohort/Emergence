@@ -513,7 +513,7 @@ def main(args):
     else:
         # Fresh start - use Phase 1's expanded curriculum size
         phase1_patterns = ['alternating', 'repeating', 'incrementing', 'fixed_offset', 'periodic_repeat',
-                           'counting', 'modular', 'staircase', 'geometric']
+                           'counting', 'modular', 'staircase', 'geometric', 'indexed_lookup']
         n_patterns = len(phase1_patterns)
         n_topics = n_patterns
         print(f"\nFresh start: {n_patterns} patterns, {n_topics} topics")
@@ -578,9 +578,9 @@ def main(args):
         print(f"  Loaded {len(topic_registry)} curriculum topics")
     else:
         print("\nCreating topic registry with curriculum patterns")
-        # Include Phase 1 patterns as curriculum topics (all 9 foundation patterns)
+        # Include Phase 1 patterns as curriculum topics (all 10 foundation patterns)
         phase1_patterns = ['alternating', 'repeating', 'incrementing', 'fixed_offset', 'periodic_repeat',
-                           'counting', 'modular', 'staircase', 'geometric']
+                           'counting', 'modular', 'staircase', 'geometric', 'indexed_lookup']
         topic_registry = DynamicTopicRegistry(phase1_patterns + pattern_types)
         print(f"  Initialized with {len(topic_registry)} curriculum topics")
 

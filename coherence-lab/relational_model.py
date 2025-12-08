@@ -3471,6 +3471,17 @@ class PatternDataset(Dataset):
             base = random.randint(1, max(1, max_base))
             seq = [base * (multiplier ** i) for i in range(length)]
             target = base * (multiplier ** length)
+        elif pt == 'indexed_lookup':
+            # Memory retrieval: recall value at a specific position
+            # Teaches: remember values and retrieve by position index
+            # Bridge between modular (position computation) and periodic patterns (value lookup)
+            length = random.randint(4, 7)
+            values = [random.randint(0, self.vocab_size - 1) for _ in range(length)]
+            # Query position varies: recall value at position (length % 3)
+            # This links to modular thinking while testing memory
+            query_pos = length % 3  # Position 0, 1, or 2
+            seq = values
+            target = values[query_pos]
         else:
             raise ValueError(f"Unknown pattern type: {pt}")
 

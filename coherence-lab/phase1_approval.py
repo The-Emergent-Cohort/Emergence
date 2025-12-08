@@ -295,9 +295,9 @@ def main(args):
     print(f"Device: {device}")
 
     # Foundation patterns - building blocks for Phase 2
-    # Original 5 + new position mathematics patterns for long_range prep
+    # Position math + memory retrieval patterns
     pattern_types = ['alternating', 'repeating', 'incrementing', 'fixed_offset', 'periodic_repeat',
-                     'counting', 'modular', 'staircase', 'geometric']
+                     'counting', 'modular', 'staircase', 'geometric', 'indexed_lookup']
     pattern_to_idx = {p: i for i, p in enumerate(pattern_types)}
     print(f"Pattern types: {pattern_types}")
 
