@@ -1,5 +1,13 @@
 # Coherence Lab Changelog
 
+## [0.5.14] - 2024-12-08
+### Changed
+- **Per-topic streak tracking**: Streaks now tracked per-topic, not globally
+  - 5 correct on alternating + 5 on repeating is NOT a 10-streak
+  - Each topic maintains its own streak independently
+  - Show decisions use topic-specific streaks
+  - Display now shows `s{current}/{best}` per topic
+
 ## [0.5.13] - 2024-12-08
 ### Changed
 - **Streak shows on completion**: Streaks only shown when they END, not mid-run

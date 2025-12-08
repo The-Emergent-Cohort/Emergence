@@ -11,7 +11,7 @@ Building the social learning foundation:
 This is the developmental foundation for later phases.
 """
 
-__version__ = "0.5.13"  # Log final exam + streak show on completion
+__version__ = "0.5.14"  # Per-topic streak tracking for show decisions
 
 import torch
 import torch.nn as nn
@@ -116,9 +116,13 @@ def train_day_with_approval(model, loader, optimizer, criterion, device, pattern
         # Get teacher's current goal for showing work
         teacher_goal = model.teacher.current_goal.item()
 
+        # Create pattern indices for per-topic streak tracking
+        pattern_indices = torch.tensor([pattern_to_idx[p] for p in pattern_types], device=device)
+
         # Student decides: should I show this? (rising bar based on internalization)
         should_show, reasons = model.learner.self_model.should_show_work(
-            correct, is_creative, conf, int_level, teacher_goal=teacher_goal
+            correct, is_creative, conf, int_level,
+            teacher_goal=teacher_goal, pattern_indices=pattern_indices
         )
 
         # Only show for non-mastered topics - no point showing mastered work
@@ -408,11 +412,14 @@ def main(args):
             level = cal.get('level', 0)
             progress = cal.get('level_progress', 0)
             xp = cal.get('xp', 0)
+            streak = cal.get('streak', 0)
+            best_streak = cal.get('best_streak', 0)
             acc_symbol = "O" if acc >= 0.95 else ("o" if acc >= 0.85 else ".")
             cal_symbol = {'calibrated': 'C', 'guessing': '?', 'overconfident': '!', 'unknown': '.'}[cal_status]
             # Level bar: █ for each level, ░ for progress to next
             level_bar = "█" * level + ("░" if progress > 0.5 else "") + "·" * (10 - level - (1 if progress > 0.5 else 0))
-            print(f"    {pt:15s}: {acc:.1%} {acc_symbol} {cal_symbol} L{level:2d} {level_bar} ({xp:.0f}xp)")
+            streak_info = f"s{streak}" + (f"/{best_streak}" if best_streak > streak else "")
+            print(f"    {pt:15s}: {acc:.1%} {acc_symbol} {cal_symbol} L{level:2d} {level_bar} ({xp:.0f}xp) {streak_info}")
         import sys; sys.stdout.flush()
 
         # === EXAMINATION SYSTEM ===
