@@ -433,19 +433,14 @@ class TopicConfidenceTracker(nn.Module):
 
                 self.topic_count[idx] += 1
 
-                # Update per-topic streak
-                if was_correct[i]:
-                    self.topic_streak[idx] += 1
-                    # Track best streak
-                    if self.topic_streak[idx] > self.topic_best_streak[idx]:
-                        self.topic_best_streak[idx] = self.topic_streak[idx].clone()
-                    # Check for mastery
-                    if self.topic_streak[idx] >= self.mastery_threshold:
-                        self.topic_mastered[idx] = True
-                    # NOTE: No auto-XP for practice. XP comes from teacher validation.
-                    # This ensures leveling requires engagement, not just grinding.
-                else:
-                    self.topic_streak[idx] = 0  # Reset on error
+                # Update best streak tracking (streak itself updated in should_show_work)
+                if self.topic_streak[idx] > self.topic_best_streak[idx]:
+                    self.topic_best_streak[idx] = self.topic_streak[idx].clone()
+                # Check for mastery
+                if self.topic_streak[idx] >= self.mastery_threshold:
+                    self.topic_mastered[idx] = True
+                # NOTE: No auto-XP for practice. XP comes from teacher validation.
+                # This ensures leveling requires engagement, not just grinding.
 
     def get_calibration(self, topic_idx):
         """
@@ -690,11 +685,13 @@ class TopicConfidenceTracker(nn.Module):
 
         Eligible when:
         - XP >= threshold for next level (based on confirmed_level, not XP-level)
+        - Streak >= target_level × 10 (must prove consistency first)
         - Not on cooldown from failed exam
         - Not already graduated (L10 passed)
 
         Uses confirmed_level (exam-verified) not get_level() (XP-based).
         XP gets you eligible to test, but you must pass to advance.
+        Streak requirement proves consistency before testing.
         """
         self._init_exam_state()
 
@@ -714,7 +711,16 @@ class TopicConfidenceTracker(nn.Module):
             threshold = self.xp_threshold(next_level)
             current_xp = self.topic_xp[topic_idx].item()
 
-            eligible = current_xp >= threshold
+            if current_xp < threshold:
+                return False  # Not enough XP
+
+            # Check streak requirement: need target_level × 10 best streak
+            # L1 needs 10, L5 needs 50, L10 needs 100
+            # Use best_streak (not current) - once you've proven it, you're eligible
+            streak_required = next_level * 10
+            best_streak = self.topic_best_streak[topic_idx].item()
+
+            eligible = best_streak >= streak_required
             self.exam_eligible[topic_idx] = eligible
             return eligible
 
@@ -1044,7 +1050,7 @@ class SelfModel(nn.Module):
             self.proposal_generator.expand(new_size)
 
     def should_show_work(self, was_correct, is_creative, confidence, internalization_level,
-                         teacher_goal=None):
+                         teacher_goal=None, pattern_indices=None):
         """
         Decide whether to present work to teacher for approval.
 
@@ -1056,6 +1062,7 @@ class SelfModel(nn.Module):
 
         teacher_goal: if provided, the negotiated goal from teacher
                      (e.g., "show me after 5 correct")
+        pattern_indices: tensor of topic indices for per-topic streak tracking
         """
         batch_size = was_correct.size(0)
         device = was_correct.device
@@ -1081,14 +1088,32 @@ class SelfModel(nn.Module):
             spontaneous_rate = 0.15 * (1.0 - internalization_level) ** 2
 
             for i in range(batch_size):
-                # Save streak BEFORE updating (for completed streak detection)
-                previous_streak = self.streak_count.item()
-
-                # Update streak
-                if was_correct[i]:
-                    self.streak_count += 1
+                # Get topic-specific streak (if pattern_indices provided)
+                if pattern_indices is not None:
+                    topic_idx = pattern_indices[i].item()
+                    previous_streak = self.topic_tracker.topic_streak[topic_idx].item()
                 else:
-                    self.streak_count.zero_()  # Reset, but we saved the completed length
+                    # Fallback to global (shouldn't happen in normal use)
+                    previous_streak = self.streak_count.item()
+                    topic_idx = None
+
+                # Update streak (per-topic if available)
+                if was_correct[i]:
+                    if topic_idx is not None:
+                        self.topic_tracker.topic_streak[topic_idx] += 1
+                    else:
+                        self.streak_count += 1
+                else:
+                    if topic_idx is not None:
+                        self.topic_tracker.topic_streak[topic_idx] = 0
+                    else:
+                        self.streak_count.zero_()
+
+                # Get current streak for mastery check
+                if topic_idx is not None:
+                    current_streak = self.topic_tracker.topic_streak[topic_idx].item()
+                else:
+                    current_streak = self.streak_count.item()
 
                 reason = None
 
@@ -1100,12 +1125,22 @@ class SelfModel(nn.Module):
                     reason = 'streak'
                     # Store the completed streak length for XP calculation
                     self.last_completed_streak = previous_streak
+                    # Update best streak BEFORE it gets lost
+                    if topic_idx is not None and previous_streak > self.topic_tracker.topic_best_streak[topic_idx]:
+                        self.topic_tracker.topic_best_streak[topic_idx] = previous_streak
 
                 # 2. Hit mastery (100 consecutive) - show this achievement
-                elif self.streak_count >= 100:
+                elif current_streak >= 100:
                     reason = 'streak'
-                    self.last_completed_streak = self.streak_count.item()
-                    self.streak_count.zero_()  # Reset after mastery
+                    self.last_completed_streak = current_streak
+                    # Update best streak BEFORE reset
+                    if topic_idx is not None and current_streak > self.topic_tracker.topic_best_streak[topic_idx]:
+                        self.topic_tracker.topic_best_streak[topic_idx] = current_streak
+                    # Reset after mastery show
+                    if topic_idx is not None:
+                        self.topic_tracker.topic_streak[topic_idx] = 0
+                    else:
+                        self.streak_count.zero_()
 
                 # 3. Creative and correct - genuinely novel approach
                 elif is_creative[i] and was_correct[i]:

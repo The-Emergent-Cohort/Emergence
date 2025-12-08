@@ -129,23 +129,40 @@ def train_day_with_proposals(model, loader, optimizer, criterion, device, patter
         seq_lens = batch['seq_len']
         pattern_types = batch['pattern_type']
 
+        # WEIGHTED TRAINING - graduated topics get maintenance training (from Phase 1)
+        tracker = model.learner.self_model.topic_tracker
+        graduated_mask = torch.tensor([
+            tracker.get_exam_stats(pattern_to_idx[p])['graduated']
+            for p in pattern_types
+        ], dtype=torch.bool, device=device)
+        active_mask = ~graduated_mask
+
+        # Loss weights: 1.0 for active, 0.1 for graduated (maintenance)
+        loss_weights = torch.where(graduated_mask,
+                                   torch.tensor(0.1, device=device),
+                                   torch.tensor(1.0, device=device))
+
         optimizer.zero_grad()
 
-        # Forward pass
+        # Forward pass - ALL topics
         details = model(tokens, seq_lens, targets=targets, return_details=True)
 
-        # Main loss
-        main_loss = criterion(details['logits'], targets)
+        # Main loss - weighted by active/graduated status
+        logits = details['logits']
+        per_sample_loss = F.cross_entropy(logits, targets, reduction='none')
+        main_loss = (per_sample_loss * loss_weights).mean()
 
-        # Pattern classification auxiliary
+        # Pattern classification auxiliary - weighted
         pattern_targets = torch.tensor([pattern_to_idx[p] for p in pattern_types], device=device)
-        aux_loss = criterion(details['pattern_logits'], pattern_targets)
+        aux_per_sample = F.cross_entropy(details['pattern_logits'], pattern_targets, reduction='none')
+        aux_loss = (aux_per_sample * loss_weights).mean()
 
-        # Confidence calibration
+        # Confidence calibration - weighted
         preds = details['logits'].argmax(dim=-1)
         correct = (preds == targets)
         conf = details['learner_self']['emotions']['confidence'].squeeze()
-        conf_loss = F.binary_cross_entropy(conf, correct.float())
+        conf_per_sample = F.binary_cross_entropy(conf, correct.float(), reduction='none')
+        conf_loss = (conf_per_sample * loss_weights).mean()
 
         # Combined loss
         loss = main_loss + 0.1 * aux_loss + 0.1 * conf_loss
@@ -173,9 +190,16 @@ def train_day_with_proposals(model, loader, optimizer, criterion, device, patter
         # Get teacher's current goal for showing work
         teacher_goal = model.teacher.current_goal.item()
 
+        # Create pattern indices for per-topic streak tracking
+        pattern_indices = torch.tensor([pattern_to_idx[p] for p in pattern_types], device=device)
+
         should_show, reasons = model.learner.self_model.should_show_work(
-            correct, is_creative, conf, int_level, teacher_goal=teacher_goal
+            correct, is_creative, conf, int_level,
+            teacher_goal=teacher_goal, pattern_indices=pattern_indices
         )
+
+        # Only show for non-graduated topics
+        should_show = should_show & active_mask
 
         if should_show.any():
             show_indices = should_show.nonzero(as_tuple=True)[0]
@@ -199,8 +223,26 @@ def train_day_with_proposals(model, loader, optimizer, criterion, device, patter
                 # Update approval calibration in self model
                 model.learner.self_model.update_after_approval(meets_bar, reason)
 
+                # === XP AWARD based on show type and outcome ===
+                topic_idx = pattern_to_idx[pattern_types[idx_item]]
+                was_correct_item = correct[idx].item()
+
+                if reason == 'creative':
+                    if was_correct_item:
+                        model.learner.self_model.topic_tracker.award_xp(topic_idx, 5)
+                    else:
+                        model.learner.self_model.topic_tracker.award_xp(topic_idx, -1)
+                elif reason == 'streak':
+                    completed_streak = model.learner.self_model.last_completed_streak
+                    model.learner.self_model.topic_tracker.award_xp(topic_idx, max(1, completed_streak // 5))
+                elif reason == 'validation':
+                    if was_correct_item:
+                        model.learner.self_model.topic_tracker.award_xp(topic_idx, 1)
+
                 # Internalize - weighted by how impressed teacher was
-                if correct[idx]:
+                # For streak shows on completion (failure), still internalize
+                should_internalize = correct[idx] or reason == 'streak'
+                if should_internalize:
                     model.learner.other_model.internalize(
                         teacher_response,
                         torch.tensor(1.0),
@@ -532,14 +574,21 @@ def main(args):
 
         val_metrics = evaluate(model, val_loader, device, pattern_to_idx)
 
-        # Update topic calibration for next epoch
+        # Update topic calibration for next epoch (including XP/level/streak from Phase 1)
         for pattern_name, idx in pattern_to_idx.items():
             acc, conf, gap = model.learner.self_model.topic_tracker.get_calibration(idx)
+            streak, best_streak, mastered = model.learner.self_model.topic_tracker.get_streak_info(idx)
+            xp, level, progress, xp_high = model.learner.self_model.topic_tracker.get_xp_info(idx)
             topic_calibration[pattern_name] = {
                 'accuracy': acc,
                 'confidence': conf,
                 'gap': gap,
-                'status': 'guessing' if gap > 0.1 else ('overconfident' if gap < -0.1 else 'calibrated')
+                'status': 'guessing' if gap > 0.1 else ('overconfident' if gap < -0.1 else 'calibrated'),
+                'streak': streak,
+                'best_streak': best_streak,
+                'xp': xp,
+                'level': level,
+                'level_progress': progress
             }
 
         # Developmental state
@@ -588,13 +637,20 @@ def main(args):
             print(f"    Types: {props['by_type']}")
             print(f"    Success rate: {prop_success:.1%}")
 
-        print(f"  Topic calibration:")
+        print(f"  Per-pattern:")
         for pt in pattern_types:
             cal = topic_calibration.get(pt, {})
             acc = val_metrics['per_pattern'].get(pt, 0)
             status = cal.get('status', 'unknown')
-            symbol = {'calibrated': 'O', 'guessing': '?', 'overconfident': '!', 'unknown': '.'}[status]
-            print(f"    {pt:18s}: {acc:.1%} [{status:12s}] {symbol}")
+            level = cal.get('level', 0)
+            xp = cal.get('xp', 0)
+            streak = cal.get('streak', 0)
+            best_streak = cal.get('best_streak', 0)
+            acc_symbol = "O" if acc >= 0.95 else ("o" if acc >= 0.85 else ".")
+            cal_symbol = {'calibrated': 'C', 'guessing': '?', 'overconfident': '!', 'unknown': '.'}[status]
+            level_bar = "█" * level + "·" * (10 - level)
+            streak_info = f"s{streak}" + (f"/{best_streak}" if best_streak > streak else "")
+            print(f"    {pt:18s}: {acc:.1%} {acc_symbol} {cal_symbol} L{level:2d} {level_bar} ({xp:.0f}xp) {streak_info}")
         import sys; sys.stdout.flush()
 
         if val_metrics['accuracy'] > best_acc:
