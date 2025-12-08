@@ -630,7 +630,8 @@ class TopicConfidenceTracker(nn.Module):
         active = self.topic_count > 0
         if not active.any():
             return 0.0
-        levels = torch.tensor([self.get_level(i) for i in range(self.n_topics)])
+        levels = torch.tensor([self.get_level(i) for i in range(self.n_topics)],
+                              device=self.topic_count.device)
         return levels[active].float().mean().item()
 
     def get_adjusted_confidence(self, topic_idx, raw_confidence):
