@@ -16,7 +16,7 @@ SECTIONED CURRICULUM:
 This is the developmental foundation for later phases.
 """
 
-__version__ = "0.7.0"  # Sectioned curriculum: focused learning, section exams
+__version__ = "0.8.0"  # Refactored to use CurriculumSequencer
 
 import torch
 import torch.nn as nn
@@ -31,6 +31,7 @@ from datetime import datetime
 from relational_model import (
     RelationalSystem, PatternDataset, collate_fn, evaluate, DynamicTopicRegistry
 )
+from curriculum_sequencer import CurriculumSequencer, create_mixed_dataset
 
 # === SECTIONED CURRICULUM ===
 # Learn patterns in focused groups, master each before moving on
@@ -321,67 +322,6 @@ def train_day_with_approval(model, loader, optimizer, criterion, device, pattern
     }
 
 
-def run_section_exam(model, section, pattern_to_idx, device, epoch, tracker):
-    """
-    Run exam for all patterns in a section.
-    All patterns must pass for section to pass.
-    Returns: (passed, results_list)
-    """
-    section_passed = True
-    results = []
-
-    for pattern_name in section['patterns']:
-        idx = pattern_to_idx[pattern_name]
-        current_level = tracker.get_level(idx)
-
-        # Section exam: must be L5+ and pass 90% on 24 problems
-        if current_level < 5:
-            results.append({
-                'topic': pattern_name,
-                'passed': False,
-                'reason': f'Not ready (L{current_level}, need L5+)'
-            })
-            section_passed = False
-            continue
-
-        exam_size = 24
-        threshold = 0.90
-
-        exam_data = PatternDataset(
-            n_examples=exam_size,
-            seed=epoch * 1000 + idx,
-            pattern_types=[pattern_name]
-        )
-        exam_loader = DataLoader(exam_data, batch_size=exam_size, collate_fn=collate_fn)
-
-        model.eval()
-        correct_count = 0
-        for batch in exam_loader:
-            tokens = batch['tokens'].to(device)
-            targets = batch['target'].to(device)
-            seq_lens = batch['seq_len']
-            with torch.no_grad():
-                details = model(tokens, seq_lens, targets=targets, return_details=True)
-                preds = details['logits'].argmax(dim=-1)
-                correct_count += (preds == targets).sum().item()
-        model.train()
-
-        score = correct_count / exam_size
-        passed = score >= threshold
-
-        results.append({
-            'topic': pattern_name,
-            'score': score,
-            'passed': passed,
-            'threshold': threshold
-        })
-
-        if not passed:
-            section_passed = False
-
-    return section_passed, results
-
-
 def main(args):
     # Setup logging
     run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -407,15 +347,14 @@ def main(args):
         print(f"  {section['name']}: {section['patterns']}")
         print(f"    {section['description']}")
 
-    # Data will be regenerated per section - validation covers all patterns
+    # Validation data covers all patterns
     val_data = PatternDataset(n_examples=args.n_val, seed=123, pattern_types=pattern_types)
     val_loader = DataLoader(val_data, batch_size=args.batch_size, collate_fn=collate_fn)
     print(f"Val data: {len(val_data)} examples (all patterns)")
 
-    # Model - n_topics and n_patterns both derive from curriculum
-    # n_topics can grow via emerged topics, n_patterns is curriculum size
+    # Model
     n_patterns = len(pattern_types)
-    n_topics = n_patterns  # Start equal, can grow organically
+    n_topics = n_patterns
 
     model = RelationalSystem(
         d_model=args.d_model,
@@ -426,310 +365,206 @@ def main(args):
     ).to(device)
 
     print(f"Curriculum: {n_patterns} patterns, {n_topics} topics")
+    print(f"Parameters: {sum(p.numel() for p in model.parameters()):,}")
 
-    n_params = sum(p.numel() for p in model.parameters())
-    print(f"Parameters: {n_params:,}")
-
-    # === DYNAMIC TOPIC REGISTRY ===
-    # Create registry with Phase 1 curriculum patterns
+    # Topic registry
     registry_path = Path(args.data_dir) / 'topic_registry.json'
-    print("\nCreating topic registry with Phase 1 curriculum patterns")
     topic_registry = DynamicTopicRegistry(pattern_types)
-    print(f"  Initialized with {len(topic_registry)} curriculum topics")
-
-    # Attach registry to model
     model.set_topic_registry(topic_registry)
-
-    # XP uses pure level scaling (1/level) - no static topic difficulty
-    # Higher levels naturally get less XP = move on to harder content
+    print(f"Topic registry: {len(topic_registry)} curriculum topics")
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     criterion = nn.CrossEntropyLoss()
-
-    # === SECTIONED CURRICULUM STATE ===
-    current_section_idx = 0
-    section_passed = [False] * len(CURRICULUM_SECTIONS)
-    all_sections_complete = False
-
-    print("\n" + "=" * 70)
-    print("SECTIONED CURRICULUM: Focus on 1-2 patterns at a time")
-    print("=" * 70)
-
-    best_acc = 0
-    history = []
     tracker = model.learner.self_model.topic_tracker
 
-    for epoch in range(1, args.epochs + 1):
-        # === DETERMINE ACTIVE PATTERNS FOR THIS EPOCH ===
-        # Current section patterns are primary focus
-        # Previous passed sections get maintenance training (reduced weight)
-        current_section = CURRICULUM_SECTIONS[current_section_idx]
-        active_patterns = current_section['patterns'].copy()
+    # === CREATE CURRICULUM SEQUENCER ===
+    sequencer = CurriculumSequencer(
+        sections=CURRICULUM_SECTIONS,
+        topic_to_idx=pattern_to_idx,
+        tracker=tracker,
+        section_exam_level=5,
+        section_exam_size=24,
+        section_exam_threshold=0.90,
+        final_exam_size=32,
+        final_exam_threshold=0.90
+    )
 
-        # Add patterns from passed sections for maintenance
-        maintenance_patterns = []
-        for i, passed in enumerate(section_passed):
-            if passed and i < current_section_idx:
-                maintenance_patterns.extend(CURRICULUM_SECTIONS[i]['patterns'])
+    # Track best accuracy for checkpointing
+    best_acc = 0
 
-        # Combined training patterns
-        training_patterns = active_patterns + maintenance_patterns
+    # === DEFINE TRAINING FUNCTION ===
+    def train_fn(mdl, active_topics, maintenance_topics, epoch):
+        """Phase 1 training with approval-seeking behavior."""
+        # Generate mixed training data
+        all_topics = active_topics + maintenance_topics
+        n_active = args.n_train // len(all_topics) * len(active_topics) if all_topics else args.n_train
+        n_maint = args.n_train - n_active if maintenance_topics else 0
 
-        # Generate training data for current patterns (focused)
-        # More examples for active patterns, fewer for maintenance
-        n_active = args.n_train // len(training_patterns) * len(active_patterns) if training_patterns else args.n_train
-        n_maintenance = args.n_train - n_active if maintenance_patterns else 0
-
-        train_samples = []
-        if active_patterns:
-            active_data = PatternDataset(n_examples=max(1000, n_active), seed=epoch * 100, pattern_types=active_patterns)
-            train_samples.extend([active_data[i] for i in range(len(active_data))])
-        if maintenance_patterns and n_maintenance > 0:
-            maint_data = PatternDataset(n_examples=max(500, n_maintenance), seed=epoch * 100 + 50, pattern_types=maintenance_patterns)
-            train_samples.extend([maint_data[i] for i in range(len(maint_data))])
-
-        # Create combined dataset
-        class CombinedDataset(Dataset):
-            def __init__(self, samples):
-                self.samples = samples
-            def __len__(self):
-                return len(self.samples)
-            def __getitem__(self, idx):
-                return self.samples[idx]
-
-        train_data = CombinedDataset(train_samples)
+        train_data = create_mixed_dataset(
+            PatternDataset, active_topics, maintenance_topics,
+            n_active, n_maint, seed=epoch * 100
+        )
         train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
 
-        print(f"\n{'='*70}")
-        print(f"Day {epoch} - Section {current_section_idx+1}/{len(CURRICULUM_SECTIONS)}: {current_section['name']}")
-        print(f"  Focus: {active_patterns}")
-        if maintenance_patterns:
-            print(f"  Maintenance: {maintenance_patterns}")
-        print(f"  Training samples: {len(train_data)}")
-
-        # === TRAINING ===
-        train_metrics = train_day_with_approval(
-            model, train_loader, optimizer, criterion, device, pattern_to_idx
-        )
+        # Run Phase 1 approval-seeking training
+        metrics = train_day_with_approval(mdl, train_loader, optimizer, criterion, device, pattern_to_idx)
 
         # Sleep to consolidate
-        model.learner.temporal_model.sleep()
+        mdl.learner.temporal_model.sleep()
 
-        val_metrics = evaluate(model, val_loader, device, pattern_to_idx)
+        return metrics
 
-        # Update topic calibration
-        topic_calibration = {}
-        for pattern_name, idx in pattern_to_idx.items():
-            acc, conf, gap = tracker.get_calibration(idx)
-            streak, best_streak, mastered = tracker.get_streak_info(idx)
-            xp, level, progress, xp_high = tracker.get_xp_info(idx)
-            topic_calibration[pattern_name] = {
-                'accuracy': acc, 'confidence': conf, 'gap': gap,
-                'status': 'guessing' if gap > 0.1 else ('overconfident' if gap < -0.1 else 'calibrated'),
-                'streak': streak, 'best_streak': best_streak, 'mastered': mastered,
-                'xp': xp, 'level': level, 'level_progress': progress, 'xp_high': xp_high
-            }
+    # === DEFINE EVAL FUNCTION ===
+    def eval_fn(mdl):
+        """Evaluate on all patterns."""
+        return evaluate(mdl, val_loader, device, pattern_to_idx)
 
-        # Developmental state
-        day = model.learner.temporal_model.current_day.item()
+    # === DEFINE EXAM FUNCTION ===
+    def exam_fn(mdl, topic_name, n_problems, seed, dev):
+        """Generate and run exam for a single topic."""
+        exam_data = PatternDataset(n_examples=n_problems, seed=seed, pattern_types=[topic_name])
+        exam_loader = DataLoader(exam_data, batch_size=n_problems, collate_fn=collate_fn)
+
+        mdl.eval()
+        correct = 0
+        for batch in exam_loader:
+            tokens = batch['tokens'].to(dev)
+            targets = batch['target'].to(dev)
+            seq_lens = batch['seq_len']
+            with torch.no_grad():
+                details = mdl(tokens, seq_lens, targets=targets, return_details=True)
+                preds = details['logits'].argmax(dim=-1)
+                correct += (preds == targets).sum().item()
+        mdl.train()
+
+        return correct, n_problems
+
+    # === DEFINE CALLBACKS ===
+    def on_epoch_start(epoch, section_info):
+        print(f"\n{'='*70}")
+        print(f"Day {epoch} - Section {section_info['section_idx']+1}/{len(CURRICULUM_SECTIONS)}: {section_info['section_name']}")
+        print(f"  Focus: {section_info['active_topics']}")
+        if section_info['maintenance_topics']:
+            print(f"  Maintenance: {section_info['maintenance_topics']}")
+
+    def on_epoch_end(epoch, record):
+        nonlocal best_acc
+
+        train_metrics = record['train_metrics']
+        eval_metrics = record['eval_metrics']
+
+        # Get developmental state
         int_level = torch.sigmoid(model.learner.other_model.internalization_level).item()
         trust = torch.sigmoid(model.learner.other_model.trust).item()
-
-        # XP summary
         total_xp = tracker.get_total_xp()
         avg_level = tracker.get_average_level()
 
-        # Display current section patterns
         print(f"\n  Train: loss={train_metrics['loss']:.4f}, acc={train_metrics['accuracy']:.1%}")
-        print(f"  Val: acc={val_metrics['accuracy']:.1%}")
+        print(f"  Val: acc={eval_metrics['accuracy']:.1%}")
         print(f"  Internalization: {int_level:.1%}, Trust: {trust:.1%}")
         print(f"  XP: total={total_xp:.0f}, avg_level={avg_level:.1f}")
 
+        # Display section patterns
+        active_topics, _ = sequencer.get_active_topics()
         print(f"\n  Section patterns:")
-        for pt in active_patterns:
-            acc = val_metrics['per_pattern'].get(pt, 0)
-            cal = topic_calibration.get(pt, {})
-            level = cal.get('level', 0)
-            progress = cal.get('level_progress', 0)
-            xp = cal.get('xp', 0)
+        for pt in active_topics:
+            acc = eval_metrics['per_pattern'].get(pt, 0)
+            level = tracker.get_level(pattern_to_idx[pt])
+            xp, _, progress, _ = tracker.get_xp_info(pattern_to_idx[pt])
             level_bar = "█" * level + ("░" if progress > 0.5 else "") + "·" * (10 - level - (1 if progress > 0.5 else 0))
             ready = "READY" if level >= 5 else ""
             print(f"    {pt:15s}: {acc:.1%} L{level:2d} {level_bar} ({xp:.0f}xp) {ready}")
 
-        import sys; sys.stdout.flush()
-
-        # === LEVEL-UP EXAMS (within section) ===
-        # Still run level exams for progression tracking
-        exam_results = []
-        for pattern_name in training_patterns:
-            idx = pattern_to_idx[pattern_name]
-            if tracker.check_exam_eligible(idx):
-                current_level = tracker.get_level(idx)
-                target_level = current_level + 1
-                exam_size = tracker.get_exam_size(target_level)
-
-                exam_data = PatternDataset(
-                    n_examples=exam_size,
-                    seed=epoch * 1000 + idx,
-                    pattern_types=[pattern_name]
-                )
-                exam_loader = DataLoader(exam_data, batch_size=exam_size, collate_fn=collate_fn)
-
-                model.eval()
-                correct_count = 0
-                for batch in exam_loader:
-                    tokens = batch['tokens'].to(device)
-                    targets = batch['target'].to(device)
-                    seq_lens = batch['seq_len']
-                    with torch.no_grad():
-                        details = model(tokens, seq_lens, targets=targets, return_details=True)
-                        preds = details['logits'].argmax(dim=-1)
-                        correct_count += (preds == targets).sum().item()
-                model.train()
-
-                result = tracker.take_exam(idx, correct_count, exam_size)
-                result['topic'] = pattern_name
-                exam_results.append(result)
-
-        if exam_results:
+        # Display level exams
+        if record['level_exams']:
             print("  Level exams:")
-            for r in exam_results:
+            for r in record['level_exams']:
                 status = f"-> L{r['new_level']}" if r['passed'] else f"(cooldown {r['cooldown']})"
                 symbol = "✓" if r['passed'] else "✗"
                 print(f"    {r['topic']:15s}: {r['score']:.0%} {symbol} {status}")
 
-        # === SECTION EXAM ===
-        # Check if all patterns in current section are ready (L5+)
-        section_ready = all(
-            tracker.get_level(pattern_to_idx[p]) >= 5
-            for p in current_section['patterns']
-        )
+        import sys; sys.stdout.flush()
 
-        if section_ready and not section_passed[current_section_idx]:
-            print(f"\n  === SECTION EXAM: {current_section['name']} ===")
-            passed, results = run_section_exam(
-                model, current_section, pattern_to_idx, device, epoch, tracker
-            )
-
-            for r in results:
-                if 'score' in r:
-                    symbol = "✓" if r['passed'] else "✗"
-                    print(f"    {r['topic']:15s}: {r['score']:.0%} {symbol}")
-                else:
-                    print(f"    {r['topic']:15s}: {r['reason']}")
-
-            if passed:
-                section_passed[current_section_idx] = True
-                print(f"\n  *** SECTION {current_section_idx+1} PASSED! ***")
-
-                # Move to next section
-                if current_section_idx < len(CURRICULUM_SECTIONS) - 1:
-                    current_section_idx += 1
-                    next_section = CURRICULUM_SECTIONS[current_section_idx]
-                    print(f"  Moving to: {next_section['name']}")
-                    print(f"    Patterns: {next_section['patterns']}")
-                else:
-                    print(f"\n  All sections complete! Preparing final exam...")
-                    all_sections_complete = True
-
-        # Save history
-        history.append({
-            'epoch': epoch, 'section': current_section_idx,
-            'section_name': current_section['name'],
-            'train_acc': train_metrics['accuracy'],
-            'train_loss': train_metrics['loss'],
-            'val_acc': val_metrics['accuracy'],
-            'topic_calibration': topic_calibration.copy(),
-            'total_xp': total_xp, 'avg_level': avg_level,
-            'internalization': int_level, 'trust': trust
-        })
-
-        # Save checkpoint
-        if val_metrics['accuracy'] > best_acc:
-            best_acc = val_metrics['accuracy']
+        # Save checkpoint if best
+        if eval_metrics['accuracy'] > best_acc:
+            best_acc = eval_metrics['accuracy']
             torch.save({
                 'state_dict': model.state_dict(),
                 'epoch': epoch,
                 'val_acc': best_acc,
                 'n_patterns': n_patterns,
                 'n_topics': n_topics,
-                'current_section': current_section_idx,
-                'section_passed': section_passed
+                'current_section': sequencer.current_section_idx,
+                'section_passed': sequencer.section_passed.copy()
             }, Path(args.data_dir) / 'phase1_approval_best.pt')
             topic_registry.save(registry_path)
 
-        # === FINAL COMPREHENSIVE EXAM ===
-        if all_sections_complete:
-            print(f"\n  {'='*50}")
-            print(f"  === FINAL COMPREHENSIVE EXAM ===")
-            print(f"  All sections passed - prove mastery across all patterns!")
-            print(f"  {'='*50}")
-
-            final_results = []
-            any_failed = False
-
-            for pattern_name, idx in pattern_to_idx.items():
-                final_size = 32
-                final_threshold = 0.90
-
-                final_data = PatternDataset(
-                    n_examples=final_size,
-                    seed=epoch * 10000 + idx,
-                    pattern_types=[pattern_name]
-                )
-                final_loader = DataLoader(final_data, batch_size=final_size, collate_fn=collate_fn)
-
-                model.eval()
-                correct_count = 0
-                for batch in final_loader:
-                    tokens = batch['tokens'].to(device)
-                    targets = batch['target'].to(device)
-                    seq_lens = batch['seq_len']
-                    with torch.no_grad():
-                        details = model(tokens, seq_lens, targets=targets, return_details=True)
-                        preds = details['logits'].argmax(dim=-1)
-                        correct_count += (preds == targets).sum().item()
-                model.train()
-
-                score = correct_count / final_size
-                passed = score >= final_threshold
-                symbol = "✓" if passed else "✗"
-                print(f"    {pattern_name:15s}: {correct_count}/{final_size} ({score:.0%}) {symbol}")
-
-                if not passed:
-                    any_failed = True
-                    # Find which section this pattern belongs to
-                    for sec_idx, sec in enumerate(CURRICULUM_SECTIONS):
-                        if pattern_name in sec['patterns']:
-                            section_passed[sec_idx] = False
-                            if sec_idx < current_section_idx:
-                                current_section_idx = sec_idx  # Go back to failed section
-
-                final_results.append({'topic': pattern_name, 'score': score, 'passed': passed})
-
-            history[-1]['final_exam'] = final_results
-
-            if not any_failed:
-                print(f"\n{'*'*60}")
-                print(f"*** Phase 1 COMPLETE! ALL PATTERNS MASTERED! ***")
-                print(f"    Trust: {trust:.1%}, Internalization: {int_level:.1%}")
-                print(f"    Total epochs: {epoch}")
-                print(f"*** Ready for Phase 2! ***")
-                print(f"{'*'*60}")
-                break
+    def on_section_exam(section, results, passed):
+        print(f"\n  === SECTION EXAM: {section['name']} ===")
+        for r in results:
+            if 'score' in r:
+                symbol = "✓" if r['passed'] else "✗"
+                print(f"    {r['topic']:15s}: {r['score']:.0%} {symbol}")
             else:
-                print(f"\n  Final exam failed - back to section {current_section_idx+1}")
-                all_sections_complete = False
+                print(f"    {r['topic']:15s}: {r['reason']}")
+
+    def on_section_complete(section_idx, next_section):
+        print(f"\n  *** SECTION {section_idx+1} PASSED! ***")
+        if next_section:
+            print(f"  Moving to: {next_section['name']}")
+            print(f"    Patterns: {next_section.get('patterns', next_section.get('topics', []))}")
+        else:
+            print(f"\n  All sections complete! Preparing final exam...")
+
+    def on_final_exam(results, passed):
+        print(f"\n  {'='*50}")
+        print(f"  === FINAL COMPREHENSIVE EXAM ===")
+        print(f"  {'='*50}")
+        for r in results:
+            symbol = "✓" if r['passed'] else "✗"
+            print(f"    {r['topic']:15s}: {r['correct']}/{r['total']} ({r['score']:.0%}) {symbol}")
+
+        if passed:
+            int_level = torch.sigmoid(model.learner.other_model.internalization_level).item()
+            trust = torch.sigmoid(model.learner.other_model.trust).item()
+            print(f"\n{'*'*60}")
+            print(f"*** Phase 1 COMPLETE! ALL PATTERNS MASTERED! ***")
+            print(f"    Trust: {trust:.1%}, Internalization: {int_level:.1%}")
+            print(f"*** Ready for Phase 2! ***")
+            print(f"{'*'*60}")
+        else:
+            print(f"\n  Final exam failed - back to training!")
+
+    # === RUN CURRICULUM ===
+    result = sequencer.run(
+        model=model,
+        train_fn=train_fn,
+        eval_fn=eval_fn,
+        exam_fn=exam_fn,
+        device=device,
+        max_epochs=args.epochs,
+        callbacks={
+            'on_epoch_start': on_epoch_start,
+            'on_epoch_end': on_epoch_end,
+            'on_section_exam': on_section_exam,
+            'on_section_complete': on_section_complete,
+            'on_final_exam': on_final_exam
+        }
+    )
+
+    # Final summary
+    int_level = torch.sigmoid(model.learner.other_model.internalization_level).item()
+    trust = torch.sigmoid(model.learner.other_model.trust).item()
 
     print("\n" + "=" * 70)
     print(f"Best accuracy: {best_acc:.1%}")
     print(f"Final trust: {trust:.1%}")
     print(f"Final internalization: {int_level:.1%}")
+    print(f"Completed: {result['completed']} in {result['epochs']} epochs")
 
-    # Final registry save and report
+    # Final registry save
     topic_registry.save(registry_path)
     print(f"\nTopic registry saved: {registry_path}")
-    print(f"  Total topics: {len(topic_registry)} curriculum patterns")
     print("=" * 70)
 
     # Save log
