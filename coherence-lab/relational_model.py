@@ -152,6 +152,24 @@ class DynamicTopicRegistry:
             if info['origin'] != 'curriculum'
         ]
 
+    def reset_emerged(self):
+        """
+        Remove all emerged topics, keeping only curriculum.
+        For clean Phase 2 runs that shouldn't inherit from prior runs.
+        """
+        emerged_ids = [tid for tid, info in self.topics.items()
+                       if info['origin'] != 'curriculum']
+        for tid in emerged_ids:
+            name = self.topics[tid]['name']
+            del self.topics[tid]
+            del self.name_to_id[name]
+        # Reset next_id to just after curriculum topics
+        if self.topics:
+            self.next_id = max(self.topics.keys()) + 1
+        else:
+            self.next_id = 0
+        return len(emerged_ids)  # Return count of removed topics
+
     def summary(self):
         """Get summary string."""
         curriculum = sum(1 for t in self.topics.values() if t['origin'] == 'curriculum')
@@ -781,18 +799,17 @@ class TopicConfidenceTracker(nn.Module):
                     'graduated': graduated
                 }
             else:
-                # FAILED - drop to target level threshold minus 25% of excess
-                # You don't keep XP above the level you couldn't prove
-                penalty_rate = 0.25
-
+                # FAILED - put you partway through the level you failed
+                # Intent: setback, not destruction. You were close, try again.
                 target_threshold = self.xp_threshold(target_level)
                 confirmed_threshold = self.xp_threshold(confirmed)
                 current_xp = self.topic_xp[topic_idx].item()
-                excess_xp = current_xp - target_threshold  # XP above what you tried to prove
 
-                # Drop to target threshold minus 25% penalty
-                new_xp = target_threshold - (excess_xp * penalty_rate) if excess_xp > 0 else target_threshold - 1
-                new_xp = max(new_xp, confirmed_threshold)  # Don't drop below confirmed level
+                # Put you at 50% of the way through the level you failed
+                # e.g., fail L2 (threshold 40), confirmed L1 (threshold 10)
+                # new_xp = 10 + (40-10)*0.5 = 10 + 15 = 25
+                level_span = target_threshold - confirmed_threshold
+                new_xp = confirmed_threshold + level_span * 0.5
                 xp_lost = current_xp - new_xp
                 self.topic_xp[topic_idx] = new_xp
 
@@ -1588,12 +1605,13 @@ class RelationalLearner(nn.Module):
     """
 
     def __init__(self, vocab_size=26, d_model=64, max_seq_len=12,
-                 n_heads=4, n_think_steps=5):
+                 n_heads=4, n_think_steps=5, n_patterns=9):
         super().__init__()
 
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.n_think_steps = n_think_steps
+        self.n_patterns = n_patterns
 
         # Perception (world interaction)
         self.token_embed = nn.Embedding(vocab_size, d_model)
@@ -1635,8 +1653,8 @@ class RelationalLearner(nn.Module):
             nn.Linear(d_model, vocab_size)
         )
 
-        # Pattern classifier (auxiliary) - 5 types now with periodic_repeat
-        self.pattern_head = nn.Linear(d_model, 5)
+        # Pattern classifier (auxiliary) - dynamic based on curriculum
+        self.pattern_head = nn.Linear(d_model, n_patterns)
 
     def perceive(self, tokens, seq_lens=None):
         """Perceive the world (encode sequence)."""
@@ -3205,11 +3223,11 @@ class RelationalSystem(nn.Module):
     """
 
     def __init__(self, vocab_size=26, d_model=64, max_seq_len=12,
-                 n_heads=4, n_think_steps=5, n_topics=10):
+                 n_heads=4, n_think_steps=5, n_topics=10, n_patterns=9):
         super().__init__()
 
         self.learner = RelationalLearner(
-            vocab_size, d_model, max_seq_len, n_heads, n_think_steps
+            vocab_size, d_model, max_seq_len, n_heads, n_think_steps, n_patterns
         )
         self.teacher = RelationalTeacher(d_model)
 
@@ -3360,6 +3378,10 @@ class PatternDataset(Dataset):
     - incrementing: [1,2,3,4,...] → look back 1, add 1
     - fixed_offset: [2,5,8,11,...] → look back 1, add k
     - periodic_repeat: [a,b,c,a,b,c,...] → look back period (3-4)
+    - counting: [0,1,2,3,4,...] → explicit position tracking
+    - modular: [0,1,2,0,1,2,...] → i % period (cycle position)
+    - staircase: [0,0,1,1,2,2,...] → i // step (integer division)
+    - geometric: [1,2,4,8,...] → multiplicative growth
 
     Use pattern_types parameter to control which patterns are included.
     """
@@ -3416,6 +3438,50 @@ class PatternDataset(Dataset):
             seq = (base * full_cycles) + base[:extra]
             # Target is what comes next in the cycle
             target = base[extra % period]
+        elif pt == 'counting':
+            # Pure position counting: 0, 1, 2, 3, 4, 5...
+            # Teaches: explicit position awareness (distinct from incrementing)
+            # Always starts at 0 - this IS the position, not "some value + position"
+            length = random.randint(4, 8)
+            seq = list(range(length))  # Always 0, 1, 2, 3...
+            target = length  # Next position
+        elif pt == 'modular':
+            # Cycle position: 0, 1, 2, 0, 1, 2, 0, 1, 2...
+            # Teaches: i % period (where am I in the cycle?)
+            period = random.randint(2, 4)
+            length = random.randint(5, 9)
+            seq = [i % period for i in range(length)]
+            target = length % period
+        elif pt == 'staircase':
+            # Slow increment: 0, 0, 0, 1, 1, 1, 2, 2, 2...
+            # Teaches: i // step (integer division / quantization)
+            step = random.randint(2, 3)
+            length = random.randint(5, 9)
+            seq = [i // step for i in range(length)]
+            target = length // step
+        elif pt == 'geometric':
+            # Multiplicative growth: 1, 2, 4, 8, 16...
+            # Teaches: different operation (multiply vs add)
+            # Must ensure target stays in vocab_size bounds
+            multiplier = 2
+            # length=3: target = base * 8, so base <= 3 for vocab=26
+            # length=4: target = base * 16, so base = 1 for vocab=26
+            length = random.randint(3, 4)
+            max_base = (self.vocab_size - 1) // (multiplier ** length)
+            base = random.randint(1, max(1, max_base))
+            seq = [base * (multiplier ** i) for i in range(length)]
+            target = base * (multiplier ** length)
+        elif pt == 'indexed_lookup':
+            # Memory retrieval: recall value at a specific position
+            # Teaches: remember values and retrieve by position index
+            # Bridge between modular (position computation) and periodic patterns (value lookup)
+            length = random.randint(4, 7)
+            values = [random.randint(0, self.vocab_size - 1) for _ in range(length)]
+            # Query position varies: recall value at position (length % 3)
+            # This links to modular thinking while testing memory
+            query_pos = length % 3  # Position 0, 1, or 2
+            seq = values
+            target = values[query_pos]
         else:
             raise ValueError(f"Unknown pattern type: {pt}")
 
@@ -3456,11 +3522,12 @@ def collate_fn(batch):
 # Phase configurations
 CURRICULUM_CONFIG = {
     '1': {
-        'patterns': ['repeating', 'alternating', 'incrementing', 'fixed_offset', 'periodic_repeat'],
+        'patterns': ['repeating', 'alternating', 'incrementing', 'fixed_offset', 'periodic_repeat',
+                     'counting', 'modular', 'staircase', 'geometric'],
         'seq_len': (4, 6),
         'max_pad': 8,
         'success_threshold': 0.95,
-        'description': 'Foundation patterns'
+        'description': 'Foundation patterns + position mathematics'
     },
     '2a': {
         'patterns': ['repeating', 'alternating', 'periodic_3', 'periodic_4'],

@@ -11,7 +11,7 @@ Building the social learning foundation:
 This is the developmental foundation for later phases.
 """
 
-__version__ = "0.5.17"  # Level-scaled creativity threshold
+__version__ = "0.6.0"  # Expanded curriculum: +counting, modular, staircase, geometric
 
 import torch
 import torch.nn as nn
@@ -294,9 +294,10 @@ def main(args):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Device: {device}")
 
-    # Easy patterns for foundation building
-    # periodic_repeat added to prep for long_range (teaches "look back N positions")
-    pattern_types = ['alternating', 'repeating', 'incrementing', 'fixed_offset', 'periodic_repeat']
+    # Foundation patterns - building blocks for Phase 2
+    # Position math + memory retrieval patterns
+    pattern_types = ['alternating', 'repeating', 'incrementing', 'fixed_offset', 'periodic_repeat',
+                     'counting', 'modular', 'staircase', 'geometric', 'indexed_lookup']
     pattern_to_idx = {p: i for i, p in enumerate(pattern_types)}
     print(f"Pattern types: {pattern_types}")
 
@@ -310,13 +311,20 @@ def main(args):
 
     print(f"Train: {len(train_data)}, Val: {len(val_data)}")
 
-    # Model - explicit n_topics=10 to match phase 2 checkpoint loading
+    # Model - n_topics and n_patterns both derive from curriculum
+    # n_topics can grow via emerged topics, n_patterns is curriculum size
+    n_patterns = len(pattern_types)
+    n_topics = n_patterns  # Start equal, can grow organically
+
     model = RelationalSystem(
         d_model=args.d_model,
         n_heads=args.n_heads,
         n_think_steps=args.n_think_steps,
-        n_topics=10
+        n_topics=n_topics,
+        n_patterns=n_patterns
     ).to(device)
+
+    print(f"Curriculum: {n_patterns} patterns, {n_topics} topics")
 
     n_params = sum(p.numel() for p in model.parameters())
     print(f"Parameters: {n_params:,}")
@@ -509,7 +517,9 @@ def main(args):
             torch.save({
                 'state_dict': model.state_dict(),
                 'epoch': epoch,
-                'val_acc': best_acc
+                'val_acc': best_acc,
+                'n_patterns': n_patterns,  # For organic growth across phases
+                'n_topics': n_topics
             }, Path(args.data_dir) / 'phase1_approval_best.pt')
             # Save topic registry with checkpoint
             topic_registry.save(registry_path)
