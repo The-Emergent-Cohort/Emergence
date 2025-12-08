@@ -364,8 +364,33 @@ def main(args):
     if phase1_path.exists() and not args.fresh:
         print(f"\nLoading phase 1 checkpoint: {phase1_path}")
         checkpoint = torch.load(phase1_path, map_location=device)
-        # Load with strict=False since we added new components
-        model.load_state_dict(checkpoint['state_dict'], strict=False)
+
+        # Handle size mismatches for proposal types (we added new ones)
+        state_dict = checkpoint['state_dict']
+        model_state = model.state_dict()
+
+        # Keys that might have size mismatch due to new proposal types
+        proposal_keys = [
+            'learner.self_model.proposal_generator.proposal_outcomes',
+            'learner.self_model.proposal_generator.proposal_type_head.weight',
+            'learner.self_model.proposal_generator.proposal_type_head.bias',
+        ]
+
+        for key in proposal_keys:
+            if key in state_dict and key in model_state:
+                old_shape = state_dict[key].shape
+                new_shape = model_state[key].shape
+                if old_shape != new_shape:
+                    print(f"  Expanding {key}: {old_shape} -> {new_shape}")
+                    # Create new tensor with model's shape, copy old values
+                    new_tensor = model_state[key].clone()
+                    # Copy the old values into the beginning
+                    slices = tuple(slice(0, min(o, n)) for o, n in zip(old_shape, new_shape))
+                    new_tensor[slices] = state_dict[key][slices]
+                    state_dict[key] = new_tensor
+
+        # Load with strict=False for any other new components
+        model.load_state_dict(state_dict, strict=False)
         print(f"  Phase 1 val_acc: {checkpoint.get('val_acc', 'N/A')}")
     else:
         print("\nStarting fresh (no phase 1 checkpoint)")
