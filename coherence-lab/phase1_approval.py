@@ -11,6 +11,8 @@ Building the social learning foundation:
 This is the developmental foundation for later phases.
 """
 
+__version__ = "0.3.0"  # Added overflow protection, per-topic tracking, scaled goal increments
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -151,7 +153,9 @@ def train_day_with_approval(model, loader, optimizer, criterion, device, pattern
                         model.learner.self_model.update_goal_estimate_from_feedback(negotiation_result)
                     else:
                         # Teacher directive: "Let's do X next time"
-                        model.teacher.current_goal.fill_(goal_action['goal'])
+                        # Defensive: clamp goal to valid range
+                        safe_goal = max(1, min(1000, int(goal_action['goal'])))
+                        model.teacher.current_goal.fill_(safe_goal)
 
         # === TEACHER MONITORING (un-shown work) ===
         # Teacher observes ALL work, notices quiet competence
@@ -391,6 +395,7 @@ def main(args):
     # Save log
     run_log = {
         'script': 'phase1_approval.py',
+        'version': __version__,
         'run_id': run_id,
         'best_acc': best_acc,
         'final_trust': trust,
