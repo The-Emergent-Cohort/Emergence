@@ -48,16 +48,21 @@ CURRICULUM_SECTIONS = [
     },
     {
         'name': 'C: Simple Memory',
-        'patterns': ['repeating', 'alternating', 'periodic_repeat'],
-        'description': 'Remember and cycle values (1, 2, then 3-4 value cycles)'
+        'patterns': ['repeating', 'alternating'],
+        'description': 'Remember and cycle 1-2 values'
     },
     {
-        'name': 'D: Indexed Retrieval',
+        'name': 'D: Extended Cycles',
+        'patterns': ['periodic_repeat'],
+        'description': 'Cycle 3-4 values (builds on alternating)'
+    },
+    {
+        'name': 'E: Indexed Retrieval',
         'patterns': ['indexed_lookup'],
         'description': 'Position-based value lookup from memory'
     },
     {
-        'name': 'E: Growth Patterns',
+        'name': 'F: Growth Patterns',
         'patterns': ['fixed_offset', 'geometric'],
         'description': 'Linear and exponential growth'
     }
@@ -72,15 +77,17 @@ CURRICULUM_BRIDGES = {
     'modular': ['counting'],              # modular needs position awareness
     'staircase': ['counting'],            # staircase needs position awareness
 
-    # Section C - Simple Memory (value cycling progression)
+    # Section C - Simple Memory
     'repeating': [],                      # basic memory, no prereqs beyond A
     'alternating': ['modular'],           # alternating uses periodic thinking (i % 2)
+
+    # Section D - Extended Cycles
     'periodic_repeat': ['alternating'],   # extends alternating to 3-4 value cycles
 
-    # Section D - Indexed Retrieval
+    # Section E - Indexed Retrieval
     'indexed_lookup': ['modular', 'repeating'],  # position math + memory retrieval
 
-    # Section E - Growth Patterns
+    # Section F - Growth Patterns
     'fixed_offset': ['incrementing'],     # fixed_offset extends incrementing
     'geometric': ['incrementing', 'staircase'],  # growth needs linear foundations
 }

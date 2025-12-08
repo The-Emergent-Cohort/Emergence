@@ -93,6 +93,10 @@ class CurriculumSequencer:
         self.all_sections_complete = False
         self.history = []
 
+        # Play day tracking
+        self.days_on_current_section = 0
+        self.play_day_interval = 5  # Play day every N days stuck on same section
+
     def get_all_topics(self) -> List[str]:
         """Get all topics from curriculum in order."""
         all_topics = []
@@ -239,6 +243,7 @@ class CurriculumSequencer:
         Returns True if there are more sections, False if all complete.
         """
         self.section_passed[self.current_section_idx] = True
+        self.days_on_current_section = 0  # Reset play day counter
 
         if self.current_section_idx < len(self.sections) - 1:
             self.current_section_idx += 1
@@ -246,6 +251,16 @@ class CurriculumSequencer:
         else:
             self.all_sections_complete = True
             return False
+
+    def is_play_day(self) -> bool:
+        """
+        Check if current day should be a play day.
+        Play days are non-scoring creative exploration epochs.
+        Fires after N days stuck on same section, then every N days.
+        """
+        if self.days_on_current_section < self.play_day_interval:
+            return False
+        return self.days_on_current_section % self.play_day_interval == 0
 
     def get_current_section(self) -> Dict:
         """Get current section info."""
@@ -285,9 +300,11 @@ class CurriculumSequencer:
             callbacks: Optional dict of callback functions:
                 - 'on_epoch_start': fn(epoch, section_info)
                 - 'on_epoch_end': fn(epoch, metrics)
+                - 'on_play_day': fn(model, topics, epoch) -> metrics (creative exploration, no scoring)
                 - 'on_section_exam': fn(section, results, passed)
                 - 'on_section_complete': fn(section_idx, next_section)
                 - 'on_final_exam': fn(results, passed)
+                - 'on_stuck_topic': fn(stuck_info, topic_to_idx, tracker)
             save_checkpoint_fn: Optional fn(model, epoch, metrics) for saving
 
         Returns:
@@ -316,8 +333,35 @@ class CurriculumSequencer:
                     'section_idx': self.current_section_idx,
                     'section_name': current_section['name'],
                     'active_topics': active_topics,
-                    'maintenance_topics': maintenance_topics
+                    'maintenance_topics': maintenance_topics,
+                    'is_play_day': self.is_play_day(),
+                    'days_on_section': self.days_on_current_section
                 })
+
+            # === PLAY DAY (non-scoring creative exploration) ===
+            if self.is_play_day() and 'on_play_day' in callbacks:
+                print(f"\n🎨 PLAY DAY! (Day {self.days_on_current_section} on {current_section['name']})")
+                print("   Creative exploration - no scoring, just play!")
+
+                all_learned = active_topics + maintenance_topics
+                play_metrics = callbacks['on_play_day'](model, all_learned, epoch)
+
+                # Record play day in history
+                epoch_record = {
+                    'epoch': epoch,
+                    'section': self.current_section_idx,
+                    'section_name': current_section['name'],
+                    'is_play_day': True,
+                    'play_metrics': play_metrics,
+                    'progress': self.get_progress_summary()
+                }
+                self.history.append(epoch_record)
+
+                if 'on_epoch_end' in callbacks:
+                    callbacks['on_epoch_end'](epoch, epoch_record)
+
+                self.days_on_current_section += 1
+                continue  # Skip normal training/exams
 
             # === TRAINING ===
             train_metrics = train_fn(model, active_topics, maintenance_topics, epoch)
@@ -465,6 +509,9 @@ class CurriculumSequencer:
             # Callback: epoch end
             if 'on_epoch_end' in callbacks:
                 callbacks['on_epoch_end'](epoch, epoch_record)
+
+            # Track days on current section (for play day calculation)
+            self.days_on_current_section += 1
 
             # Save checkpoint
             if save_checkpoint_fn:
