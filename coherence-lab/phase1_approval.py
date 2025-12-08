@@ -63,12 +63,87 @@ CURRICULUM_SECTIONS = [
     }
 ]
 
+# === CURRICULUM BRIDGES ===
+# When stuck on a pattern, teacher proposes these foundational concepts
+# If bridge is in an earlier section, reinforce that section
+# If bridge is missing entirely, flag as curriculum gap
+CURRICULUM_BRIDGES = {
+    # Section B - Position Math
+    'modular': ['counting'],              # modular needs position awareness
+    'staircase': ['counting'],            # staircase needs position awareness
+
+    # Section C - Simple Memory
+    'repeating': [],                      # basic memory, no prereqs beyond A
+    'alternating': ['modular'],           # alternating uses periodic thinking
+
+    # Section D - Complex Memory
+    'indexed_lookup': ['modular'],        # indexed lookup = modular position + memory
+    'periodic_repeat': ['modular', 'indexed_lookup'],  # needs both periodic + memory
+
+    # Section E - Growth Patterns
+    'fixed_offset': ['incrementing'],     # fixed_offset extends incrementing
+    'geometric': ['incrementing', 'staircase'],  # growth needs linear foundations
+}
+
+
 def get_all_patterns():
     """Get all patterns from curriculum in order."""
     all_patterns = []
     for section in CURRICULUM_SECTIONS:
         all_patterns.extend(section['patterns'])
     return all_patterns
+
+
+def get_pattern_section(pattern_name):
+    """Get which section a pattern belongs to."""
+    for i, section in enumerate(CURRICULUM_SECTIONS):
+        if pattern_name in section['patterns']:
+            return i, section
+    return None, None
+
+
+def diagnose_stuckness(stuck_pattern, pattern_to_idx, tracker):
+    """
+    Teacher diagnoses why student is stuck and proposes help.
+
+    Returns:
+        dict with:
+        - bridges: list of bridging patterns to reinforce
+        - sections_to_reinforce: section indices that need work
+        - is_curriculum_gap: True if bridge pattern isn't in curriculum
+    """
+    bridges = CURRICULUM_BRIDGES.get(stuck_pattern, [])
+    if not bridges:
+        return {'bridges': [], 'sections_to_reinforce': [], 'is_curriculum_gap': False}
+
+    all_patterns = get_all_patterns()
+    sections_to_reinforce = set()
+    weak_bridges = []
+    curriculum_gap = False
+
+    for bridge in bridges:
+        if bridge not in all_patterns:
+            # Bridge pattern not in curriculum - this is a gap!
+            curriculum_gap = True
+            continue
+
+        bridge_idx = pattern_to_idx.get(bridge)
+        if bridge_idx is None:
+            continue
+
+        # Check if bridge pattern is weak (low level)
+        bridge_level = tracker.get_level(bridge_idx)
+        if bridge_level < 5:  # Not yet solid
+            weak_bridges.append(bridge)
+            sec_idx, _ = get_pattern_section(bridge)
+            if sec_idx is not None:
+                sections_to_reinforce.add(sec_idx)
+
+    return {
+        'bridges': weak_bridges,
+        'sections_to_reinforce': sorted(sections_to_reinforce),
+        'is_curriculum_gap': curriculum_gap
+    }
 
 
 def train_day_with_approval(model, loader, optimizer, criterion, device, pattern_to_idx):
@@ -499,6 +574,30 @@ def main(args):
             }, Path(args.data_dir) / 'phase1_approval_best.pt')
             topic_registry.save(registry_path)
 
+    def on_stuck_topic(stuck_info, topic_to_idx_map, trk):
+        """Teacher notices student is stuck and proposes help."""
+        topic = stuck_info['topic']
+        reason = stuck_info['reason']
+
+        print(f"\n  [Teacher notices: {topic} is stuck ({reason})]")
+
+        # Diagnose and propose bridging concepts
+        diagnosis = diagnose_stuckness(topic, topic_to_idx_map, trk)
+
+        if diagnosis['bridges']:
+            print(f"    Teacher proposes: Reinforce foundations - {diagnosis['bridges']}")
+            for bridge in diagnosis['bridges']:
+                bridge_idx = topic_to_idx_map.get(bridge)
+                if bridge_idx is not None:
+                    trk.record_teacher_proposal(bridge_idx)
+
+        if diagnosis['sections_to_reinforce']:
+            sec_names = [CURRICULUM_SECTIONS[i]['name'] for i in diagnosis['sections_to_reinforce']]
+            print(f"    Sections to revisit: {sec_names}")
+
+        if diagnosis['is_curriculum_gap']:
+            print(f"    ⚠ CURRICULUM GAP: Missing bridging concepts for {topic}!")
+
     def on_section_exam(section, results, passed):
         print(f"\n  === SECTION EXAM: {section['name']} ===")
         for r in results:
@@ -546,6 +645,7 @@ def main(args):
         callbacks={
             'on_epoch_start': on_epoch_start,
             'on_epoch_end': on_epoch_end,
+            'on_stuck_topic': on_stuck_topic,
             'on_section_exam': on_section_exam,
             'on_section_complete': on_section_complete,
             'on_final_exam': on_final_exam

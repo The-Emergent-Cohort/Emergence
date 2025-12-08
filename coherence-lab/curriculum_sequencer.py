@@ -329,6 +329,8 @@ class CurriculumSequencer:
             # Run level exams for all training topics
             level_exam_results = []
             all_training_topics = active_topics + maintenance_topics
+            topics_that_leveled = set()
+
             for topic_name in all_training_topics:
                 idx = self.topic_to_idx[topic_name]
                 if self.tracker.check_exam_eligible(idx):
@@ -343,6 +345,37 @@ class CurriculumSequencer:
                     result = self.tracker.take_exam(idx, correct, total)
                     result['topic'] = topic_name
                     level_exam_results.append(result)
+
+                    # Track stuckness based on exam results
+                    if hasattr(self.tracker, 'record_level_up'):
+                        if result['passed']:
+                            self.tracker.record_level_up(idx)
+                            topics_that_leveled.add(topic_name)
+                        else:
+                            self.tracker.record_exam_failure(idx)
+
+            # === STUCKNESS TRACKING ===
+            # Tick stuckness for active topics that didn't level up
+            if hasattr(self.tracker, 'tick_stuckness'):
+                for topic_name in active_topics:
+                    if topic_name not in topics_that_leveled:
+                        idx = self.topic_to_idx[topic_name]
+                        self.tracker.tick_stuckness(idx)
+
+            # === TEACHER STUCKNESS CHECK ===
+            # Check if any active topics are stuck and need intervention
+            stuck_topics = []
+            if hasattr(self.tracker, 'check_stuck'):
+                for topic_name in active_topics:
+                    idx = self.topic_to_idx[topic_name]
+                    is_stuck, reason = self.tracker.check_stuck(idx)
+                    if is_stuck:
+                        stuck_topics.append({'topic': topic_name, 'idx': idx, 'reason': reason})
+
+            # Callback: teacher proposal for stuck topics
+            if stuck_topics and 'on_stuck_topic' in callbacks:
+                for stuck_info in stuck_topics:
+                    callbacks['on_stuck_topic'](stuck_info, self.topic_to_idx, self.tracker)
 
             # === SECTION EXAM ===
             section_exam_results = None
@@ -388,6 +421,7 @@ class CurriculumSequencer:
                 'level_exams': level_exam_results,
                 'section_exam': section_exam_results,
                 'final_exam': final_exam_results,
+                'stuck_topics': stuck_topics,
                 'progress': self.get_progress_summary()
             }
             self.history.append(epoch_record)

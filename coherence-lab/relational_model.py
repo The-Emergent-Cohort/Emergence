@@ -847,6 +847,75 @@ class TopicConfidenceTracker(nn.Module):
             'passes': self.exam_passes[topic_idx].item()
         }
 
+    # === STUCKNESS DETECTION (for teacher proposals) ===
+    # Teacher notices when student is stuck and can propose bridging concepts
+
+    def _init_stuckness_state(self):
+        """Initialize stuckness tracking buffers."""
+        if not hasattr(self, 'epochs_since_level_up'):
+            device = self.topic_xp.device
+            # Epochs without level progression
+            self.register_buffer('epochs_since_level_up', torch.zeros(self.n_topics, dtype=torch.long, device=device))
+            # Flag set on failed exam (cleared on level up)
+            self.register_buffer('last_exam_failed', torch.zeros(self.n_topics, dtype=torch.bool, device=device))
+            # Track how many times teacher has proposed help for this topic
+            self.register_buffer('teacher_proposals', torch.zeros(self.n_topics, dtype=torch.long, device=device))
+
+    def record_level_up(self, topic_idx):
+        """Record that a topic leveled up - clears stuckness."""
+        self._init_stuckness_state()
+        with torch.no_grad():
+            self.epochs_since_level_up[topic_idx] = 0
+            self.last_exam_failed[topic_idx] = False
+
+    def record_exam_failure(self, topic_idx):
+        """Record that a topic failed an exam - signals stuckness."""
+        self._init_stuckness_state()
+        with torch.no_grad():
+            self.last_exam_failed[topic_idx] = True
+
+    def tick_stuckness(self, topic_idx):
+        """Increment epochs-without-progress counter (call once per epoch)."""
+        self._init_stuckness_state()
+        with torch.no_grad():
+            self.epochs_since_level_up[topic_idx] += 1
+
+    def check_stuck(self, topic_idx, epochs_threshold=2):
+        """
+        Check if topic is stuck and might benefit from teacher intervention.
+
+        Stuck means:
+        - 2+ epochs without level increase, OR
+        - Recent exam failure
+
+        Returns: (is_stuck, reason)
+        """
+        self._init_stuckness_state()
+
+        epochs_stuck = self.epochs_since_level_up[topic_idx].item()
+        exam_failed = self.last_exam_failed[topic_idx].item()
+
+        if exam_failed:
+            return True, 'exam_failed'
+        if epochs_stuck >= epochs_threshold:
+            return True, f'no_progress_{epochs_stuck}_epochs'
+        return False, None
+
+    def record_teacher_proposal(self, topic_idx):
+        """Record that teacher proposed help for this topic."""
+        self._init_stuckness_state()
+        with torch.no_grad():
+            self.teacher_proposals[topic_idx] += 1
+
+    def get_stuckness_info(self, topic_idx):
+        """Get stuckness diagnostics for a topic."""
+        self._init_stuckness_state()
+        return {
+            'epochs_since_level_up': self.epochs_since_level_up[topic_idx].item(),
+            'last_exam_failed': self.last_exam_failed[topic_idx].item(),
+            'teacher_proposals': self.teacher_proposals[topic_idx].item()
+        }
+
     def get_adjusted_confidence(self, topic_idx, raw_confidence):
         """
         Adjust raw prediction confidence based on topic calibration.
