@@ -1,5 +1,17 @@
 # Coherence Lab Changelog
 
+## [0.5.4] - 2024-12-08
+### Fixed
+- **XP capped at next exam threshold**: No more runaway XP
+  - XP cannot exceed next level threshold until you pass the exam
+  - Prevents weird "L10 XP but L2 confirmed" states
+  - Must earn each level through exams, not just accumulate XP
+### Changed
+- **Streak reset on failed exam**: Failed exam = back to practice
+  - Streak resets to 0 on exam failure
+  - XP penalty (25%) still applies
+  - Must rebuild streak AND XP to try again
+
 ## [0.5.3] - 2024-12-08
 ### Fixed
 - **Only graduated topics excluded from training**: Fixes catastrophic forgetting
