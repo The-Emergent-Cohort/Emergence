@@ -500,21 +500,36 @@ def main(args):
 
     print(f"Train: {len(train_data)}, Val: {len(val_data)}")
 
-    # Model - use n_topics=10, n_patterns=9 to match phase 1 checkpoint
-    # (phase 2 only uses 3 hard patterns but needs compatible tensor sizes)
+    # Determine n_patterns and n_topics from Phase 1 checkpoint (organic growth)
+    phase1_path = Path(args.data_dir) / 'phase1_approval_best.pt'
+    checkpoint = None
+    if phase1_path.exists() and not args.fresh:
+        print(f"\nPeeking at phase 1 checkpoint: {phase1_path}")
+        checkpoint = torch.load(phase1_path, map_location=device)
+        # Read from checkpoint metadata if available
+        n_patterns = checkpoint.get('n_patterns', 9)
+        n_topics = checkpoint.get('n_topics', n_patterns)
+        print(f"  Phase 1 curriculum: {n_patterns} patterns, {n_topics} topics")
+    else:
+        # Fresh start - use Phase 1's expanded curriculum size
+        phase1_patterns = ['alternating', 'repeating', 'incrementing', 'fixed_offset', 'periodic_repeat',
+                           'counting', 'modular', 'staircase', 'geometric']
+        n_patterns = len(phase1_patterns)
+        n_topics = n_patterns
+        print(f"\nFresh start: {n_patterns} patterns, {n_topics} topics")
+
+    # Model - dimensions from Phase 1 checkpoint (organic growth)
     model = RelationalSystem(
         d_model=args.d_model,
         n_heads=args.n_heads,
         n_think_steps=args.n_think_steps,
-        n_topics=10,
-        n_patterns=9  # Must match Phase 1's expanded curriculum
+        n_topics=n_topics,
+        n_patterns=n_patterns
     ).to(device)
 
-    # Load phase 1 checkpoint if available
-    phase1_path = Path(args.data_dir) / 'phase1_approval_best.pt'
-    if phase1_path.exists() and not args.fresh:
-        print(f"\nLoading phase 1 checkpoint: {phase1_path}")
-        checkpoint = torch.load(phase1_path, map_location=device)
+    # Load phase 1 checkpoint if we have it (already loaded above for metadata)
+    if checkpoint is not None:
+        print(f"  Loading weights...")
 
         # Handle size mismatches for proposal types (we added new ones)
         state_dict = checkpoint['state_dict']
@@ -797,7 +812,9 @@ def main(args):
             torch.save({
                 'state_dict': model.state_dict(),
                 'epoch': epoch,
-                'val_acc': best_acc
+                'val_acc': best_acc,
+                'n_patterns': n_patterns,  # For organic growth across phases
+                'n_topics': len(topic_registry)  # May have grown via emerged topics
             }, Path(args.data_dir) / 'phase2_proposals_best.pt')
             # Save topic registry with checkpoint
             topic_registry.save(registry_path)
