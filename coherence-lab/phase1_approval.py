@@ -11,7 +11,7 @@ Building the social learning foundation:
 This is the developmental foundation for later phases.
 """
 
-__version__ = "0.5.17"  # Level-scaled creativity threshold
+__version__ = "0.6.0"  # Expanded curriculum: +counting, modular, staircase, geometric
 
 import torch
 import torch.nn as nn
@@ -294,9 +294,10 @@ def main(args):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Device: {device}")
 
-    # Easy patterns for foundation building
-    # periodic_repeat added to prep for long_range (teaches "look back N positions")
-    pattern_types = ['alternating', 'repeating', 'incrementing', 'fixed_offset', 'periodic_repeat']
+    # Foundation patterns - building blocks for Phase 2
+    # Original 5 + new position mathematics patterns for long_range prep
+    pattern_types = ['alternating', 'repeating', 'incrementing', 'fixed_offset', 'periodic_repeat',
+                     'counting', 'modular', 'staircase', 'geometric']
     pattern_to_idx = {p: i for i, p in enumerate(pattern_types)}
     print(f"Pattern types: {pattern_types}")
 

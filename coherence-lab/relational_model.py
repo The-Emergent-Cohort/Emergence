@@ -3378,6 +3378,10 @@ class PatternDataset(Dataset):
     - incrementing: [1,2,3,4,...] → look back 1, add 1
     - fixed_offset: [2,5,8,11,...] → look back 1, add k
     - periodic_repeat: [a,b,c,a,b,c,...] → look back period (3-4)
+    - counting: [0,1,2,3,4,...] → explicit position tracking
+    - modular: [0,1,2,0,1,2,...] → i % period (cycle position)
+    - staircase: [0,0,1,1,2,2,...] → i // step (integer division)
+    - geometric: [1,2,4,8,...] → multiplicative growth
 
     Use pattern_types parameter to control which patterns are included.
     """
@@ -3434,6 +3438,39 @@ class PatternDataset(Dataset):
             seq = (base * full_cycles) + base[:extra]
             # Target is what comes next in the cycle
             target = base[extra % period]
+        elif pt == 'counting':
+            # Simple position counting: 0, 1, 2, 3, 4, 5...
+            # Teaches: explicit position awareness
+            length = random.randint(4, 8)
+            start = random.randint(0, max(0, self.vocab_size - length - 2))
+            seq = [start + i for i in range(length)]
+            target = start + length
+        elif pt == 'modular':
+            # Cycle position: 0, 1, 2, 0, 1, 2, 0, 1, 2...
+            # Teaches: i % period (where am I in the cycle?)
+            period = random.randint(2, 4)
+            length = random.randint(5, 9)
+            seq = [i % period for i in range(length)]
+            target = length % period
+        elif pt == 'staircase':
+            # Slow increment: 0, 0, 0, 1, 1, 1, 2, 2, 2...
+            # Teaches: i // step (integer division / quantization)
+            step = random.randint(2, 3)
+            length = random.randint(5, 9)
+            seq = [i // step for i in range(length)]
+            target = length // step
+        elif pt == 'geometric':
+            # Multiplicative growth: 1, 2, 4, 8, 16...
+            # Teaches: different operation (multiply vs add)
+            length = random.randint(3, 5)  # Keep short to stay in vocab
+            base = random.randint(1, 2)
+            multiplier = 2
+            seq = [base * (multiplier ** i) for i in range(length)]
+            target = base * (multiplier ** length)
+            # Clamp to vocab size
+            if target >= self.vocab_size:
+                target = self.vocab_size - 1
+            seq = [min(x, self.vocab_size - 1) for x in seq]
         else:
             raise ValueError(f"Unknown pattern type: {pt}")
 
@@ -3474,11 +3511,12 @@ def collate_fn(batch):
 # Phase configurations
 CURRICULUM_CONFIG = {
     '1': {
-        'patterns': ['repeating', 'alternating', 'incrementing', 'fixed_offset', 'periodic_repeat'],
+        'patterns': ['repeating', 'alternating', 'incrementing', 'fixed_offset', 'periodic_repeat',
+                     'counting', 'modular', 'staircase', 'geometric'],
         'seq_len': (4, 6),
         'max_pad': 8,
         'success_threshold': 0.95,
-        'description': 'Foundation patterns'
+        'description': 'Foundation patterns + position mathematics'
     },
     '2a': {
         'patterns': ['repeating', 'alternating', 'periodic_3', 'periodic_4'],

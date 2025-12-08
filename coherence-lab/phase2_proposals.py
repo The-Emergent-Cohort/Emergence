@@ -562,8 +562,9 @@ def main(args):
         print(f"  Loaded {len(topic_registry)} curriculum topics")
     else:
         print("\nCreating topic registry with curriculum patterns")
-        # Include Phase 1 patterns as curriculum topics
-        phase1_patterns = ['alternating', 'repeating', 'incrementing', 'fixed_offset', 'periodic_repeat']
+        # Include Phase 1 patterns as curriculum topics (all 9 foundation patterns)
+        phase1_patterns = ['alternating', 'repeating', 'incrementing', 'fixed_offset', 'periodic_repeat',
+                           'counting', 'modular', 'staircase', 'geometric']
         topic_registry = DynamicTopicRegistry(phase1_patterns + pattern_types)
         print(f"  Initialized with {len(topic_registry)} curriculum topics")
 
