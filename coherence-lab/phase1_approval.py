@@ -11,7 +11,7 @@ Building the social learning foundation:
 This is the developmental foundation for later phases.
 """
 
-__version__ = "0.5.7"  # Multiple level-ups per epoch
+__version__ = "0.5.8"  # Simplified exam flow, no cooldowns
 
 import torch
 import torch.nn as nn
@@ -406,17 +406,19 @@ def main(args):
         import sys; sys.stdout.flush()
 
         # === EXAMINATION SYSTEM ===
-        # Check for topics ready for level-up exams
-        # Allow multiple level-ups per epoch - keep testing until topics fail or graduate
+        # Take exams until you fail - first failure stops you for this epoch
+        # 25% XP penalty carries over, try again next epoch
         tracker = model.learner.self_model.topic_tracker
-        tracker.tick_cooldowns()  # Decrement any cooldowns from failed exams
 
         exam_results = []
+        failed_this_epoch = set()  # Topics that failed - done for this epoch
         exam_round = 0
         any_advanced = True
         while any_advanced:
             any_advanced = False
             for pattern_name, idx in pattern_to_idx.items():
+                if idx in failed_this_epoch:
+                    continue  # Already failed this epoch, wait for next
                 if tracker.check_exam_eligible(idx):
                     # Generate exam batch for this topic
                     current_level = tracker.get_level(idx)
@@ -452,6 +454,8 @@ def main(args):
 
                     if result['passed']:
                         any_advanced = True  # Keep going if anyone passed
+                    else:
+                        failed_this_epoch.add(idx)  # Done for this epoch
             exam_round += 1
 
         # Display exam results (formative, not judgmental)

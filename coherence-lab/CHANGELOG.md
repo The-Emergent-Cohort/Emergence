@@ -1,5 +1,14 @@
 # Coherence Lab Changelog
 
+## [0.5.8] - 2024-12-08
+### Changed
+- **Simplified exam flow**: No more cooldowns, just fail-and-retry
+  - XP accumulates during epoch, exams at end
+  - First failure = done for this epoch, 25% penalty
+  - Failed exam drops you to target threshold minus 25% of excess
+  - You don't keep XP above what you couldn't prove
+  - Try again next epoch if XP allows
+
 ## [0.5.7] - 2024-12-08
 ### Changed
 - **Multiple level-ups per epoch**: Topics can advance as far as they can prove
