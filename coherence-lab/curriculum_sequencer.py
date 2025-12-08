@@ -377,6 +377,17 @@ class CurriculumSequencer:
                 for stuck_info in stuck_topics:
                     callbacks['on_stuck_topic'](stuck_info, self.topic_to_idx, self.tracker)
 
+            # Check if callback flagged a curriculum order error
+            if hasattr(self, 'curriculum_order_error') and self.curriculum_order_error:
+                return {
+                    'completed': False,
+                    'epochs': epoch,
+                    'final_section': self.current_section_idx,
+                    'sections_passed': self.section_passed.copy(),
+                    'history': self.history,
+                    'error': 'curriculum_order_error'
+                }
+
             # === SECTION EXAM ===
             section_exam_results = None
             section_passed = False

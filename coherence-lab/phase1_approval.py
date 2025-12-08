@@ -102,23 +102,34 @@ def get_pattern_section(pattern_name):
     return None, None
 
 
-def diagnose_stuckness(stuck_pattern, pattern_to_idx, tracker):
+def diagnose_stuckness(stuck_pattern, pattern_to_idx, tracker, current_section_idx):
     """
     Teacher diagnoses why student is stuck and proposes help.
 
+    Args:
+        stuck_pattern: Pattern name that's stuck
+        pattern_to_idx: Mapping from pattern name to index
+        tracker: TopicConfidenceTracker
+        current_section_idx: Which section we're currently on
+
     Returns:
         dict with:
-        - bridges: list of bridging patterns to reinforce
+        - bridges: list of bridging patterns to reinforce (already taught)
+        - untaught_bridges: list of bridges in future sections (curriculum order issue)
         - sections_to_reinforce: section indices that need work
-        - is_curriculum_gap: True if bridge pattern isn't in curriculum
+        - is_curriculum_gap: True if bridge pattern isn't in curriculum at all
     """
     bridges = CURRICULUM_BRIDGES.get(stuck_pattern, [])
     if not bridges:
-        return {'bridges': [], 'sections_to_reinforce': [], 'is_curriculum_gap': False}
+        return {
+            'bridges': [], 'untaught_bridges': [],
+            'sections_to_reinforce': [], 'is_curriculum_gap': False
+        }
 
     all_patterns = get_all_patterns()
     sections_to_reinforce = set()
     weak_bridges = []
+    untaught_bridges = []
     curriculum_gap = False
 
     for bridge in bridges:
@@ -131,16 +142,23 @@ def diagnose_stuckness(stuck_pattern, pattern_to_idx, tracker):
         if bridge_idx is None:
             continue
 
-        # Check if bridge pattern is weak (low level)
-        bridge_level = tracker.get_level(bridge_idx)
-        if bridge_level < 5:  # Not yet solid
-            weak_bridges.append(bridge)
-            sec_idx, _ = get_pattern_section(bridge)
-            if sec_idx is not None:
-                sections_to_reinforce.add(sec_idx)
+        # Which section is this bridge in?
+        bridge_section_idx, _ = get_pattern_section(bridge)
+
+        if bridge_section_idx is not None and bridge_section_idx > current_section_idx:
+            # Bridge is in a FUTURE section - curriculum order issue!
+            untaught_bridges.append(bridge)
+        else:
+            # Bridge is in current or past section - check if weak
+            bridge_level = tracker.get_level(bridge_idx)
+            if bridge_level < 5:  # Not yet solid
+                weak_bridges.append(bridge)
+                if bridge_section_idx is not None:
+                    sections_to_reinforce.add(bridge_section_idx)
 
     return {
         'bridges': weak_bridges,
+        'untaught_bridges': untaught_bridges,
         'sections_to_reinforce': sorted(sections_to_reinforce),
         'is_curriculum_gap': curriculum_gap
     }
@@ -574,15 +592,20 @@ def main(args):
             }, Path(args.data_dir) / 'phase1_approval_best.pt')
             topic_registry.save(registry_path)
 
+    # Track proposals for untaught bridges (curriculum order issues)
+    untaught_proposals = {}  # bridge_name -> count
+
     def on_stuck_topic(stuck_info, topic_to_idx_map, trk):
         """Teacher notices student is stuck and proposes help."""
+        nonlocal untaught_proposals
+
         topic = stuck_info['topic']
         reason = stuck_info['reason']
 
         print(f"\n  [Teacher notices: {topic} is stuck ({reason})]")
 
         # Diagnose and propose bridging concepts
-        diagnosis = diagnose_stuckness(topic, topic_to_idx_map, trk)
+        diagnosis = diagnose_stuckness(topic, topic_to_idx_map, trk, sequencer.current_section_idx)
 
         if diagnosis['bridges']:
             print(f"    Teacher proposes: Reinforce foundations - {diagnosis['bridges']}")
@@ -594,6 +617,24 @@ def main(args):
         if diagnosis['sections_to_reinforce']:
             sec_names = [CURRICULUM_SECTIONS[i]['name'] for i in diagnosis['sections_to_reinforce']]
             print(f"    Sections to revisit: {sec_names}")
+
+        # Track untaught bridge proposals - curriculum order issue!
+        if diagnosis['untaught_bridges']:
+            for bridge in diagnosis['untaught_bridges']:
+                untaught_proposals[bridge] = untaught_proposals.get(bridge, 0) + 1
+                bridge_section, _ = get_pattern_section(bridge)
+                sec_name = CURRICULUM_SECTIONS[bridge_section]['name'] if bridge_section else "?"
+                print(f"    ⚠ Untaught prerequisite: {bridge} (in {sec_name}, proposal #{untaught_proposals[bridge]})")
+
+                if untaught_proposals[bridge] >= 2:
+                    print(f"\n{'!'*60}")
+                    print(f"!!! CURRICULUM ORDER ERROR !!!")
+                    print(f"    Pattern '{topic}' needs '{bridge}' but it's in a later section.")
+                    print(f"    Suggested fix: Move '{bridge}' before '{topic}' in curriculum.")
+                    print(f"    Stopping training - please review CURRICULUM_SECTIONS order.")
+                    print(f"{'!'*60}")
+                    # Signal to stop - we'll check this after callback
+                    sequencer.curriculum_order_error = True
 
         if diagnosis['is_curriculum_gap']:
             print(f"    ⚠ CURRICULUM GAP: Missing bridging concepts for {topic}!")
