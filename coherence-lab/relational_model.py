@@ -370,6 +370,12 @@ class TopicConfidenceTracker(nn.Module):
         self.register_buffer('topic_confidence', torch.zeros(n_topics))
         self.register_buffer('topic_count', torch.zeros(n_topics))
 
+        # Per-topic streak tracking for mastery
+        self.register_buffer('topic_streak', torch.zeros(n_topics, dtype=torch.long))
+        self.register_buffer('topic_best_streak', torch.zeros(n_topics, dtype=torch.long))
+        self.register_buffer('topic_mastered', torch.zeros(n_topics, dtype=torch.bool))
+        self.mastery_threshold = 100  # 10x starting goal
+
     def update(self, topic_idx, was_correct, predicted_confidence):
         """
         Update topic statistics after a prediction.
@@ -408,6 +414,18 @@ class TopicConfidenceTracker(nn.Module):
                     self.topic_confidence[idx] = (1 - self.ema_alpha) * self.topic_confidence[idx] + self.ema_alpha * conf_val
 
                 self.topic_count[idx] += 1
+
+                # Update per-topic streak
+                if was_correct[i]:
+                    self.topic_streak[idx] += 1
+                    # Track best streak
+                    if self.topic_streak[idx] > self.topic_best_streak[idx]:
+                        self.topic_best_streak[idx] = self.topic_streak[idx].clone()
+                    # Check for mastery
+                    if self.topic_streak[idx] >= self.mastery_threshold:
+                        self.topic_mastered[idx] = True
+                else:
+                    self.topic_streak[idx] = 0  # Reset on error
 
     def get_calibration(self, topic_idx):
         """
@@ -460,6 +478,30 @@ class TopicConfidenceTracker(nn.Module):
             return self.topic_accuracy[topic_idx].item()
         return self.topic_accuracy[topic_idx]
 
+    def is_mastered(self, topic_idx):
+        """Returns True if topic has achieved mastery (100 streak)."""
+        if isinstance(topic_idx, int):
+            return self.topic_mastered[topic_idx].item()
+        return self.topic_mastered[topic_idx]
+
+    def get_streak_info(self, topic_idx):
+        """Get streak info for a topic: (current, best, mastered)."""
+        if isinstance(topic_idx, int):
+            return (
+                self.topic_streak[topic_idx].item(),
+                self.topic_best_streak[topic_idx].item(),
+                self.topic_mastered[topic_idx].item()
+            )
+        return (
+            self.topic_streak[topic_idx],
+            self.topic_best_streak[topic_idx],
+            self.topic_mastered[topic_idx]
+        )
+
+    def get_unmastered_topics(self):
+        """Get list of topic indices that haven't achieved mastery yet."""
+        return (~self.topic_mastered).nonzero(as_tuple=True)[0].tolist()
+
     def get_adjusted_confidence(self, topic_idx, raw_confidence):
         """
         Adjust raw prediction confidence based on topic calibration.
@@ -507,6 +549,23 @@ class TopicConfidenceTracker(nn.Module):
             self.register_buffer('topic_accuracy', new_accuracy)
             self.register_buffer('topic_confidence', new_confidence)
             self.register_buffer('topic_count', new_count)
+
+            # Expand streak buffers
+            new_streak = torch.zeros(new_size, dtype=torch.long, device=device)
+            new_best_streak = torch.zeros(new_size, dtype=torch.long, device=device)
+            new_mastered = torch.zeros(new_size, dtype=torch.bool, device=device)
+
+            new_streak[:self.n_topics] = self.topic_streak
+            new_best_streak[:self.n_topics] = self.topic_best_streak
+            new_mastered[:self.n_topics] = self.topic_mastered
+
+            del self.topic_streak
+            del self.topic_best_streak
+            del self.topic_mastered
+
+            self.register_buffer('topic_streak', new_streak)
+            self.register_buffer('topic_best_streak', new_best_streak)
+            self.register_buffer('topic_mastered', new_mastered)
 
             self.n_topics = new_size
 
@@ -693,8 +752,9 @@ class SelfModel(nn.Module):
                 if reason is not None:
                     should_show[i] = True
                     show_reasons[i] = reason
-                    # Reset streak on ANY show - counting toward next goal
-                    self.streak_count.zero_()
+                    # Only reset streak on STREAK shows - creative/validation don't interrupt
+                    if reason == 'streak':
+                        self.streak_count.zero_()
 
         return should_show, show_reasons
 
@@ -2313,12 +2373,9 @@ class RelationalTeacher(nn.Module):
         - goal_action: None or dict with goal-setting info if it's time to raise the bar
         """
         with torch.no_grad():
-            # Update perceived competence (EMA of correctness)
-            self.total_observed += 1
-            if was_correct.any():
-                self.correct_observed += 1
-            obs_rate = self.correct_observed.float() / self.total_observed.float()
-            self.perceived_competence = 0.95 * self.perceived_competence + 0.05 * obs_rate
+            # NOTE: perceived_competence is updated in monitor_unshown_work
+            # which sees ALL items, not just shown ones. This method only
+            # handles the approval logic for shown work.
 
             # Approval threshold rises with perceived competence
             # At 50% competence: threshold = 0.3 (low bar)
@@ -2363,8 +2420,9 @@ class RelationalTeacher(nn.Module):
             # Update how impressed teacher is (novelty wears off)
             self.update_impressedness(approval_level, show_reason)
 
-            # Check if it's time to raise the bar
-            if self.should_set_new_goal():
+            # Check if it's time to raise the bar - ONLY on streak shows
+            # Streaks are the actual goal achievement, not creative/validation shows
+            if show_reason == 'streak' and self.should_set_new_goal():
                 # Decide: directive ("let's do 5") or negotiation ("how many do you think?")
                 # Early: more directive (teacher setting expectations)
                 # Later: more negotiation (student learning self-assessment)
@@ -2390,6 +2448,15 @@ class RelationalTeacher(nn.Module):
             - streak_length: how many correct in a row without showing
         """
         with torch.no_grad():
+            # === UPDATE PERCEIVED COMPETENCE FROM ALL ITEMS ===
+            # This is the ground truth - teacher observes everything
+            batch_size = was_correct_batch.numel()
+            correct_count = was_correct_batch.sum().item()
+            self.total_observed += batch_size
+            self.correct_observed += correct_count
+            obs_rate = self.correct_observed.float() / self.total_observed.float()
+            self.perceived_competence = 0.95 * self.perceived_competence + 0.05 * obs_rate
+
             # Count correct answers that weren't shown
             correct_unshown = (was_correct_batch & ~was_shown_batch).sum().item()
             total_unshown = (~was_shown_batch).sum().item()
@@ -2474,7 +2541,7 @@ class RelationalTeacher(nn.Module):
 
             # NEW: If student is very competent, push them even if not bored
             # "You're doing great at 6, let's try something harder"
-            competence = self.perceived_competence.item()
+            competence = max(0.0, min(1.0, self.perceived_competence.item()))
             expected_goal = 3 + int(12 * competence)  # Scale higher - no artificial cap
             goal_too_easy = (competence > 0.8 and
                            self.current_goal.item() < expected_goal - 1)
@@ -2494,22 +2561,31 @@ class RelationalTeacher(nn.Module):
         with torch.no_grad():
             competence = self.perceived_competence.item()
 
-            # Base goal increases with competence - NO CAP
+            # Base goal increases with competence
             # Low competence (0.3): goal = 6
             # Medium competence (0.6): goal = 10
             # High competence (0.9): goal = 13-14
             # Full competence (1.0): goal = 15
+            # Defensive: clamp competence to valid range
+            competence = max(0.0, min(1.0, competence))
             base_goal = 3 + int(12 * competence)
 
-            # Scale increment: 25-50% based on impressedness
-            # Impressed teacher pushes harder
-            current = self.current_goal.item()
-            scale_factor = 1.25 + 0.25 * self.impressedness.item()  # 1.25 to 1.50
-            scaled_goal = int(current * scale_factor)
-            # Ensure at least +1 for very small goals
-            scaled_goal = max(scaled_goal, current + 1)
-            new_goal = max(scaled_goal, base_goal)
-            # NO CAP - let streaks grow as long as student can sustain
+            # Additive increment: +2 to +5 based on impressedness
+            # (NOT compound scaling - that caused runaway goals)
+            current = int(self.current_goal.item())
+            impressedness = max(0.0, min(1.0, self.impressedness.item()))
+            increment = 2 + int(3 * impressedness)  # +2 to +5
+            new_goal = max(current + increment, base_goal)
+
+            # Mastery cap at 100 - that's the graduation bar
+            new_goal = min(new_goal, 100)
+
+            # Reset goals_met_count to prevent immediate re-triggering
+            self.goals_met_count.zero_()
+
+            # Setting a new goal is engaging - teacher becomes invested again
+            # This prevents boredom from triggering repeated goal-setting
+            self.impressedness.clamp_(min=0.6)
 
             return {
                 'goal': new_goal,
@@ -2533,12 +2609,14 @@ class RelationalTeacher(nn.Module):
                 - feedback: message type for student
         """
         with torch.no_grad():
-            competence = self.perceived_competence.item()
-            current = self.current_goal.item()
+            # Defensive: clamp values to valid ranges
+            competence = max(0.0, min(1.0, self.perceived_competence.item()))
+            current = max(1, min(1000, int(self.current_goal.item())))
 
-            # What teacher thinks is appropriate - scale higher, no cap
+            # What teacher thinks is appropriate - capped at mastery (100)
             expected = 3 + int(12 * competence)
             expected = max(current, expected)  # Don't go below current
+            expected = min(expected, 100)  # Mastery cap
 
             # Tolerance: within 1 of expected is acceptable
             # But if student is very competent, push them to expected anyway
@@ -2552,6 +2630,8 @@ class RelationalTeacher(nn.Module):
                 else:
                     final_goal = student_proposal
 
+                # Mastery cap before fill
+                final_goal = max(1, min(100, int(final_goal)))
                 self.current_goal.fill_(final_goal)
                 self.goals_met_count.zero_()
                 self.impressedness.add_(0.1).clamp_(max=1.0)
@@ -2564,7 +2644,7 @@ class RelationalTeacher(nn.Module):
             elif diff < -1:
                 # Student proposing too low - counter up
                 # "Let's aim a bit higher - try X"
-                counter = expected
+                counter = max(1, min(100, int(expected)))
                 self.current_goal.fill_(counter)
                 self.goals_met_count.zero_()
                 return {
@@ -2578,6 +2658,7 @@ class RelationalTeacher(nn.Module):
                 # "That's ambitious! Let's start with X"
                 counter = expected + 1  # Give a bit more than expected, but not their full ask
                 counter = min(counter, student_proposal - 1)  # At least 1 below their ask
+                counter = max(1, min(100, int(counter)))  # Mastery cap
                 self.current_goal.fill_(counter)
                 self.goals_met_count.zero_()
                 return {

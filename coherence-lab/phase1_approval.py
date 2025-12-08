@@ -11,6 +11,8 @@ Building the social learning foundation:
 This is the developmental foundation for later phases.
 """
 
+__version__ = "0.3.4"  # Added per-topic streak display to epoch output
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -151,7 +153,9 @@ def train_day_with_approval(model, loader, optimizer, criterion, device, pattern
                         model.learner.self_model.update_goal_estimate_from_feedback(negotiation_result)
                     else:
                         # Teacher directive: "Let's do X next time"
-                        model.teacher.current_goal.fill_(goal_action['goal'])
+                        # Mastery cap at 100
+                        safe_goal = max(1, min(100, int(goal_action['goal'])))
+                        model.teacher.current_goal.fill_(safe_goal)
 
         # === TEACHER MONITORING (un-shown work) ===
         # Teacher observes ALL work, notices quiet competence
@@ -278,15 +282,19 @@ def main(args):
 
         val_metrics = evaluate(model, val_loader, device, pattern_to_idx)
 
-        # Update topic calibration (accuracy vs confidence gap)
+        # Update topic calibration (accuracy vs confidence gap) and streaks
         topic_calibration = {}
         for pattern_name, idx in pattern_to_idx.items():
             acc, conf, gap = model.learner.self_model.topic_tracker.get_calibration(idx)
+            streak, best_streak, mastered = model.learner.self_model.topic_tracker.get_streak_info(idx)
             topic_calibration[pattern_name] = {
                 'accuracy': acc,
                 'confidence': conf,
                 'gap': gap,
-                'status': 'guessing' if gap > 0.1 else ('overconfident' if gap < -0.1 else 'calibrated')
+                'status': 'guessing' if gap > 0.1 else ('overconfident' if gap < -0.1 else 'calibrated'),
+                'streak': streak,
+                'best_streak': best_streak,
+                'mastered': mastered
             }
 
         # Developmental state
@@ -323,14 +331,18 @@ def main(args):
         print(f"  Rising bars: competence={train_metrics['perceived_competence']:.1%}, threshold={train_metrics['approval_threshold']:.1%}")
         highest = train_metrics['highest_goal_achieved']
         print(f"  Goals: current={train_metrics['teacher_goal']}, best={highest}, student_est={train_metrics['student_goal_estimate']:.1f}, impressed={train_metrics['teacher_impressedness']:.0%}")
-        print("  Per-pattern (accuracy [calibration]):")
+        print("  Per-pattern (accuracy [calibration] streak/best):")
         for pt in pattern_types:
             acc = val_metrics['per_pattern'].get(pt, 0)
             cal = topic_calibration.get(pt, {})
             cal_status = cal.get('status', 'unknown')
+            streak = cal.get('streak', 0)
+            best_streak = cal.get('best_streak', 0)
+            mastered = cal.get('mastered', False)
             acc_symbol = "O" if acc >= 0.95 else ("o" if acc >= 0.85 else ".")
             cal_symbol = {'calibrated': 'C', 'guessing': '?', 'overconfident': '!', 'unknown': '.'}[cal_status]
-            print(f"    {pt:15s}: {acc:.1%} {acc_symbol} [{cal_status:12s}] {cal_symbol}")
+            mastery_symbol = "M" if mastered else ""
+            print(f"    {pt:15s}: {acc:.1%} {acc_symbol} [{cal_status:12s}] {cal_symbol} streak:{streak}/{best_streak} {mastery_symbol}")
         import sys; sys.stdout.flush()
 
         if val_metrics['accuracy'] > best_acc:
@@ -391,6 +403,7 @@ def main(args):
     # Save log
     run_log = {
         'script': 'phase1_approval.py',
+        'version': __version__,
         'run_id': run_id,
         'best_acc': best_acc,
         'final_trust': trust,
