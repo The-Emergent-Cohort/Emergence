@@ -673,6 +673,23 @@ class SelfModel(nn.Module):
                 # Mark learning as consolidated - increase calibration confidence
                 self.show_calibration = min(1.0, self.show_calibration + 0.1)
 
+            elif proposal_type == 'request_unknown':
+                # This is a request for help - no self-modification
+                # The value is in the teacher's response (probing questions)
+                # Store that we asked for help (meta-awareness)
+                pass  # Teacher response handles this
+
+            elif proposal_type == 'propose_novel':
+                # This is a novel idea - teacher decides if/how to implement
+                # If approved, the teacher's response includes what to do
+                # The evaluation may include 'novel_implementation' instructions
+                if evaluation.get('novel_implementation'):
+                    impl = evaluation['novel_implementation']
+                    if impl.get('type') == 'add_tracking':
+                        # Teacher approved tracking something new
+                        # For now, log that this happened (future: actually add it)
+                        pass
+
         return True
 
 
@@ -1130,6 +1147,8 @@ class ProposalGenerator(nn.Module):
         'adjust_trust',           # "I should trust teacher more/less"
         'reset_topic',            # "I'm confused about X, start fresh"
         'consolidate_learning',   # "I feel ready to lock this in"
+        'request_unknown',        # "Something feels off, I don't know what"
+        'propose_novel',          # "What if I tracked/did X differently?"
     ]
 
     def __init__(self, d_model=64, n_topics=10):
@@ -1167,6 +1186,34 @@ class ProposalGenerator(nn.Module):
         # Justification encoder: why am I proposing this?
         self.justification_encoder = nn.Linear(d_model, d_model)
 
+        # === NEW: For request_unknown and propose_novel ===
+        # Uncertainty detector: sense that something's off without knowing what
+        # High activation = "I feel confused but can't pinpoint why"
+        self.uncertainty_detector = nn.Sequential(
+            nn.Linear(d_model, d_model // 2),
+            nn.ReLU(),
+            nn.Linear(d_model // 2, 1),
+            nn.Sigmoid()
+        )
+
+        # Novel idea generator: encode "what I wish I could track"
+        # This produces a latent representation of a desired capability
+        self.novel_idea_encoder = nn.Sequential(
+            nn.Linear(d_model, d_model),
+            nn.ReLU(),
+            nn.Linear(d_model, d_model)
+        )
+
+        # Novel idea categories (what domain is the novel idea about)
+        self.NOVEL_CATEGORIES = [
+            'temporal',       # "something about timing/sequence"
+            'relational',     # "something about how things connect"
+            'magnitude',      # "something about size/scale"
+            'pattern',        # "something about structure"
+            'meta',           # "something about my own process"
+        ]
+        self.novel_category_head = nn.Linear(d_model, len(self.NOVEL_CATEGORIES))
+
         # Track proposal history (for learning what works)
         self.register_buffer('proposal_outcomes', torch.zeros(len(self.PROPOSAL_TYPES), 2))  # [successes, attempts]
         self.register_buffer('topic_proposal_outcomes', torch.zeros(n_topics, 2))
@@ -1184,6 +1231,8 @@ class ProposalGenerator(nn.Module):
         - Struggling on a topic (low accuracy despite effort)
         - Ready to consolidate (high consistent accuracy)
         - Trust mismatch (teacher guidance not helping)
+        - Diffuse uncertainty (something's off but can't pinpoint)
+        - Novel insight (sense of a new approach)
         """
         with torch.no_grad():
             # Cooldown check
@@ -1208,6 +1257,33 @@ class ProposalGenerator(nn.Module):
             # Check for consolidation readiness (consistent high accuracy)
             if recent_accuracy > 0.95:
                 triggers.append(('consolidate_learning', -1, 0.8, 'mastery'))
+
+            # === NEW: Diffuse uncertainty detection ===
+            # "Something feels off but I can't pinpoint it"
+            # Triggered when: accuracy is mediocre AND confidence is also mediocre
+            # (not clearly right or wrong, not clearly sure or unsure)
+            if 0.4 < recent_accuracy < 0.7:
+                # Check if any topics are in ambiguous state
+                ambiguous_count = 0
+                if isinstance(topic_calibration, dict):
+                    for topic_name, cal in topic_calibration.items():
+                        acc = cal.get('accuracy', 0.5)
+                        conf = cal.get('confidence', 0.5)
+                        # Ambiguous: both accuracy and confidence in middle range
+                        if 0.4 < acc < 0.7 and 0.4 < conf < 0.7:
+                            ambiguous_count += 1
+                if ambiguous_count >= 2:  # Multiple topics feel "off"
+                    triggers.append(('request_unknown', -1, 0.0, 'diffuse_uncertainty'))
+
+            # === NEW: Novel proposal detection ===
+            # "What if I tried tracking this differently?"
+            # Triggered when: stuck despite trying (accuracy plateau with high effort)
+            # We detect this by checking if accuracy hasn't improved much
+            # For now, trigger occasionally when accuracy is moderate
+            if 0.6 < recent_accuracy < 0.85:
+                # Low probability of novel idea - these should be rare
+                if torch.rand(1).item() < 0.05:  # 5% chance
+                    triggers.append(('propose_novel', -1, 0.5, 'insight'))
 
             if triggers:
                 self.cooldown_counter.fill_(10)  # 10 batches cooldown
@@ -1246,6 +1322,17 @@ class ProposalGenerator(nn.Module):
         confidence = self.confidence_head(encoded)
         justification = self.justification_encoder(encoded)
 
+        # === NEW: For request_unknown ===
+        # Diffuse uncertainty level - "how much does something feel off?"
+        uncertainty_level = self.uncertainty_detector(encoded)
+
+        # === NEW: For propose_novel ===
+        # Novel idea encoding - "what kind of new thing am I sensing?"
+        novel_idea = self.novel_idea_encoder(encoded)
+        novel_category_logits = self.novel_category_head(encoded)
+        novel_category_probs = F.softmax(novel_category_logits, dim=-1)
+        novel_category_idx = novel_category_probs.argmax(dim=-1)
+
         # Track that we made a proposal
         self.proposals_since_last += 1
 
@@ -1258,7 +1345,12 @@ class ProposalGenerator(nn.Module):
             'magnitude': magnitude,
             'confidence': confidence,
             'justification': justification,
-            'encoded_state': encoded
+            'encoded_state': encoded,
+            # New fields
+            'uncertainty_level': uncertainty_level,
+            'novel_idea': novel_idea,
+            'novel_category': [self.NOVEL_CATEGORIES[idx.item()] for idx in novel_category_idx],
+            'novel_category_probs': novel_category_probs,
         }
 
     def update_outcome(self, proposal_type_idx, topic_idx, was_successful):
@@ -1360,6 +1452,38 @@ class ProposalEvaluator(nn.Module):
 
         combined = torch.cat([justification, learner_state], dim=-1)
 
+        # === SPECIAL HANDLING: request_unknown and propose_novel ===
+        # These aren't approve/modify/redirect - they're communication
+        if proposal_type == 'request_unknown':
+            # Student senses something's off but can't pinpoint it
+            # Teacher responds with diagnostic probing
+            probing_response = self._generate_probing_response(proposal, topic_calibration)
+            return {
+                'decision': 'probe',
+                'decision_probs': torch.zeros(3, device=learner_state.device),
+                'modified_magnitude': proposal['magnitude'],
+                'guidance': self.guidance_generator(learner_state),
+                'approval_score': torch.tensor(0.8, device=learner_state.device),  # Rewarding self-awareness
+                'is_approved': True,  # Asking for help is always "approved"
+                'probing_response': probing_response,
+                'redirect_reason': None
+            }
+
+        if proposal_type == 'propose_novel':
+            # Student has a novel idea - evaluate its merit
+            novel_evaluation = self._evaluate_novel_proposal(proposal, topic_calibration)
+            return {
+                'decision': 'novel_' + novel_evaluation['verdict'],
+                'decision_probs': torch.zeros(3, device=learner_state.device),
+                'modified_magnitude': proposal['magnitude'],
+                'guidance': self.guidance_generator(learner_state),
+                'approval_score': torch.tensor(novel_evaluation['approval'], device=learner_state.device),
+                'is_approved': novel_evaluation['verdict'] in ['implement', 'explore'],
+                'novel_evaluation': novel_evaluation,
+                'novel_implementation': novel_evaluation.get('implementation'),
+                'redirect_reason': None
+            }
+
         # === RULE-BASED SAFETY CHECK ===
         # Before neural evaluation, check for harmful proposals
         force_redirect = False
@@ -1424,6 +1548,138 @@ class ProposalEvaluator(nn.Module):
             'is_approved': decision_name in ['approve', 'modify'],
             'redirect_reason': redirect_reason
         }
+
+    def _generate_probing_response(self, proposal, topic_calibration):
+        """
+        Generate diagnostic probing questions for request_unknown.
+
+        When student says "something feels off but I don't know what",
+        the teacher probes to help identify the issue.
+        """
+        probes = []
+
+        # Identify weak areas from topic calibration
+        weak_topics = []
+        confused_topics = []
+
+        if topic_calibration:
+            for topic_name, cal in topic_calibration.items():
+                acc = cal.get('accuracy', 0.5)
+                conf = cal.get('confidence', 0.5)
+                gap = abs(cal.get('gap', 0))
+
+                if acc < 0.6:
+                    weak_topics.append((topic_name, acc))
+                if gap > 0.15:  # Large calibration gap
+                    confused_topics.append((topic_name, gap, cal.get('status')))
+
+        # Generate probing based on what we find
+        if weak_topics:
+            worst = min(weak_topics, key=lambda x: x[1])
+            probes.append({
+                'type': 'focus_weak',
+                'topic': worst[0],
+                'message': f"Let's look at {worst[0]} - how do you approach these?"
+            })
+
+        if confused_topics:
+            most_confused = max(confused_topics, key=lambda x: x[1])
+            status = most_confused[2]
+            if status == 'overconfident':
+                probes.append({
+                    'type': 'check_overconfidence',
+                    'topic': most_confused[0],
+                    'message': f"You seem confident on {most_confused[0]} - walk me through your reasoning?"
+                })
+            elif status == 'guessing':
+                probes.append({
+                    'type': 'check_underconfidence',
+                    'topic': most_confused[0],
+                    'message': f"You're not sure about {most_confused[0]} - what's confusing?"
+                })
+
+        # If nothing specific found, general probe
+        if not probes:
+            probes.append({
+                'type': 'general',
+                'topic': None,
+                'message': "Tell me what you notice when you're working on these problems."
+            })
+
+        return {
+            'probes': probes,
+            'n_probes': len(probes),
+            'weak_topics': [t[0] for t in weak_topics],
+            'confused_topics': [t[0] for t in confused_topics]
+        }
+
+    def _evaluate_novel_proposal(self, proposal, topic_calibration):
+        """
+        Evaluate a novel idea from the student.
+
+        When student says "what if I tracked X differently?",
+        teacher decides if it's worth exploring.
+        """
+        novel_category = proposal.get('novel_category', ['meta'])[0]
+        uncertainty = proposal.get('uncertainty_level', torch.tensor(0.5))
+        if isinstance(uncertainty, torch.Tensor):
+            uncertainty = uncertainty.mean().item()
+
+        # Novel ideas in different categories have different merit thresholds
+        category_thresholds = {
+            'temporal': 0.6,     # Timing ideas are often good
+            'relational': 0.5,  # Connection ideas are encouraged
+            'magnitude': 0.7,   # Scale ideas need to be clearer
+            'pattern': 0.5,     # Structure ideas are encouraged
+            'meta': 0.4,        # Meta-cognition ideas are very encouraged
+        }
+
+        threshold = category_thresholds.get(novel_category, 0.5)
+
+        # Evaluate based on context
+        # Novel ideas are more valuable when struggling (higher uncertainty)
+        merit = uncertainty  # Higher uncertainty = more valuable to try new things
+
+        if merit > threshold:
+            if merit > 0.7:
+                verdict = 'implement'
+                approval = 0.9
+                implementation = {
+                    'type': 'add_tracking',
+                    'category': novel_category,
+                    'description': f"Try tracking {novel_category} patterns differently"
+                }
+            else:
+                verdict = 'explore'
+                approval = 0.7
+                implementation = {
+                    'type': 'experiment',
+                    'category': novel_category,
+                    'description': f"Let's experiment with {novel_category} awareness"
+                }
+        else:
+            verdict = 'defer'
+            approval = 0.5
+            implementation = None
+
+        return {
+            'verdict': verdict,
+            'approval': approval,
+            'category': novel_category,
+            'merit': merit,
+            'threshold': threshold,
+            'implementation': implementation,
+            'message': self._novel_feedback_message(verdict, novel_category)
+        }
+
+    def _novel_feedback_message(self, verdict, category):
+        """Generate encouraging feedback for novel ideas."""
+        if verdict == 'implement':
+            return f"Great insight about {category}! Let's build that in."
+        elif verdict == 'explore':
+            return f"Interesting thought about {category}. Let's try it out."
+        else:
+            return f"I see what you're thinking about {category}. Keep that in mind."
 
 
 # =============================================================================
