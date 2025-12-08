@@ -2464,11 +2464,20 @@ class RelationalTeacher(nn.Module):
         Triggers when:
         - Impressedness has dropped (teacher getting bored)
         - Student has met current goal multiple times
+        - Student is highly competent but goal is low (push them!)
         """
         with torch.no_grad():
             bored = self.impressedness.item() < 0.5
             goals_routine = self.goals_met_count.item() >= 3
-            return bored or goals_routine
+
+            # NEW: If student is very competent, push them even if not bored
+            # "You're doing great at 6, let's try something harder"
+            competence = self.perceived_competence.item()
+            expected_goal = 3 + int(5 * competence)
+            goal_too_easy = (competence > 0.8 and
+                           self.current_goal.item() < expected_goal - 1)
+
+            return bored or goals_routine or goal_too_easy
 
     def set_new_goal(self, is_negotiation=False):
         """
@@ -2523,16 +2532,23 @@ class RelationalTeacher(nn.Module):
             expected = max(current, expected)  # Don't go below current
 
             # Tolerance: within 1 of expected is acceptable
+            # But if student is very competent, push them to expected anyway
             diff = student_proposal - expected
 
             if abs(diff) <= 1:
-                # Acceptable proposal
-                self.current_goal.fill_(student_proposal)
+                # Close to expected - but push high-competence students to expected
+                if competence > 0.8 and student_proposal < expected:
+                    # "Good self-assessment, but I think you can do [expected]"
+                    final_goal = expected
+                else:
+                    final_goal = student_proposal
+
+                self.current_goal.fill_(final_goal)
                 self.goals_met_count.zero_()
                 self.impressedness.add_(0.1).clamp_(max=1.0)
                 return {
                     'accepted': True,
-                    'final_goal': student_proposal,
+                    'final_goal': final_goal,
                     'counter_direction': None,
                     'feedback': 'good_calibration'
                 }
