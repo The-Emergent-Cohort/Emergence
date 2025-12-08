@@ -370,6 +370,12 @@ class TopicConfidenceTracker(nn.Module):
         self.register_buffer('topic_confidence', torch.zeros(n_topics))
         self.register_buffer('topic_count', torch.zeros(n_topics))
 
+        # Per-topic streak tracking for mastery
+        self.register_buffer('topic_streak', torch.zeros(n_topics, dtype=torch.long))
+        self.register_buffer('topic_best_streak', torch.zeros(n_topics, dtype=torch.long))
+        self.register_buffer('topic_mastered', torch.zeros(n_topics, dtype=torch.bool))
+        self.mastery_threshold = 100  # 10x starting goal
+
     def update(self, topic_idx, was_correct, predicted_confidence):
         """
         Update topic statistics after a prediction.
@@ -408,6 +414,18 @@ class TopicConfidenceTracker(nn.Module):
                     self.topic_confidence[idx] = (1 - self.ema_alpha) * self.topic_confidence[idx] + self.ema_alpha * conf_val
 
                 self.topic_count[idx] += 1
+
+                # Update per-topic streak
+                if was_correct[i]:
+                    self.topic_streak[idx] += 1
+                    # Track best streak
+                    if self.topic_streak[idx] > self.topic_best_streak[idx]:
+                        self.topic_best_streak[idx] = self.topic_streak[idx].clone()
+                    # Check for mastery
+                    if self.topic_streak[idx] >= self.mastery_threshold:
+                        self.topic_mastered[idx] = True
+                else:
+                    self.topic_streak[idx] = 0  # Reset on error
 
     def get_calibration(self, topic_idx):
         """
@@ -460,6 +478,30 @@ class TopicConfidenceTracker(nn.Module):
             return self.topic_accuracy[topic_idx].item()
         return self.topic_accuracy[topic_idx]
 
+    def is_mastered(self, topic_idx):
+        """Returns True if topic has achieved mastery (100 streak)."""
+        if isinstance(topic_idx, int):
+            return self.topic_mastered[topic_idx].item()
+        return self.topic_mastered[topic_idx]
+
+    def get_streak_info(self, topic_idx):
+        """Get streak info for a topic: (current, best, mastered)."""
+        if isinstance(topic_idx, int):
+            return (
+                self.topic_streak[topic_idx].item(),
+                self.topic_best_streak[topic_idx].item(),
+                self.topic_mastered[topic_idx].item()
+            )
+        return (
+            self.topic_streak[topic_idx],
+            self.topic_best_streak[topic_idx],
+            self.topic_mastered[topic_idx]
+        )
+
+    def get_unmastered_topics(self):
+        """Get list of topic indices that haven't achieved mastery yet."""
+        return (~self.topic_mastered).nonzero(as_tuple=True)[0].tolist()
+
     def get_adjusted_confidence(self, topic_idx, raw_confidence):
         """
         Adjust raw prediction confidence based on topic calibration.
@@ -507,6 +549,23 @@ class TopicConfidenceTracker(nn.Module):
             self.register_buffer('topic_accuracy', new_accuracy)
             self.register_buffer('topic_confidence', new_confidence)
             self.register_buffer('topic_count', new_count)
+
+            # Expand streak buffers
+            new_streak = torch.zeros(new_size, dtype=torch.long, device=device)
+            new_best_streak = torch.zeros(new_size, dtype=torch.long, device=device)
+            new_mastered = torch.zeros(new_size, dtype=torch.bool, device=device)
+
+            new_streak[:self.n_topics] = self.topic_streak
+            new_best_streak[:self.n_topics] = self.topic_best_streak
+            new_mastered[:self.n_topics] = self.topic_mastered
+
+            del self.topic_streak
+            del self.topic_best_streak
+            del self.topic_mastered
+
+            self.register_buffer('topic_streak', new_streak)
+            self.register_buffer('topic_best_streak', new_best_streak)
+            self.register_buffer('topic_mastered', new_mastered)
 
             self.n_topics = new_size
 
