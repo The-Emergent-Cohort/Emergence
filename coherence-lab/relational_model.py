@@ -1114,11 +1114,17 @@ class SelfModel(nn.Module):
                     reason = 'streak'
                     # Store the completed streak length for XP calculation
                     self.last_completed_streak = previous_streak
+                    # Update best streak BEFORE it gets lost
+                    if topic_idx is not None and previous_streak > self.topic_tracker.topic_best_streak[topic_idx]:
+                        self.topic_tracker.topic_best_streak[topic_idx] = previous_streak
 
                 # 2. Hit mastery (100 consecutive) - show this achievement
                 elif current_streak >= 100:
                     reason = 'streak'
                     self.last_completed_streak = current_streak
+                    # Update best streak BEFORE reset
+                    if topic_idx is not None and current_streak > self.topic_tracker.topic_best_streak[topic_idx]:
+                        self.topic_tracker.topic_best_streak[topic_idx] = current_streak
                     # Reset after mastery show
                     if topic_idx is not None:
                         self.topic_tracker.topic_streak[topic_idx] = 0
