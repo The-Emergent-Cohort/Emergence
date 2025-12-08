@@ -2618,10 +2618,16 @@ class PatternDataset(Dataset):
             # Teaches: "look back N positions" - prep for long_range
             period = random.randint(3, 4)
             base = random.sample(range(self.vocab_size), period)
-            # Generate 2-3 full cycles plus partial
-            n_cycles = random.randint(2, 3)
-            extra = random.randint(0, period - 1)
-            seq = (base * n_cycles) + base[:extra]
+            # Target length 6-10 to stay safely under max_len=12
+            target_len = random.randint(6, 10)
+            # Build sequence by repeating base pattern
+            full_cycles = target_len // period
+            extra = target_len % period
+            if extra == 0:
+                # Ensure we're mid-cycle (not at boundary) for better learning
+                extra = random.randint(1, period - 1)
+                full_cycles = max(1, full_cycles - 1)
+            seq = (base * full_cycles) + base[:extra]
             # Target is what comes next in the cycle
             target = base[extra % period]
         else:
