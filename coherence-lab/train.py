@@ -150,19 +150,17 @@ def train_epoch(model, loader, optimizer, criterion, device, pattern_to_idx):
             for idx in show_indices:
                 idx_item = idx.item()
                 is_correct = correct[idx_item].item()
-                confidence = conf[idx_item].item()
 
-                approval_bar = model.learner.other_model.get_approval_bar()
-                work_quality = confidence if is_correct else 0.3
+                # Teacher responds to shown work
+                model.learner.other_model.update_trust(is_correct)
 
-                if work_quality >= approval_bar:
-                    model.learner.other_model.receive_approval(is_correct)
+                if is_correct:
                     approval_count += 1
-
+                    # Award XP for correct shown work
                     pt = pattern_types[idx_item]
                     pt_idx = pattern_to_idx[pt]
                     xp_gain = 10 + int(5 * (1 - int_level))
-                    model.learner.self_model.topic_tracker.add_xp(pt_idx, xp_gain)
+                    model.learner.self_model.topic_tracker.award_xp(pt_idx, xp_gain)
 
             show_count += len(show_indices)
 
