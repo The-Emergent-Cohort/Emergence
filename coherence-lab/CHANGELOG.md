@@ -1,5 +1,37 @@
 # Coherence Lab Changelog
 
+## [0.4.1] - 2024-12-08
+### Added
+- **XP Scaling Formula**: `actual_xp = base × difficulty / level`
+  - Prevents low-level farming: grinding easy content gives diminishing returns
+  - Topic difficulties: alternating=1.0, repeating=1.0, incrementing=1.5, fixed_offset=2.0, periodic_repeat=2.5
+  - Level scaling: L5 on easy topic gets 1/5th base XP
+- **Farming Detection**: Teacher penalizes wasting time on mastered easy topics
+  - If level >= 4 AND difficulty <= 1.5 AND showing validation/spontaneous: -2 XP
+  - "You already know this. Move on."
+  - Note: Penalties are NOT scaled (always hurt the same)
+
+## [0.4.0] - 2024-12-08
+### Added
+- **XP (Experience Points) System**: Per-topic skill tracking with geometric leveling
+  - Correct answers: +1 XP (base accumulation)
+  - Creative shows (correct): +5 XP (validated insight)
+  - Creative shows (wrong): -3 XP (overconfidence cost - self-competition)
+  - Streak shows: +streak_length/5 XP (consistency bonus)
+  - Validation shows: 0 XP (neutral - asking for help is fine)
+  - Level thresholds: N² × 10 (L1=10, L2=40, L3=90, L4=160... L10=1000)
+  - Early levels are quick, mastery requires sustained proof
+  - XP can go down (but not below 0) - honest self-assessment
+- **Visual level display**: `L 5 █████░····` shows level + progress to next
+- **Total XP and average level** displayed per epoch
+
+## [0.3.5] - 2024-12-08
+### Fixed
+- **Student goal estimate clamp**: Was capped at 10, now caps at 100 (mastery)
+  - Student couldn't learn goals above 10, but teacher could set up to 100
+  - This caused 32/10 disconnects where student fell behind teacher's expectations
+  - Now student can grow to match teacher throughout the learning journey
+
 ## [0.3.4] - 2024-12-08
 ### Added
 - **Per-topic streak display**: Epoch output now shows `streak:current/best` for each topic

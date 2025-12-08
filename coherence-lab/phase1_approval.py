@@ -11,7 +11,7 @@ Building the social learning foundation:
 This is the developmental foundation for later phases.
 """
 
-__version__ = "0.3.4"  # Added per-topic streak display to epoch output
+__version__ = "0.4.1"  # XP scaling: difficulty/level formula + farming detection
 
 import torch
 import torch.nn as nn
@@ -129,6 +129,31 @@ def train_day_with_approval(model, loader, optimizer, criterion, device, pattern
 
                 # Update approval calibration in self model
                 model.learner.self_model.update_after_approval(meets_bar, reason)
+
+                # === XP AWARD based on show type and outcome ===
+                topic_idx = pattern_to_idx[pattern_types[idx_item]]
+                was_correct_item = correct[idx].item()
+                topic_level = model.learner.self_model.topic_tracker.get_level(topic_idx)
+                topic_difficulty = model.learner.self_model.topic_tracker.topic_difficulty[topic_idx].item()
+
+                # === FARMING DETECTION ===
+                # High level on easy topic + not creative/streak = wasting time
+                is_farming = (topic_level >= 4 and topic_difficulty <= 1.5 and
+                              reason in ('validation', 'spontaneous'))
+                if is_farming:
+                    # Teacher notices: "You already know this. Move on."
+                    model.learner.self_model.topic_tracker.award_xp(topic_idx, -2)  # Farming penalty
+
+                if reason == 'creative':
+                    if was_correct_item:
+                        model.learner.self_model.topic_tracker.award_xp(topic_idx, 5)  # Validated insight
+                    else:
+                        model.learner.self_model.topic_tracker.award_xp(topic_idx, -3)  # Overconfidence cost
+                elif reason == 'streak':
+                    if was_correct_item:
+                        streak_len = model.learner.self_model.topic_tracker.topic_streak[topic_idx].item()
+                        model.learner.self_model.topic_tracker.award_xp(topic_idx, max(1, streak_len // 5))  # Streak bonus
+                # validation and spontaneous: 0 XP (neutral) - unless farming
 
                 # Internalize - weighted by how impressed teacher was
                 if correct[idx]:
@@ -263,6 +288,23 @@ def main(args):
     # Attach registry to model
     model.set_topic_registry(topic_registry)
 
+    # === SET TOPIC DIFFICULTIES ===
+    # Higher difficulty = harder = more XP per action (prevents farming easy topics)
+    # Based on empirical pattern complexity:
+    topic_difficulties = {
+        'alternating': 1.0,      # Easy - just flip between two values
+        'repeating': 1.0,        # Easy - same value repeats
+        'incrementing': 1.5,     # Medium - arithmetic progression
+        'fixed_offset': 2.0,     # Medium-hard - look back N positions
+        'periodic_repeat': 2.5,  # Hard - complex period detection
+    }
+    for pattern_name, difficulty in topic_difficulties.items():
+        if pattern_name in pattern_to_idx:
+            model.learner.self_model.topic_tracker.set_topic_difficulty(
+                pattern_to_idx[pattern_name], difficulty
+            )
+    print(f"Topic difficulties: {topic_difficulties}")
+
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     criterion = nn.CrossEntropyLoss()
 
@@ -282,11 +324,13 @@ def main(args):
 
         val_metrics = evaluate(model, val_loader, device, pattern_to_idx)
 
-        # Update topic calibration (accuracy vs confidence gap) and streaks
+        # Update topic calibration (accuracy vs confidence gap), streaks, and XP
         topic_calibration = {}
         for pattern_name, idx in pattern_to_idx.items():
             acc, conf, gap = model.learner.self_model.topic_tracker.get_calibration(idx)
             streak, best_streak, mastered = model.learner.self_model.topic_tracker.get_streak_info(idx)
+            xp, level, progress, xp_high = model.learner.self_model.topic_tracker.get_xp_info(idx)
+            difficulty = model.learner.self_model.topic_tracker.topic_difficulty[idx].item()
             topic_calibration[pattern_name] = {
                 'accuracy': acc,
                 'confidence': conf,
@@ -294,7 +338,12 @@ def main(args):
                 'status': 'guessing' if gap > 0.1 else ('overconfident' if gap < -0.1 else 'calibrated'),
                 'streak': streak,
                 'best_streak': best_streak,
-                'mastered': mastered
+                'mastered': mastered,
+                'xp': xp,
+                'level': level,
+                'level_progress': progress,
+                'xp_high': xp_high,
+                'difficulty': difficulty
             }
 
         # Developmental state
@@ -302,6 +351,10 @@ def main(args):
         int_level = torch.sigmoid(model.learner.other_model.internalization_level).item()
         trust = torch.sigmoid(model.learner.other_model.trust).item()
         show_cal = model.learner.self_model.show_calibration.item()
+
+        # XP summary for history
+        total_xp = model.learner.self_model.topic_tracker.get_total_xp()
+        avg_level = model.learner.self_model.topic_tracker.get_average_level()
 
         history.append({
             'epoch': epoch,
@@ -319,7 +372,9 @@ def main(args):
             'student_goal_estimate': train_metrics['student_goal_estimate'],
             'teacher_impressedness': train_metrics['teacher_impressedness'],
             'goal_calibration_rate': train_metrics['goal_calibration_rate'],
-            'topic_calibration': topic_calibration.copy()
+            'topic_calibration': topic_calibration.copy(),
+            'total_xp': total_xp,
+            'avg_level': avg_level
         })
 
         print(f"\nDay {day} (Epoch {epoch:2d})", flush=True)
@@ -331,18 +386,23 @@ def main(args):
         print(f"  Rising bars: competence={train_metrics['perceived_competence']:.1%}, threshold={train_metrics['approval_threshold']:.1%}")
         highest = train_metrics['highest_goal_achieved']
         print(f"  Goals: current={train_metrics['teacher_goal']}, best={highest}, student_est={train_metrics['student_goal_estimate']:.1f}, impressed={train_metrics['teacher_impressedness']:.0%}")
-        print("  Per-pattern (accuracy [calibration] streak/best):")
+        print(f"  XP: total={total_xp:.0f}, avg_level={avg_level:.1f}")
+        print("  Per-pattern:")
         for pt in pattern_types:
             acc = val_metrics['per_pattern'].get(pt, 0)
             cal = topic_calibration.get(pt, {})
             cal_status = cal.get('status', 'unknown')
-            streak = cal.get('streak', 0)
-            best_streak = cal.get('best_streak', 0)
-            mastered = cal.get('mastered', False)
+            level = cal.get('level', 0)
+            progress = cal.get('level_progress', 0)
+            xp = cal.get('xp', 0)
+            diff = cal.get('difficulty', 1.0)
             acc_symbol = "O" if acc >= 0.95 else ("o" if acc >= 0.85 else ".")
             cal_symbol = {'calibrated': 'C', 'guessing': '?', 'overconfident': '!', 'unknown': '.'}[cal_status]
-            mastery_symbol = "M" if mastered else ""
-            print(f"    {pt:15s}: {acc:.1%} {acc_symbol} [{cal_status:12s}] {cal_symbol} streak:{streak}/{best_streak} {mastery_symbol}")
+            # Level bar: █ for each level, ░ for progress to next
+            level_bar = "█" * level + ("░" if progress > 0.5 else "") + "·" * (10 - level - (1 if progress > 0.5 else 0))
+            # Difficulty stars: ★ for each 0.5 difficulty
+            diff_stars = "★" * int(diff * 2)
+            print(f"    {pt:15s}: {acc:.1%} {acc_symbol} {cal_symbol} L{level:2d} {level_bar} ({xp:.0f}xp) {diff_stars}")
         import sys; sys.stdout.flush()
 
         if val_metrics['accuracy'] > best_acc:
