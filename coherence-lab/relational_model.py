@@ -2501,8 +2501,14 @@ class RelationalTeacher(nn.Module):
             # Full competence (1.0): goal = 15
             base_goal = 3 + int(12 * competence)
 
-            # Add 1-2 to current goal (incremental raising)
-            new_goal = max(self.current_goal.item() + 1, base_goal)
+            # Scale increment: 25-50% based on impressedness
+            # Impressed teacher pushes harder
+            current = self.current_goal.item()
+            scale_factor = 1.25 + 0.25 * self.impressedness.item()  # 1.25 to 1.50
+            scaled_goal = int(current * scale_factor)
+            # Ensure at least +1 for very small goals
+            scaled_goal = max(scaled_goal, current + 1)
+            new_goal = max(scaled_goal, base_goal)
             # NO CAP - let streaks grow as long as student can sustain
 
             return {
