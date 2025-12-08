@@ -542,23 +542,28 @@ class TopicConfidenceTracker(nn.Module):
 
     def get_xp_info(self, topic_idx):
         """
-        Get XP info for a topic: (xp, level, progress_to_next, xp_high).
+        Get XP info for a topic: (xp, confirmed_level, progress_to_next, xp_high).
 
-        progress_to_next is 0.0-1.0 showing how close to next level.
+        Returns CONFIRMED level (exam-proven), not XP-based level.
+        progress_to_next is 0.0-1.0 showing how close to next level threshold.
         """
+        self._init_exam_state()  # Ensure confirmed_level exists
+
         xp = self.topic_xp[topic_idx].item() if isinstance(topic_idx, int) else self.topic_xp[topic_idx].item()
         xp_high = self.topic_xp_high[topic_idx].item() if isinstance(topic_idx, int) else self.topic_xp_high[topic_idx].item()
 
-        level = self.get_level(topic_idx)
+        # Use CONFIRMED level (exam-proven), not XP-based level
+        level = self.confirmed_level[topic_idx].item()
 
         if level >= self.max_level:
             progress = 1.0  # Maxed out
         else:
-            current_threshold = self.xp_threshold(level)
+            # Progress toward NEXT level's XP threshold
             next_threshold = self.xp_threshold(level + 1)
+            current_threshold = self.xp_threshold(level) if level > 0 else 0
             xp_in_level = xp - current_threshold
             xp_needed = next_threshold - current_threshold
-            progress = xp_in_level / xp_needed if xp_needed > 0 else 0.0
+            progress = min(1.0, xp_in_level / xp_needed) if xp_needed > 0 else 0.0
 
         return xp, level, progress, xp_high
 
