@@ -1,5 +1,16 @@
 # Coherence Lab Changelog
 
+## [0.5.3] - 2024-12-08
+### Fixed
+- **Only graduated topics excluded from training**: Fixes catastrophic forgetting
+  - Changed from `topic_mastered` (streak=100) to `exam_graduated` (passed L10)
+  - Failed exams now resume training - topics stay active until truly proven
+  - Streak mastery = sign, Exam graduation = proof
+### Changed
+- **Gentler exploration penalty**: Wrong creative shows now -1 XP (was -3)
+  - Don't punish curiosity too harshly - exploration is how you learn
+  - Still provides signal that guess was wrong, without discouraging risk-taking
+
 ## [0.5.2] - 2024-12-08
 ### Fixed
 - **Exam system uses confirmed_level**: Exams now gate on exam-verified level, not XP-level
