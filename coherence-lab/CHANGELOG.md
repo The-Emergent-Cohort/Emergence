@@ -1,5 +1,21 @@
 # Coherence Lab Changelog
 
+## [0.5.12] - 2024-12-08
+### Fixed
+- **Anti-forgetting maintenance training**: Graduated topics no longer excluded entirely
+  - Was: graduated topics completely masked out of training → catastrophic forgetting
+  - Now: graduated topics get 10% loss weight (maintenance), active get 100%
+  - Prevents model from forgetting patterns while focusing compute on struggling topics
+  - Final exam will actually test retained knowledge, not forgotten skills
+  - Topic tracker now updates ALL topics to maintain accuracy tracking
+
+## [0.5.11] - 2024-12-08
+### Changed
+- **No artificial epoch limit**: Default epochs raised from 10 to 100
+  - Let the system run until complete, break manually if stuck
+  - Some topics genuinely need more time - don't cut them off arbitrarily
+  - User can always Ctrl+C if it looks looped
+
 ## [0.5.10] - 2024-12-08
 ### Added
 - **Final comprehensive exam**: After all topics graduate individually (L10), must pass final
