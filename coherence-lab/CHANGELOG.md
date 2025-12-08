@@ -1,5 +1,17 @@
 # Coherence Lab Changelog
 
+## [0.5.13] - 2024-12-08
+### Changed
+- **Streak shows on completion**: Streaks only shown when they END, not mid-run
+  - Was: show when streak hits goal (interrupts potentially longer streak)
+  - Now: show when streak BREAKS (on failure) or hits mastery (100)
+  - Completed streak length stored for XP calculation
+  - Enables longer natural streaks without premature interruption
+  - Streak shows still internalize feedback (about the completed streak)
+### Added
+- **Final exam logging**: Final comprehensive exam results now saved to history JSON
+- **Raw counts in final exam output**: Shows `32/32 (100%)` to verify fresh inference
+
 ## [0.5.12] - 2024-12-08
 ### Fixed
 - **Anti-forgetting maintenance training**: Graduated topics no longer excluded entirely

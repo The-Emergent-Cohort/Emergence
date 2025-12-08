@@ -966,6 +966,7 @@ class SelfModel(nn.Module):
         self.register_buffer('streak_count', torch.tensor(0))  # Current correct streak
         self.register_buffer('total_shows', torch.tensor(0))
         self.register_buffer('approved_shows', torch.tensor(0))
+        self.last_completed_streak = 0  # For XP calculation on streak shows
 
         # Topic-specific confidence tracking
         # "I'm 65% confident on fibonacci, but scoring 75% - some are guesses"
@@ -1080,31 +1081,41 @@ class SelfModel(nn.Module):
             spontaneous_rate = 0.15 * (1.0 - internalization_level) ** 2
 
             for i in range(batch_size):
+                # Save streak BEFORE updating (for completed streak detection)
+                previous_streak = self.streak_count.item()
+
                 # Update streak
                 if was_correct[i]:
                     self.streak_count += 1
                 else:
-                    self.streak_count.zero_()
+                    self.streak_count.zero_()  # Reset, but we saved the completed length
 
                 reason = None
 
-                # === PRIORITY: Competence > Creativity > Validation > Spontaneous ===
-                # Streak (proven consistency) must be checked FIRST
-                # Otherwise creative catches everything and streak never triggers
+                # === PRIORITY: Completed Streak > Mastery > Creative > Validation > Spontaneous ===
 
-                # 1. Streak meets goal - COMPETENCE (the graduation signal)
-                if self.streak_count >= streak_threshold and was_correct[i]:
+                # 1. Streak just ENDED at or above goal - show completed streak
+                #    (Don't show mid-run - wait until it's actually done)
+                if not was_correct[i] and previous_streak >= streak_threshold:
                     reason = 'streak'
+                    # Store the completed streak length for XP calculation
+                    self.last_completed_streak = previous_streak
 
-                # 2. Creative and correct - genuinely novel approach
+                # 2. Hit mastery (100 consecutive) - show this achievement
+                elif self.streak_count >= 100:
+                    reason = 'streak'
+                    self.last_completed_streak = self.streak_count.item()
+                    self.streak_count.zero_()  # Reset after mastery
+
+                # 3. Creative and correct - genuinely novel approach
                 elif is_creative[i] and was_correct[i]:
                     reason = 'creative'
 
-                # 3. Uncertain but correct → seeking validation
+                # 4. Uncertain but correct → seeking validation
                 elif was_correct[i] and confidence[i] < validation_conf_threshold:
                     reason = 'validation'
 
-                # 4. Spontaneous - random chance, decreases with internalization
+                # 5. Spontaneous - random chance, decreases with internalization
                 elif was_correct[i]:
                     if torch.rand(1).item() < spontaneous_rate:
                         reason = 'spontaneous'
@@ -1112,9 +1123,6 @@ class SelfModel(nn.Module):
                 if reason is not None:
                     should_show[i] = True
                     show_reasons[i] = reason
-                    # Only reset streak on STREAK shows - creative/validation don't interrupt
-                    if reason == 'streak':
-                        self.streak_count.zero_()
 
         return should_show, show_reasons
 

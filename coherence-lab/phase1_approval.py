@@ -11,7 +11,7 @@ Building the social learning foundation:
 This is the developmental foundation for later phases.
 """
 
-__version__ = "0.5.12"  # Anti-forgetting maintenance training
+__version__ = "0.5.13"  # Log final exam + streak show on completion
 
 import torch
 import torch.nn as nn
@@ -167,9 +167,10 @@ def train_day_with_approval(model, loader, optimizer, criterion, device, pattern
                     else:
                         model.learner.self_model.topic_tracker.award_xp(topic_idx, -1)  # Gentle nudge - don't punish exploration
                 elif reason == 'streak':
-                    if was_correct_item:
-                        streak_len = model.learner.self_model.topic_tracker.topic_streak[topic_idx].item()
-                        model.learner.self_model.topic_tracker.award_xp(topic_idx, max(1, streak_len // 5))  # Streak bonus
+                    # Streak shows now trigger on completion (failure or mastery)
+                    # Use the completed streak length stored during show decision
+                    completed_streak = model.learner.self_model.last_completed_streak
+                    model.learner.self_model.topic_tracker.award_xp(topic_idx, max(1, completed_streak // 5))  # Streak bonus
                 elif reason == 'validation':
                     # Asking teacher for help = engaging with learning = +1 XP
                     if was_correct_item:
@@ -177,7 +178,9 @@ def train_day_with_approval(model, loader, optimizer, criterion, device, pattern
                 # spontaneous: 0 XP (neutral)
 
                 # Internalize - weighted by how impressed teacher was
-                if correct[idx]:
+                # For streak shows on completion (failure), still internalize the streak feedback
+                should_internalize = correct[idx] or reason == 'streak'
+                if should_internalize:
                     model.learner.other_model.internalize(
                         teacher_response,
                         torch.tensor(1.0),
@@ -514,10 +517,11 @@ def main(args):
                 # Final exam: 32 problems per topic, 90% threshold
                 final_size = 32
                 final_threshold = 0.90
+                exam_seed = epoch * 10000 + idx
 
                 final_data = PatternDataset(
                     n_examples=final_size,
-                    seed=epoch * 10000 + idx,  # Different seed for final
+                    seed=exam_seed,
                     pattern_types=[pattern_name]
                 )
                 final_loader = DataLoader(final_data, batch_size=final_size, collate_fn=collate_fn)
@@ -537,10 +541,11 @@ def main(args):
                 score = correct_count / final_size
                 passed = score >= final_threshold
 
+                # Show raw counts to verify fresh inference
                 if passed:
-                    print(f"    {pattern_name:15s}: {score:.0%} >= {final_threshold:.0%} - PASSED FINAL")
+                    print(f"    {pattern_name:15s}: {correct_count}/{final_size} ({score:.0%}) - PASSED")
                 else:
-                    print(f"    {pattern_name:15s}: {score:.0%} < {final_threshold:.0%} - FAILED FINAL (kicked back)")
+                    print(f"    {pattern_name:15s}: {correct_count}/{final_size} ({score:.0%}) - FAILED (kicked back)")
                     # Kick back: un-graduate, reset confirmed level, apply penalty
                     tracker.topic_graduated[idx] = False
                     tracker.confirmed_level[idx] = 7  # Knocked back to L7
@@ -549,6 +554,9 @@ def main(args):
                     any_failed = True
 
                 final_results.append({'topic': pattern_name, 'score': score, 'passed': passed})
+
+            # Log final exam results to history
+            history[-1]['final_exam'] = final_results
 
             if not any_failed:
                 print(f"\n*** Phase 1 COMPLETE! All topics PASSED FINAL EXAM! ***")
