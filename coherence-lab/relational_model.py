@@ -1225,7 +1225,7 @@ class SelfModel(nn.Module):
 
                 reason = None
 
-                # === PRIORITY: Completed Streak > Mastery > Creative > Validation > Spontaneous ===
+                # === PRIORITY: Completed Streak > Mastery > Progress > Creative > Validation > Spontaneous ===
 
                 # 1. Streak just ENDED at or above goal - show completed streak
                 #    (Don't show mid-run - wait until it's actually done)
@@ -1250,15 +1250,22 @@ class SelfModel(nn.Module):
                     else:
                         self.streak_count.zero_()
 
-                # 3. Creative and correct - genuinely novel approach
+                # 3. Progress check-in - periodic encouragement during streaks
+                #    Show every 10 correct to get teacher encouragement + XP
+                #    WITHOUT breaking the streak (key difference from streak show)
+                elif was_correct[i] and current_streak > 0 and current_streak % 10 == 0:
+                    reason = 'progress'
+                    self.last_completed_streak = current_streak  # For XP calculation
+
+                # 4. Creative and correct - genuinely novel approach
                 elif is_creative[i] and was_correct[i]:
                     reason = 'creative'
 
-                # 4. Uncertain but correct → seeking validation
+                # 5. Uncertain but correct → seeking validation
                 elif was_correct[i] and confidence[i] < validation_conf_threshold:
                     reason = 'validation'
 
-                # 5. Spontaneous - random chance, decreases with internalization
+                # 6. Spontaneous - random chance, decreases with internalization
                 elif was_correct[i]:
                     if torch.rand(1).item() < spontaneous_rate:
                         reason = 'spontaneous'

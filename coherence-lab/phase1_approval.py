@@ -182,7 +182,7 @@ def train_day_with_approval(model, loader, optimizer, criterion, device, pattern
     total_loss, total_correct, total_samples = 0, 0, 0
     show_count = 0
     approval_count = 0
-    show_reasons = {'creative': 0, 'streak': 0, 'validation': 0, 'spontaneous': 0}
+    show_reasons = {'creative': 0, 'streak': 0, 'progress': 0, 'validation': 0, 'spontaneous': 0}
 
     for batch_idx, batch in enumerate(loader):
         tokens = batch['tokens'].to(device)
@@ -321,6 +321,11 @@ def train_day_with_approval(model, loader, optimizer, criterion, device, pattern
                     # Use the completed streak length stored during show decision
                     completed_streak = model.learner.self_model.last_completed_streak
                     model.learner.self_model.topic_tracker.award_xp(topic_idx, max(1, completed_streak // 5))  # Streak bonus
+                elif reason == 'progress':
+                    # Progress check-in during streak - encouragement without breaking streak
+                    # Small XP bonus for consistent work (streak continues!)
+                    current_streak = model.learner.self_model.last_completed_streak
+                    model.learner.self_model.topic_tracker.award_xp(topic_idx, max(1, current_streak // 10))  # Progress bonus
                 elif reason == 'validation':
                     # Asking teacher for help = engaging with learning = +1 XP
                     if was_correct_item:
