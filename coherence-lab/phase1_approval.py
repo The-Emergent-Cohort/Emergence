@@ -11,7 +11,7 @@ Building the social learning foundation:
 This is the developmental foundation for later phases.
 """
 
-__version__ = "0.5.6"  # Graduation-based completion (not accuracy)
+__version__ = "0.5.7"  # Multiple level-ups per epoch
 
 import torch
 import torch.nn as nn
@@ -407,43 +407,52 @@ def main(args):
 
         # === EXAMINATION SYSTEM ===
         # Check for topics ready for level-up exams
+        # Allow multiple level-ups per epoch - keep testing until topics fail or graduate
         tracker = model.learner.self_model.topic_tracker
         tracker.tick_cooldowns()  # Decrement any cooldowns from failed exams
 
         exam_results = []
-        for pattern_name, idx in pattern_to_idx.items():
-            if tracker.check_exam_eligible(idx):
-                # Generate exam batch for this topic
-                current_level = tracker.get_level(idx)
-                target_level = current_level + 1
-                exam_size = tracker.get_exam_size(target_level)
+        exam_round = 0
+        any_advanced = True
+        while any_advanced:
+            any_advanced = False
+            for pattern_name, idx in pattern_to_idx.items():
+                if tracker.check_exam_eligible(idx):
+                    # Generate exam batch for this topic
+                    current_level = tracker.get_level(idx)
+                    target_level = current_level + 1
+                    exam_size = tracker.get_exam_size(target_level)
 
-                # Create exam problems (fresh generation, not from training data)
-                exam_data = PatternDataset(
-                    n_examples=exam_size,
-                    seed=epoch * 1000 + idx,  # Reproducible but different each epoch
-                    pattern_types=[pattern_name]  # Only this topic
-                )
-                exam_loader = DataLoader(exam_data, batch_size=exam_size, collate_fn=collate_fn)
+                    # Create exam problems (fresh generation, not from training data)
+                    exam_data = PatternDataset(
+                        n_examples=exam_size,
+                        seed=epoch * 1000 + idx + exam_round * 100,  # Different seed each round
+                        pattern_types=[pattern_name]  # Only this topic
+                    )
+                    exam_loader = DataLoader(exam_data, batch_size=exam_size, collate_fn=collate_fn)
 
-                # Run exam (no gradient, just evaluation)
-                model.eval()
-                correct_count = 0
-                for batch in exam_loader:
-                    tokens = batch['tokens'].to(device)
-                    targets = batch['target'].to(device)
-                    seq_lens = batch['seq_len']
-                    with torch.no_grad():
-                        details = model(tokens, seq_lens, targets=targets, return_details=True)
-                        preds = details['logits'].argmax(dim=-1)
-                        correct_count += (preds == targets).sum().item()
-                model.train()
+                    # Run exam (no gradient, just evaluation)
+                    model.eval()
+                    correct_count = 0
+                    for batch in exam_loader:
+                        tokens = batch['tokens'].to(device)
+                        targets = batch['target'].to(device)
+                        seq_lens = batch['seq_len']
+                        with torch.no_grad():
+                            details = model(tokens, seq_lens, targets=targets, return_details=True)
+                            preds = details['logits'].argmax(dim=-1)
+                            correct_count += (preds == targets).sum().item()
+                    model.train()
 
-                # Take the exam
-                result = tracker.take_exam(idx, correct_count, exam_size)
-                result['topic'] = pattern_name
-                result['target_level'] = target_level
-                exam_results.append(result)
+                    # Take the exam
+                    result = tracker.take_exam(idx, correct_count, exam_size)
+                    result['topic'] = pattern_name
+                    result['target_level'] = target_level
+                    exam_results.append(result)
+
+                    if result['passed']:
+                        any_advanced = True  # Keep going if anyone passed
+            exam_round += 1
 
         # Display exam results (formative, not judgmental)
         if exam_results:
