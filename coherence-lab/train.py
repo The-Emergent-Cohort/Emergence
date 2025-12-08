@@ -37,41 +37,54 @@ CURRICULUM = [
         'description': 'Pure position awareness and linear progression'
     },
     {
-        'name': 'B: Position Math',
-        'patterns': ['modular', 'staircase'],
-        'description': 'Cycle position (i % n) and quantization (i // n)'
+        'name': 'B: Reverse & Cycles',
+        'patterns': ['decrementing', 'modular'],
+        'description': 'Countdown and cycle position (i % n)'
     },
     {
-        'name': 'C: Simple Memory',
+        'name': 'C: Position Math',
+        'patterns': ['staircase', 'fixed_offset'],
+        'description': 'Quantization (i // n) and linear growth'
+    },
+    {
+        'name': 'D: Simple Memory',
         'patterns': ['repeating', 'alternating'],
         'description': 'Remember and cycle 1-2 values'
     },
     {
-        'name': 'D: Extended Cycles',
+        'name': 'E: Extended Cycles',
         'patterns': ['periodic_repeat'],
         'description': 'Cycle 3-4 values (builds on alternating)'
     },
     {
-        'name': 'E: Indexed Retrieval',
+        'name': 'F: Indexed Retrieval',
         'patterns': ['indexed_lookup'],
         'description': 'Position-based value lookup from memory'
     },
     {
-        'name': 'F: Growth Patterns',
-        'patterns': ['fixed_offset', 'geometric'],
-        'description': 'Linear and exponential growth'
+        'name': 'G: Growth Patterns',
+        'patterns': ['geometric', 'triangular'],
+        'description': 'Exponential and accumulative growth'
+    },
+    {
+        'name': 'H: Combined Operations',
+        'patterns': ['fibonacci_like'],
+        'description': 'Combine two lookbacks (sum of previous two)'
     }
 ]
 
 # Bridges for diagnosis when stuck
 BRIDGES = {
+    'decrementing': ['incrementing'],
     'modular': ['counting'],
     'staircase': ['counting'],
+    'fixed_offset': ['incrementing'],
     'alternating': ['modular'],
     'periodic_repeat': ['alternating'],
     'indexed_lookup': ['modular', 'repeating'],
-    'fixed_offset': ['incrementing'],
     'geometric': ['incrementing', 'staircase'],
+    'triangular': ['incrementing', 'staircase'],
+    'fibonacci_like': ['incrementing', 'alternating'],
 }
 
 

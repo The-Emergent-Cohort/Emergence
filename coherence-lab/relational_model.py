@@ -3575,6 +3575,43 @@ class PatternDataset(Dataset):
             query_pos = length % 3  # Position 0, 1, or 2
             seq = values
             target = values[query_pos]
+        elif pt == 'fibonacci_like':
+            # Fibonacci-like: each value is sum of previous two
+            # [1, 1, 2, 3, 5, 8, 13...] or [2, 2, 4, 6, 10...]
+            # Teaches: combining two lookbacks
+            a, b = random.randint(1, 3), random.randint(1, 3)
+            length = random.randint(4, 6)
+            seq = [a, b]
+            for _ in range(length - 2):
+                seq.append(seq[-1] + seq[-2])
+                if seq[-1] >= self.vocab_size:
+                    # Overflow - restart with smaller values
+                    seq = [1, 1, 2, 3, 5][:length]
+                    break
+            target = seq[-1] + seq[-2]
+            if target >= self.vocab_size:
+                target = self.vocab_size - 1
+        elif pt == 'triangular':
+            # Triangle numbers: cumulative sum 1, 3, 6, 10, 15...
+            # Position n has value n*(n+1)/2
+            # Teaches: accumulation / running sum
+            length = random.randint(4, 6)
+            seq = [(i * (i + 1)) // 2 for i in range(1, length + 1)]
+            target = (length + 1) * (length + 2) // 2
+            # Keep in bounds
+            if target >= self.vocab_size:
+                length = 4
+                seq = [1, 3, 6, 10]
+                target = 15
+        elif pt == 'decrementing':
+            # Countdown: [8, 7, 6, 5, 4...] → next is 3
+            # Reverse of incrementing
+            length = random.randint(3, 6)
+            start = random.randint(length, self.vocab_size - 1)
+            seq = [start - i for i in range(length)]
+            target = start - length
+            if target < 0:
+                target = 0
         else:
             raise ValueError(f"Unknown pattern type: {pt}")
 

@@ -43,16 +43,18 @@ Checkpoints include:
 
 ## Curriculum
 
-6 sections, mastered in order:
+8 sections, 13 patterns, mastered in order:
 
 | Section | Patterns | Description |
 |---------|----------|-------------|
 | A: Position Foundations | counting, incrementing | Pure position awareness |
-| B: Position Math | modular, staircase | Cycle and quantization |
-| C: Simple Memory | repeating, alternating | 1-2 value cycles |
-| D: Extended Cycles | periodic_repeat | 3-4 value cycles |
-| E: Indexed Retrieval | indexed_lookup | Position-based lookup |
-| F: Growth Patterns | fixed_offset, geometric | Linear/exponential growth |
+| B: Reverse & Cycles | decrementing, modular | Countdown and cycle position |
+| C: Position Math | staircase, fixed_offset | Quantization and linear growth |
+| D: Simple Memory | repeating, alternating | 1-2 value cycles |
+| E: Extended Cycles | periodic_repeat | 3-4 value cycles |
+| F: Indexed Retrieval | indexed_lookup | Position-based lookup |
+| G: Growth Patterns | geometric, triangular | Exponential/accumulative growth |
+| H: Combined Operations | fibonacci_like | Sum of previous two values |
 
 ## Archive
 
