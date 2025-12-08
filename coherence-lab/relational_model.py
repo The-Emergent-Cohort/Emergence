@@ -990,8 +990,8 @@ class RelationalLearner(nn.Module):
             nn.Linear(d_model, vocab_size)
         )
 
-        # Pattern classifier (auxiliary)
-        self.pattern_head = nn.Linear(d_model, 4)
+        # Pattern classifier (auxiliary) - 5 types now with periodic_repeat
+        self.pattern_head = nn.Linear(d_model, 5)
 
     def perceive(self, tokens, seq_lens=None):
         """Perceive the world (encode sequence)."""
@@ -2632,6 +2632,12 @@ class PatternDataset(Dataset):
             target = base[extra % period]
         else:
             raise ValueError(f"Unknown pattern type: {pt}")
+
+        # Validate target is in bounds
+        if target < 0 or target >= self.vocab_size:
+            raise ValueError(f"Target {target} out of bounds for vocab_size {self.vocab_size} "
+                           f"in pattern type {pt}. seq={seq}")
+
         return {'sequence': seq, 'target': target, 'pattern_type': pt}
 
     def __len__(self):
