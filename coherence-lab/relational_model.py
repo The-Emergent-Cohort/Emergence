@@ -2373,14 +2373,9 @@ class RelationalTeacher(nn.Module):
         - goal_action: None or dict with goal-setting info if it's time to raise the bar
         """
         with torch.no_grad():
-            # Update perceived competence (EMA of correctness)
-            # Count ALL items, not just batches
-            batch_size = was_correct.numel()
-            correct_count = was_correct.sum().item()
-            self.total_observed += batch_size
-            self.correct_observed += correct_count
-            obs_rate = self.correct_observed.float() / self.total_observed.float()
-            self.perceived_competence = 0.95 * self.perceived_competence + 0.05 * obs_rate
+            # NOTE: perceived_competence is updated in monitor_unshown_work
+            # which sees ALL items, not just shown ones. This method only
+            # handles the approval logic for shown work.
 
             # Approval threshold rises with perceived competence
             # At 50% competence: threshold = 0.3 (low bar)
@@ -2452,6 +2447,15 @@ class RelationalTeacher(nn.Module):
             - streak_length: how many correct in a row without showing
         """
         with torch.no_grad():
+            # === UPDATE PERCEIVED COMPETENCE FROM ALL ITEMS ===
+            # This is the ground truth - teacher observes everything
+            batch_size = was_correct_batch.numel()
+            correct_count = was_correct_batch.sum().item()
+            self.total_observed += batch_size
+            self.correct_observed += correct_count
+            obs_rate = self.correct_observed.float() / self.total_observed.float()
+            self.perceived_competence = 0.95 * self.perceived_competence + 0.05 * obs_rate
+
             # Count correct answers that weren't shown
             correct_unshown = (was_correct_batch & ~was_shown_batch).sum().item()
             total_unshown = (~was_shown_batch).sum().item()
