@@ -301,6 +301,14 @@ def train_day_with_proposals(model, loader, optimizer, criterion, device, patter
                     proposal_detail['magnitude'] = magnitude
                     print(f"      [{proposal_type.upper()}] Topic: {topic_name}, Magnitude: {magnitude:.2f}")
 
+                    # Diagnostic: if topic is out of valid range, show probability distribution
+                    if topic_idx >= len(topic_names):
+                        topic_probs = proposal['topic_probs'][0].tolist()
+                        valid_probs = topic_probs[:len(topic_names)]
+                        invalid_probs = topic_probs[len(topic_names):]
+                        print(f"        [OOB topic] valid probs: {[f'{p:.2f}' for p in valid_probs]}, "
+                              f"invalid probs: {[f'{p:.2f}' for p in invalid_probs]}")
+
                 # Show proposal to teacher
                 evaluation, response = model.teacher.evaluate_self_modification_proposal(
                     proposal, cognitive_state, topic_calibration
