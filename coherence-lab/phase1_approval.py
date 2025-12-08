@@ -513,7 +513,7 @@ def main(args):
         return evaluate(mdl, val_loader, device, pattern_to_idx)
 
     # === DEFINE EXAM FUNCTION ===
-    def exam_fn(mdl, topic_name, n_problems, seed, dev):
+    def exam_fn(mdl, topic_name, n_problems, seed, device):
         """Generate and run exam for a single topic."""
         exam_data = PatternDataset(n_examples=n_problems, seed=seed, pattern_types=[topic_name])
         exam_loader = DataLoader(exam_data, batch_size=n_problems, collate_fn=collate_fn)
@@ -521,8 +521,8 @@ def main(args):
         mdl.eval()
         correct = 0
         for batch in exam_loader:
-            tokens = batch['tokens'].to(dev)
-            targets = batch['target'].to(dev)
+            tokens = batch['tokens'].to(device)
+            targets = batch['target'].to(device)
             seq_lens = batch['seq_len']
             with torch.no_grad():
                 details = mdl(tokens, seq_lens, targets=targets, return_details=True)
