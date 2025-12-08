@@ -693,8 +693,9 @@ class SelfModel(nn.Module):
                 if reason is not None:
                     should_show[i] = True
                     show_reasons[i] = reason
-                    # Reset streak on ANY show - counting toward next goal
-                    self.streak_count.zero_()
+                    # Only reset streak on STREAK shows - creative/validation don't interrupt
+                    if reason == 'streak':
+                        self.streak_count.zero_()
 
         return should_show, show_reasons
 
