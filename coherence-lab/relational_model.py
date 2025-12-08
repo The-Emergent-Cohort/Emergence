@@ -3462,15 +3462,15 @@ class PatternDataset(Dataset):
         elif pt == 'geometric':
             # Multiplicative growth: 1, 2, 4, 8, 16...
             # Teaches: different operation (multiply vs add)
-            length = random.randint(3, 5)  # Keep short to stay in vocab
-            base = random.randint(1, 2)
+            # Must ensure target stays in vocab_size bounds
             multiplier = 2
+            # length=3: target = base * 8, so base <= 3 for vocab=26
+            # length=4: target = base * 16, so base = 1 for vocab=26
+            length = random.randint(3, 4)
+            max_base = (self.vocab_size - 1) // (multiplier ** length)
+            base = random.randint(1, max(1, max_base))
             seq = [base * (multiplier ** i) for i in range(length)]
             target = base * (multiplier ** length)
-            # Clamp to vocab size
-            if target >= self.vocab_size:
-                target = self.vocab_size - 1
-            seq = [min(x, self.vocab_size - 1) for x in seq]
         else:
             raise ValueError(f"Unknown pattern type: {pt}")
 
