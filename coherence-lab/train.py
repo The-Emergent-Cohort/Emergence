@@ -98,8 +98,14 @@ def get_all_patterns():
 
 def append_to_log(log_file, record):
     """Append a single record to log file (crash-safe)."""
-    with open(log_file, 'a') as f:
-        f.write(json.dumps(record) + '\n')
+    try:
+        # Ensure parent directory exists
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(log_file, 'a') as f:
+            f.write(json.dumps(record) + '\n')
+            f.flush()  # Force write to disk
+    except Exception as e:
+        print(f"  [Warning: Failed to write log: {e}]")
 
 
 def load_log(log_file):
@@ -361,6 +367,18 @@ def main(args):
 
     def on_epoch_end(epoch, record):
         # Append to log (crash-safe, session-tagged)
+        # Capture per-pattern details for analysis
+        pattern_details = {}
+        eval_m = record.get('eval_metrics', {})
+        for pt in pattern_types:
+            pt_idx = pattern_to_idx[pt]
+            pattern_details[pt] = {
+                'accuracy': eval_m.get('per_pattern', {}).get(pt, 0),
+                'confirmed_level': tracker.confirmed_level[pt_idx].item() if hasattr(tracker, 'confirmed_level') else 0,
+                'xp': tracker.topic_xp[pt_idx].item(),
+                'best_streak': tracker.topic_best_streak[pt_idx].item(),
+            }
+
         log_record = {
             'session_id': session_id,
             'epoch': epoch,
@@ -368,7 +386,12 @@ def main(args):
             'section_name': record['section_name'],
             'is_play_day': record.get('is_play_day', False),
             'train_acc': record.get('train_metrics', {}).get('accuracy'),
-            'eval_acc': record.get('eval_metrics', {}).get('accuracy'),
+            'train_loss': record.get('train_metrics', {}).get('loss'),
+            'eval_acc': eval_m.get('accuracy'),
+            'pattern_details': pattern_details,
+            'level_exams': record.get('level_exams', []),
+            'section_exam': record.get('section_exam'),
+            'stuck_topics': record.get('stuck_topics', []),
             'proposals': proposals.copy(),
             'timestamp': datetime.now().isoformat()
         }
@@ -401,7 +424,10 @@ def main(args):
             print("  Level exams:")
             for r in record['level_exams']:
                 sym = "PASS" if r['passed'] else "FAIL"
-                print(f"    {r['topic']:15s}: {r['score']:.0%} {sym}")
+                extra = ""
+                if not r['passed'] and r.get('consecutive_failures', 0) >= 5:
+                    extra = f" [plateau:{r['consecutive_failures']}]"
+                print(f"    {r['topic']:15s}: {r['score']:.0%} {sym}{extra}")
 
         import sys; sys.stdout.flush()
 
