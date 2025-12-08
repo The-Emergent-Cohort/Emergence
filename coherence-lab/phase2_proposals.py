@@ -534,7 +534,7 @@ def main(args):
             'topic_calibration': topic_calibration.copy()
         })
 
-        print(f"\nDay {day} (Epoch {epoch:2d})")
+        print(f"\nDay {day} (Epoch {epoch:2d})", flush=True)
         print(f"  Train: loss={train_metrics['loss']:.4f}, acc={train_metrics['accuracy']:.1%}")
         print(f"  Val: acc={val_metrics['accuracy']:.1%}")
         print(f"  Shows: {train_metrics['show_rate']:.1%} shown, {train_metrics['approval_rate']:.1%} approved")
@@ -556,6 +556,7 @@ def main(args):
             status = cal.get('status', 'unknown')
             symbol = {'calibrated': 'O', 'guessing': '?', 'overconfident': '!', 'unknown': '.'}[status]
             print(f"    {pt:18s}: {acc:.1%} [{status:12s}] {symbol}")
+        import sys; sys.stdout.flush()
 
         if val_metrics['accuracy'] > best_acc:
             best_acc = val_metrics['accuracy']
