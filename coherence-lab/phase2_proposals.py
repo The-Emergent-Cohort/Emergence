@@ -23,7 +23,7 @@ import json
 from datetime import datetime
 
 from relational_model import (
-    RelationalSystem, PatternDataset, collate_fn, evaluate
+    RelationalSystem, PatternDataset, collate_fn, evaluate, DynamicTopicRegistry
 )
 
 
@@ -98,7 +98,7 @@ class HardPatternDataset(Dataset):
 # =============================================================================
 
 def train_day_with_proposals(model, loader, optimizer, criterion, device, pattern_to_idx,
-                              val_loader=None, topic_calibration=None):
+                              val_loader=None, topic_calibration=None, epoch=None):
     """
     Training loop with self-modification proposals.
 
@@ -346,6 +346,23 @@ def train_day_with_proposals(model, loader, optimizer, criterion, device, patter
                         topic_names=list(pattern_to_idx.keys())
                     )
 
+                    # === CREATE EMERGED TOPIC if propose_novel was approved ===
+                    if proposal_type == 'propose_novel' and hasattr(model, 'topic_registry'):
+                        novel_cat = proposal.get('novel_category', ['unknown'])[0]
+                        # Generate a unique name for the emerged topic
+                        emerged_name = f"emerged_{novel_cat}_{len(model.topic_registry)}"
+                        topic_id = model.add_emerged_topic(
+                            name=emerged_name,
+                            epoch=epoch if 'epoch' in dir() else None,
+                            metadata={
+                                'category': novel_cat,
+                                'trigger': trigger,
+                                'batch_idx': batch_idx,
+                                'recent_accuracy': recent_accuracy
+                            }
+                        )
+                        print(f"        [NEW TOPIC EMERGED] id={topic_id}, name={emerged_name}")
+
                     # Update proposal generator with outcome
                     # (We'll measure success by improvement in next batches)
                     model.learner.self_model.proposal_generator.update_outcome(
@@ -472,6 +489,23 @@ def main(args):
     n_params = sum(p.numel() for p in model.parameters())
     print(f"Parameters: {n_params:,}")
 
+    # === DYNAMIC TOPIC REGISTRY ===
+    # Load previous registry or create new one with curriculum patterns
+    registry_path = Path(args.data_dir) / 'topic_registry.json'
+    if registry_path.exists():
+        print(f"\nLoading topic registry: {registry_path}")
+        topic_registry = DynamicTopicRegistry(registry_path)
+        print(f"  Loaded {len(topic_registry)} topics ({len(topic_registry.get_emerged_topics())} emerged)")
+    else:
+        print("\nCreating topic registry with curriculum patterns")
+        # Include Phase 1 patterns as curriculum topics
+        phase1_patterns = ['alternating', 'repeating', 'incrementing', 'fixed_offset', 'periodic_repeat']
+        topic_registry = DynamicTopicRegistry(phase1_patterns + pattern_types)
+        print(f"  Initialized with {len(topic_registry)} curriculum topics")
+
+    # Attach registry to model
+    model.set_topic_registry(topic_registry)
+
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     criterion = nn.CrossEntropyLoss()
 
@@ -485,7 +519,7 @@ def main(args):
     for epoch in range(1, args.epochs + 1):
         train_metrics = train_day_with_proposals(
             model, train_loader, optimizer, criterion, device, pattern_to_idx,
-            val_loader, topic_calibration
+            val_loader, topic_calibration, epoch=epoch
         )
 
         # Sleep to consolidate
@@ -565,6 +599,9 @@ def main(args):
                 'epoch': epoch,
                 'val_acc': best_acc
             }, Path(args.data_dir) / 'phase2_proposals_best.pt')
+            # Save topic registry with checkpoint
+            topic_registry.save(registry_path)
+            print(f"  [Registry saved: {len(topic_registry)} topics]")
 
         # Check mastery - requires accuracy AND calibration at high level
         all_accurate = all(val_metrics['per_pattern'].get(pt, 0) >= 0.90 for pt in pattern_types)
@@ -603,6 +640,22 @@ def main(args):
     print(f"Final trust: {trust:.1%}")
     print(f"Final internalization: {int_level:.1%}")
     print(f"Final proposal success rate: {prop_success:.1%}")
+
+    # Report emerged topics
+    emerged = topic_registry.get_emerged_topics()
+    if emerged:
+        print(f"\nEmerged topics during training: {len(emerged)}")
+        for topic in emerged:
+            print(f"  {topic['id']}: {topic['name']} (epoch {topic.get('created_epoch', '?')})")
+            if topic.get('metadata'):
+                print(f"      category: {topic['metadata'].get('category', '?')}")
+    else:
+        print("\nNo topics emerged during training")
+
+    # Final registry save
+    topic_registry.save(registry_path)
+    print(f"\nTopic registry saved: {registry_path}")
+    print(f"  Total topics: {len(topic_registry)} ({len(emerged)} emerged)")
     print("=" * 70)
 
     # Save log
@@ -617,6 +670,12 @@ def main(args):
         'final_proposal_success_rate': prop_success,
         'epochs_completed': len(history),
         'early_stop_reason': early_stop_reason if 'early_stop_reason' in dir() else None,
+        'emerged_topics': [
+            {'id': t['id'], 'name': t['name'], 'epoch': t.get('created_epoch'),
+             'category': t.get('metadata', {}).get('category')}
+            for t in emerged
+        ],
+        'total_topics': len(topic_registry),
         'args': vars(args),
         'history': history
     }

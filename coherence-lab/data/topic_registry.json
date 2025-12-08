@@ -1,0 +1,42 @@
+{
+  "topics": {
+    "0": {
+      "name": "alternating",
+      "origin": "curriculum",
+      "created_epoch": null,
+      "metadata": {}
+    },
+    "1": {
+      "name": "repeating",
+      "origin": "curriculum",
+      "created_epoch": null,
+      "metadata": {}
+    },
+    "2": {
+      "name": "incrementing",
+      "origin": "curriculum",
+      "created_epoch": null,
+      "metadata": {}
+    },
+    "3": {
+      "name": "fixed_offset",
+      "origin": "curriculum",
+      "created_epoch": null,
+      "metadata": {}
+    },
+    "4": {
+      "name": "periodic_repeat",
+      "origin": "curriculum",
+      "created_epoch": null,
+      "metadata": {}
+    }
+  },
+  "name_to_id": {
+    "alternating": 0,
+    "repeating": 1,
+    "incrementing": 2,
+    "fixed_offset": 3,
+    "periodic_repeat": 4
+  },
+  "next_id": 5
+}

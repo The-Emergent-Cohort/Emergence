@@ -25,9 +25,138 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 import random
+import json
 from pathlib import Path
 import argparse
 from collections import deque
+
+
+# =============================================================================
+# DYNAMIC TOPIC REGISTRY - Emergent topic tracking
+# =============================================================================
+
+class DynamicTopicRegistry:
+    """
+    Registry for topics that can grow dynamically during training.
+
+    Topics can be:
+    - curriculum: Pre-defined patterns from the curriculum
+    - emerged: Discovered by the model during training
+
+    Saves/loads to JSON for cross-phase continuity.
+    """
+
+    def __init__(self, initial_topics=None):
+        """
+        Args:
+            initial_topics: List of topic names to initialize with, or path to JSON file
+        """
+        self.topics = {}  # id -> {name, origin, created_epoch, metadata}
+        self.name_to_id = {}  # name -> id for quick lookup
+        self.next_id = 0
+
+        if initial_topics is not None:
+            if isinstance(initial_topics, (str, Path)):
+                self.load(initial_topics)
+            elif isinstance(initial_topics, list):
+                for name in initial_topics:
+                    self.add_topic(name, origin='curriculum')
+            elif isinstance(initial_topics, dict):
+                # Direct dict initialization
+                self._load_dict(initial_topics)
+
+    def add_topic(self, name, origin='emerged', epoch=None, metadata=None):
+        """
+        Add a new topic to the registry.
+
+        Args:
+            name: Human-readable name for the topic
+            origin: 'curriculum' or 'emerged' or custom string
+            epoch: Training epoch when this emerged (if applicable)
+            metadata: Any additional info about this topic
+
+        Returns:
+            topic_id: The assigned ID for this topic
+        """
+        # Check if already exists
+        if name in self.name_to_id:
+            return self.name_to_id[name]
+
+        topic_id = self.next_id
+        self.topics[topic_id] = {
+            'name': name,
+            'origin': origin,
+            'created_epoch': epoch,
+            'metadata': metadata or {}
+        }
+        self.name_to_id[name] = topic_id
+        self.next_id += 1
+
+        return topic_id
+
+    def get_topic(self, topic_id):
+        """Get topic info by ID."""
+        return self.topics.get(topic_id, None)
+
+    def get_id(self, name):
+        """Get topic ID by name."""
+        return self.name_to_id.get(name, None)
+
+    def get_name(self, topic_id):
+        """Get topic name by ID."""
+        topic = self.topics.get(topic_id, None)
+        return topic['name'] if topic else f'unknown_{topic_id}'
+
+    def __len__(self):
+        return len(self.topics)
+
+    def __contains__(self, key):
+        if isinstance(key, int):
+            return key in self.topics
+        return key in self.name_to_id
+
+    def save(self, path):
+        """Save registry to JSON file."""
+        data = {
+            'topics': {str(k): v for k, v in self.topics.items()},
+            'name_to_id': self.name_to_id,
+            'next_id': self.next_id
+        }
+        with open(path, 'w') as f:
+            json.dump(data, f, indent=2)
+
+    def load(self, path):
+        """Load registry from JSON file."""
+        with open(path, 'r') as f:
+            data = json.load(f)
+        self._load_dict(data)
+
+    def _load_dict(self, data):
+        """Load from dict structure."""
+        self.topics = {int(k): v for k, v in data.get('topics', {}).items()}
+        self.name_to_id = data.get('name_to_id', {})
+        self.next_id = data.get('next_id', len(self.topics))
+
+    def list_topics(self):
+        """Get list of all topics for display."""
+        return [
+            {'id': tid, **info}
+            for tid, info in sorted(self.topics.items())
+        ]
+
+    def get_emerged_topics(self):
+        """Get only topics that emerged during training."""
+        return [
+            {'id': tid, **info}
+            for tid, info in self.topics.items()
+            if info['origin'] != 'curriculum'
+        ]
+
+    def summary(self):
+        """Get summary string."""
+        curriculum = sum(1 for t in self.topics.values() if t['origin'] == 'curriculum')
+        emerged = len(self.topics) - curriculum
+        return f"Topics: {len(self.topics)} total ({curriculum} curriculum, {emerged} emerged)"
 import time
 import uuid
 
@@ -348,6 +477,43 @@ class TopicConfidenceTracker(nn.Module):
             return raw_confidence * (1 - calibration_penalty)
         return raw_confidence * (1 - calibration_penalty)
 
+    def expand(self, new_size):
+        """
+        Expand topic tracking to accommodate more topics.
+
+        Called when new topics emerge during training.
+        Preserves existing statistics.
+        """
+        if new_size <= self.n_topics:
+            return  # No expansion needed
+
+        with torch.no_grad():
+            # Create expanded buffers
+            device = self.topic_accuracy.device
+            new_accuracy = torch.zeros(new_size, device=device)
+            new_confidence = torch.zeros(new_size, device=device)
+            new_count = torch.zeros(new_size, device=device)
+
+            # Copy existing values
+            new_accuracy[:self.n_topics] = self.topic_accuracy
+            new_confidence[:self.n_topics] = self.topic_confidence
+            new_count[:self.n_topics] = self.topic_count
+
+            # Replace buffers (need to delete and re-register)
+            del self.topic_accuracy
+            del self.topic_confidence
+            del self.topic_count
+
+            self.register_buffer('topic_accuracy', new_accuracy)
+            self.register_buffer('topic_confidence', new_confidence)
+            self.register_buffer('topic_count', new_count)
+
+            self.n_topics = new_size
+
+    def get_active_topics(self):
+        """Get indices of topics that have been used (count > 0)."""
+        return (self.topic_count > 0).nonzero(as_tuple=True)[0].tolist()
+
 
 class SelfModel(nn.Module):
     """
@@ -447,6 +613,16 @@ class SelfModel(nn.Module):
         _, new_memory = self.experience_memory(exp, memory_state)
         return new_memory
 
+    def expand_topics(self, new_size):
+        """
+        Expand topic tracking to accommodate new emerged topics.
+
+        Propagates expansion to topic_tracker and proposal_generator.
+        """
+        self.topic_tracker.expand(new_size)
+        if self.proposal_generator is not None:
+            self.proposal_generator.expand(new_size)
+
     def should_show_work(self, was_correct, is_creative, confidence, internalization_level,
                          teacher_goal=None):
         """
@@ -493,23 +669,23 @@ class SelfModel(nn.Module):
 
                 reason = None
 
-                # Creative and correct → always worth showing
-                # (But later, we might distinguish "truly creative" vs "just different")
-                if is_creative[i] and was_correct[i]:
-                    reason = 'creative'
+                # === PRIORITY: Competence > Creativity > Validation > Spontaneous ===
+                # Streak (proven consistency) must be checked FIRST
+                # Otherwise creative catches everything and streak never triggers
 
-                # Streak meets goal - time to show!
-                # This is the negotiated/set goal from teacher
-                elif self.streak_count >= streak_threshold and was_correct[i]:
+                # 1. Streak meets goal - COMPETENCE (the graduation signal)
+                if self.streak_count >= streak_threshold and was_correct[i]:
                     reason = 'streak'
 
-                # Uncertain but correct → seeking validation
-                # Early: show when not sure (confidence < 0.5)
-                # Later: only show when VERY unsure (threshold drops)
+                # 2. Creative and correct - genuinely novel approach
+                elif is_creative[i] and was_correct[i]:
+                    reason = 'creative'
+
+                # 3. Uncertain but correct → seeking validation
                 elif was_correct[i] and confidence[i] < validation_conf_threshold:
                     reason = 'validation'
 
-                # Spontaneous showing - decreases rapidly with internalization
+                # 4. Spontaneous - random chance, decreases with internalization
                 elif was_correct[i]:
                     if torch.rand(1).item() < spontaneous_rate:
                         reason = 'spontaneous'
@@ -1121,6 +1297,14 @@ class RelationalLearner(nn.Module):
 
         return logits, final_self['emotions']['confidence'], pattern_logits
 
+    def expand_topics(self, new_size):
+        """
+        Expand topic tracking throughout the learner.
+
+        Called when new topics emerge during training.
+        """
+        self.self_model.expand_topics(new_size)
+
 
 # =============================================================================
 # SELF-MODIFICATION PROPOSALS
@@ -1380,6 +1564,43 @@ class ProposalGenerator(nn.Module):
             if total_attempts == 0:
                 return 0.5
             return self.proposal_outcomes[:, 0].sum().item() / total_attempts
+
+    def expand(self, new_size):
+        """
+        Expand topic tracking to accommodate more emerged topics.
+
+        Called when new topics are discovered during training.
+        Preserves existing learned weights and statistics.
+        """
+        if new_size <= self.n_topics:
+            return  # No expansion needed
+
+        with torch.no_grad():
+            device = self.topic_proposal_outcomes.device
+
+            # Expand topic_proposal_outcomes buffer
+            new_outcomes = torch.zeros(new_size, 2, device=device)
+            new_outcomes[:self.n_topics] = self.topic_proposal_outcomes
+            del self.topic_proposal_outcomes
+            self.register_buffer('topic_proposal_outcomes', new_outcomes)
+
+            # Expand topic_selector linear layer
+            old_weight = self.topic_selector.weight.data
+            old_bias = self.topic_selector.bias.data
+
+            # Create new larger layer
+            new_selector = nn.Linear(self.d_model, new_size).to(device)
+
+            # Copy old weights
+            new_selector.weight.data[:self.n_topics] = old_weight
+            new_selector.bias.data[:self.n_topics] = old_bias
+
+            # Initialize new topic slots with small random values
+            nn.init.xavier_uniform_(new_selector.weight.data[self.n_topics:])
+            nn.init.zeros_(new_selector.bias.data[self.n_topics:])
+
+            self.topic_selector = new_selector
+            self.n_topics = new_size
 
 
 class ProposalEvaluator(nn.Module):
@@ -2560,6 +2781,52 @@ class RelationalSystem(nn.Module):
 
         return learner_output['logits'], learner_output['self_state']['emotions']['confidence'], learner_output['pattern_logits']
 
+    def expand_topics(self, new_size):
+        """
+        Expand topic tracking throughout the system.
+
+        Called when new topics emerge during training.
+        """
+        self.learner.expand_topics(new_size)
+        self.n_topics = new_size
+
+    def set_topic_registry(self, registry):
+        """
+        Attach a DynamicTopicRegistry to this system.
+
+        The registry tracks emerged topics across training phases.
+        """
+        self.topic_registry = registry
+        # Ensure we have enough topic slots
+        if len(registry) > self.n_topics:
+            self.expand_topics(len(registry))
+
+    def add_emerged_topic(self, name, epoch=None, metadata=None):
+        """
+        Add a new emerged topic to the registry and expand tracking.
+
+        Called when a propose_novel proposal is approved.
+
+        Returns:
+            topic_id: The assigned ID for the new topic
+        """
+        if not hasattr(self, 'topic_registry'):
+            # Create registry if not attached
+            self.topic_registry = DynamicTopicRegistry()
+
+        topic_id = self.topic_registry.add_topic(
+            name=name,
+            origin='emerged',
+            epoch=epoch,
+            metadata=metadata
+        )
+
+        # Expand topic tracking if needed
+        if len(self.topic_registry) > self.n_topics:
+            self.expand_topics(len(self.topic_registry))
+
+        return topic_id
+
 
 # =============================================================================
 # DATASET (same as before)
@@ -2662,6 +2929,316 @@ def collate_fn(batch):
         'seq_len': [b['seq_len'] for b in batch],
         'pattern_type': [b['pattern_type'] for b in batch]
     }
+
+
+# =============================================================================
+# CURRICULUM DATASET - Phase-aware with context scaling
+# =============================================================================
+
+# Phase configurations
+CURRICULUM_CONFIG = {
+    '1': {
+        'patterns': ['repeating', 'alternating', 'incrementing', 'fixed_offset', 'periodic_repeat'],
+        'seq_len': (4, 6),
+        'max_pad': 8,
+        'success_threshold': 0.95,
+        'description': 'Foundation patterns'
+    },
+    '2a': {
+        'patterns': ['repeating', 'alternating', 'periodic_3', 'periodic_4'],
+        'seq_len': (6, 8),
+        'max_pad': 10,
+        'success_threshold': 0.90,
+        'description': 'Position patterns (extended)'
+    },
+    '2b': {
+        'patterns': ['incrementing', 'fixed_offset', 'decrementing', 'variable_step'],
+        'seq_len': (8, 10),
+        'max_pad': 12,
+        'success_threshold': 0.85,
+        'description': 'Arithmetic patterns'
+    },
+    '3a': {
+        'patterns': ['compositional', 'long_range', 'interleaved'],
+        'seq_len': (10, 12),
+        'max_pad': 14,
+        'success_threshold': 0.80,
+        'description': 'Working memory patterns'
+    },
+    '3b': {
+        'patterns': ['fibonacci_like', 'difference_based'],
+        'seq_len': (8, 10),
+        'max_pad': 12,
+        'success_threshold': 0.75,
+        'description': 'Recursive patterns'
+    },
+    '4': {
+        'patterns': ['context_dependent', 'mirror', 'ambiguous'],
+        'seq_len': (12, 16),
+        'max_pad': 18,
+        'success_threshold': 0.70,
+        'description': 'Advanced reasoning'
+    }
+}
+
+
+class CurriculumDataset(Dataset):
+    """
+    Phase-aware curriculum dataset with context length scaling.
+
+    Based on developmental psychology principles:
+    - Scaffolding: Each phase builds on prior mastery
+    - ZPD: Tasks are challenging but achievable
+    - Dual progression: Pattern complexity AND context length scale together
+    """
+
+    def __init__(self, phase='1', n_examples=50000, vocab_size=26, seed=None):
+        if seed:
+            random.seed(seed)
+
+        self.vocab_size = vocab_size
+        self.phase = phase
+        self.config = CURRICULUM_CONFIG[phase]
+        self.seq_len_min, self.seq_len_max = self.config['seq_len']
+        self.max_pad = self.config['max_pad']
+        self.pattern_types = self.config['patterns']
+
+        self.examples = []
+        for _ in range(n_examples):
+            pattern_type = random.choice(self.pattern_types)
+            self.examples.append(self._generate(pattern_type))
+
+    def _get_length(self):
+        """Get sequence length within phase-appropriate range."""
+        return random.randint(self.seq_len_min, self.seq_len_max)
+
+    def _generate(self, pt):
+        """Generate a pattern example."""
+
+        # === PHASE 1 & 2A: Position-based patterns ===
+
+        if pt == 'repeating':
+            a = random.randint(0, self.vocab_size - 1)
+            length = self._get_length()
+            seq = [a] * length
+            target = a
+
+        elif pt == 'alternating':
+            a, b = random.sample(range(self.vocab_size), 2)
+            length = self._get_length()
+            seq = [a if i % 2 == 0 else b for i in range(length)]
+            target = a if length % 2 == 0 else b
+
+        elif pt == 'periodic_repeat':
+            period = random.randint(3, 4)
+            base = random.sample(range(self.vocab_size), period)
+            length = self._get_length()
+            full_cycles = length // period
+            extra = length % period
+            if extra == 0:
+                extra = random.randint(1, period - 1)
+                full_cycles = max(1, full_cycles - 1)
+            seq = (base * full_cycles) + base[:extra]
+            target = base[extra % period]
+
+        elif pt == 'periodic_3':
+            base = random.sample(range(self.vocab_size), 3)
+            length = self._get_length()
+            full_cycles = length // 3
+            extra = length % 3
+            if extra == 0:
+                extra = random.randint(1, 2)
+                full_cycles = max(1, full_cycles - 1)
+            seq = (base * full_cycles) + base[:extra]
+            target = base[extra % 3]
+
+        elif pt == 'periodic_4':
+            base = random.sample(range(self.vocab_size), 4)
+            length = self._get_length()
+            full_cycles = length // 4
+            extra = length % 4
+            if extra == 0:
+                extra = random.randint(1, 3)
+                full_cycles = max(1, full_cycles - 1)
+            seq = (base * full_cycles) + base[:extra]
+            target = base[extra % 4]
+
+        # === PHASE 2B: Arithmetic patterns ===
+
+        elif pt == 'incrementing':
+            length = self._get_length()
+            start = random.randint(0, max(0, self.vocab_size - length - 1))
+            seq = [start + i for i in range(length)]
+            target = start + length
+
+        elif pt == 'fixed_offset':
+            length = self._get_length()
+            k = random.randint(2, 3)
+            start = random.randint(0, max(0, self.vocab_size - k * length - 1))
+            seq = [start + i * k for i in range(length)]
+            target = start + length * k
+
+        elif pt == 'decrementing':
+            length = self._get_length()
+            start = random.randint(length, self.vocab_size - 1)
+            seq = [start - i for i in range(length)]
+            target = start - length
+
+        elif pt == 'variable_step':
+            # Steps increase: +1, +2, +3, ... (triangular)
+            length = self._get_length()
+            # Sum of 1+2+...+length = length*(length+1)/2
+            max_sum = length * (length + 1) // 2
+            start = random.randint(0, max(0, self.vocab_size - max_sum - length))
+            seq = []
+            val = start
+            for i in range(length):
+                seq.append(val)
+                val += (i + 1)
+            target = val  # Next step would be +length
+
+        # === PHASE 3A: Working memory patterns ===
+
+        elif pt == 'compositional':
+            # Two patterns interleaved: incrementing + constant
+            length = self._get_length()
+            half = length // 2
+            inc_start = random.randint(0, max(0, self.vocab_size - half - 2))
+            const = random.randint(0, self.vocab_size - 1)
+            while const in [inc_start + i for i in range(half + 1)]:
+                const = random.randint(0, self.vocab_size - 1)
+            seq = []
+            for i in range(half):
+                seq.append(inc_start + i)
+                seq.append(const)
+            # Target depends on position
+            if length % 2 == 0:
+                target = inc_start + half  # Next incrementing
+            else:
+                target = const
+
+        elif pt == 'long_range':
+            # Must remember element from early in sequence
+            length = self._get_length()
+            anchor = random.randint(0, self.vocab_size - 1)
+            filler = random.randint(0, self.vocab_size - 1)
+            while filler == anchor:
+                filler = random.randint(0, self.vocab_size - 1)
+            # Anchor at position 0, rest are filler, target is anchor
+            seq = [anchor] + [filler] * (length - 1)
+            target = anchor
+
+        elif pt == 'interleaved':
+            # Two independent patterns at alternating positions
+            length = self._get_length()
+            # Pattern A: incrementing at even positions
+            # Pattern B: decrementing at odd positions
+            a_start = random.randint(0, max(0, self.vocab_size // 2 - length // 2 - 1))
+            b_start = random.randint(self.vocab_size // 2, self.vocab_size - 1)
+            seq = []
+            for i in range(length):
+                if i % 2 == 0:
+                    seq.append(a_start + i // 2)
+                else:
+                    seq.append(b_start - i // 2)
+            # Target depends on next position parity
+            if length % 2 == 0:
+                target = a_start + length // 2
+            else:
+                target = b_start - length // 2
+
+        # === PHASE 3B: Recursive patterns ===
+
+        elif pt == 'fibonacci_like':
+            length = self._get_length()
+            # Start with small values to avoid overflow
+            a, b = random.randint(1, 3), random.randint(1, 3)
+            seq = [a, b]
+            while len(seq) < length:
+                next_val = seq[-1] + seq[-2]
+                if next_val >= self.vocab_size:
+                    break
+                seq.append(next_val)
+            if len(seq) < 3:
+                # Fallback if sequence too short
+                seq = [1, 1, 2, 3, 5][:length]
+            target = seq[-1] + seq[-2] if seq[-1] + seq[-2] < self.vocab_size else seq[-1]
+
+        elif pt == 'difference_based':
+            # Pattern is in the differences: diffs are incrementing
+            length = self._get_length()
+            start = random.randint(0, 5)
+            seq = [start]
+            diff = 1
+            for i in range(length - 1):
+                next_val = seq[-1] + diff
+                if next_val >= self.vocab_size:
+                    break
+                seq.append(next_val)
+                diff += 1
+            target = seq[-1] + diff if seq[-1] + diff < self.vocab_size else seq[-1]
+
+        # === PHASE 4: Advanced patterns ===
+
+        elif pt == 'context_dependent':
+            # If first element < vocab_size/2: increment, else decrement
+            length = self._get_length()
+            first = random.randint(0, self.vocab_size - 1)
+            if first < self.vocab_size // 2:
+                # Incrementing
+                start = random.randint(0, max(0, self.vocab_size - length - 1))
+                seq = [start + i for i in range(length)]
+                target = start + length
+            else:
+                # Decrementing
+                start = random.randint(length, self.vocab_size - 1)
+                seq = [start - i for i in range(length)]
+                target = start - length
+            seq[0] = first  # Override first to be the context signal
+
+        elif pt == 'mirror':
+            # Palindrome: first half determines second half
+            length = self._get_length()
+            half = (length + 1) // 2
+            first_half = [random.randint(0, self.vocab_size - 1) for _ in range(half)]
+            seq = first_half + first_half[-(2 if length % 2 == 0 else 1)::-1]
+            seq = seq[:length]
+            # Target continues the mirror
+            mirror_pos = length % half
+            target = first_half[half - 1 - mirror_pos] if mirror_pos < half else first_half[0]
+
+        elif pt == 'ambiguous':
+            # Could be +2 or *2 - both valid interpretations
+            length = min(self._get_length(), 5)  # Keep short
+            start = random.randint(2, 4)
+            seq = [start]
+            for i in range(length - 1):
+                seq.append(seq[-1] + 2)  # We use +2, but *2 also plausible early
+            target = seq[-1] + 2  # Continue with +2
+
+        else:
+            raise ValueError(f"Unknown pattern type: {pt}")
+
+        # Validate target
+        if target < 0 or target >= self.vocab_size:
+            # Clamp if out of bounds (shouldn't happen with careful generation)
+            target = max(0, min(self.vocab_size - 1, target))
+
+        return {'sequence': seq, 'target': target, 'pattern_type': pt}
+
+    def __len__(self):
+        return len(self.examples)
+
+    def __getitem__(self, idx):
+        ex = self.examples[idx]
+        seq_len = len(ex['sequence'])
+        padded = ex['sequence'] + [0] * (self.max_pad - seq_len)
+        return {
+            'sequence': torch.tensor(padded[:self.max_pad], dtype=torch.long),
+            'target': torch.tensor(ex['target'], dtype=torch.long),
+            'seq_len': seq_len,
+            'pattern_type': ex['pattern_type']
+        }
 
 
 # =============================================================================
