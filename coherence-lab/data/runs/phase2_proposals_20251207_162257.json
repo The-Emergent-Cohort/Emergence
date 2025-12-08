@@ -1,5 +1,9 @@
 {
+  "script": "phase2_proposals.py",
   "run_id": "20251207_162257",
+  "phase1_checkpoint": "data/phase1_approval_best.pt",
+  "phase1_val_acc": 0.991,
+  "early_stop_reason": "Phase 2 complete - trust/internalization saturated, proposal success 100%",
   "best_acc": 0.963375,
   "final_trust": 0.9933071732521057,
   "final_internalization": 0.9933071732521057,

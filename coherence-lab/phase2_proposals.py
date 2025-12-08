@@ -433,13 +433,23 @@ def main(args):
                 'val_acc': best_acc
             }, Path(args.data_dir) / 'phase2_proposals_best.pt')
 
-        # Check mastery
-        all_good = all(val_metrics['per_pattern'].get(pt, 0) >= 0.90 for pt in pattern_types)
-        if all_good and val_metrics['accuracy'] >= 0.90:
-            print(f"\n*** Phase 2 complete! Self-modification proposals working. ***")
-            print(f"    Trust: {trust:.1%}, Internalization: {int_level:.1%}")
-            print(f"    Proposal success rate: {prop_success:.1%}")
-            break
+        # Check mastery - requires accuracy AND calibration
+        all_accurate = all(val_metrics['per_pattern'].get(pt, 0) >= 0.90 for pt in pattern_types)
+        all_calibrated = all(topic_calibration.get(pt, {}).get('status') == 'calibrated' for pt in pattern_types)
+
+        # Can't graduate if still guessing or overconfident on any topic
+        uncalibrated = [pt for pt in pattern_types if topic_calibration.get(pt, {}).get('status') != 'calibrated']
+
+        if all_accurate and val_metrics['accuracy'] >= 0.90:
+            if all_calibrated:
+                early_stop_reason = "Phase 2 complete - all topics accurate and calibrated"
+                print(f"\n*** Phase 2 complete! Self-modification proposals working. ***")
+                print(f"    Trust: {trust:.1%}, Internalization: {int_level:.1%}")
+                print(f"    Proposal success rate: {prop_success:.1%}")
+                break
+            else:
+                # Accurate but not calibrated - teacher notices guessing
+                print(f"\n  [Teacher notes: Still guessing on {uncalibrated} - not ready to graduate]")
 
     print("\n" + "=" * 70)
     print(f"Best accuracy: {best_acc:.1%}")
@@ -452,11 +462,14 @@ def main(args):
     run_log = {
         'script': 'phase2_proposals.py',
         'run_id': run_id,
+        'phase1_checkpoint': str(phase1_path) if phase1_path.exists() and not args.fresh else None,
+        'phase1_val_acc': checkpoint.get('val_acc') if phase1_path.exists() and not args.fresh else None,
         'best_acc': best_acc,
         'final_trust': trust,
         'final_internalization': int_level,
         'final_proposal_success_rate': prop_success,
         'epochs_completed': len(history),
+        'early_stop_reason': early_stop_reason if 'early_stop_reason' in dir() else None,
         'args': vars(args),
         'history': history
     }
