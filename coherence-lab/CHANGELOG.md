@@ -1,5 +1,12 @@
 # Coherence Lab Changelog
 
+## [0.5.5] - 2024-12-08
+### Fixed
+- **Streak-mastered topics can now earn XP**: Was blocking XP on `topic_mastered`
+  - Changed to `topic_graduated` (exam-proven L10)
+  - Streak mastery = sign of readiness, but still need to prove via exams
+  - Fixes `repeating` stuck at L1 with 100% accuracy but 10xp
+
 ## [0.5.4] - 2024-12-08
 ### Fixed
 - **XP capped at next exam threshold**: No more runaway XP

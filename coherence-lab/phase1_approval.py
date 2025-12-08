@@ -11,7 +11,7 @@ Building the social learning foundation:
 This is the developmental foundation for later phases.
 """
 
-__version__ = "0.5.4"  # XP gated by exams + streak reset on fail
+__version__ = "0.5.5"  # Fix streak-mastered XP block
 
 import torch
 import torch.nn as nn
