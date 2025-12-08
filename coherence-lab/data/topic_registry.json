@@ -31,68 +31,34 @@
       "metadata": {}
     },
     "5": {
-      "name": "emerged_meta_5",
-      "origin": "emerged",
-      "created_epoch": 2,
-      "metadata": {
-        "category": "meta",
-        "trigger": [
-          "propose_novel",
-          -1,
-          0.5,
-          "insight"
-        ],
-        "batch_idx": 80,
-        "recent_accuracy": 0.8028125
-      }
+      "name": "counting",
+      "origin": "curriculum",
+      "created_epoch": null,
+      "metadata": {}
     },
     "6": {
-      "name": "emerged_meta_6",
-      "origin": "emerged",
-      "created_epoch": 2,
-      "metadata": {
-        "category": "meta",
-        "trigger": [
-          "propose_novel",
-          -1,
-          0.5,
-          "insight"
-        ],
-        "batch_idx": 20,
-        "recent_accuracy": 0.7886904761904762
-      }
+      "name": "modular",
+      "origin": "curriculum",
+      "created_epoch": null,
+      "metadata": {}
     },
     "7": {
-      "name": "emerged_meta_7",
-      "origin": "emerged",
-      "created_epoch": 3,
-      "metadata": {
-        "category": "meta",
-        "trigger": [
-          "request_practice",
-          1,
-          0.5,
-          "need_practice"
-        ],
-        "batch_idx": 20,
-        "recent_accuracy": 0.8794642857142857
-      }
+      "name": "staircase",
+      "origin": "curriculum",
+      "created_epoch": null,
+      "metadata": {}
     },
     "8": {
-      "name": "emerged_meta_8",
-      "origin": "emerged",
-      "created_epoch": 3,
-      "metadata": {
-        "category": "meta",
-        "trigger": [
-          "request_practice",
-          1,
-          0.5,
-          "need_practice"
-        ],
-        "batch_idx": 460,
-        "recent_accuracy": 0.894375
-      }
+      "name": "geometric",
+      "origin": "curriculum",
+      "created_epoch": null,
+      "metadata": {}
+    },
+    "9": {
+      "name": "indexed_lookup",
+      "origin": "curriculum",
+      "created_epoch": null,
+      "metadata": {}
     }
   },
   "name_to_id": {
@@ -101,10 +67,11 @@
     "incrementing": 2,
     "fixed_offset": 3,
     "periodic_repeat": 4,
-    "emerged_meta_5": 5,
-    "emerged_meta_6": 6,
-    "emerged_meta_7": 7,
-    "emerged_meta_8": 8
+    "counting": 5,
+    "modular": 6,
+    "staircase": 7,
+    "geometric": 8,
+    "indexed_lookup": 9
   },
-  "next_id": 9
+  "next_id": 10
 }
