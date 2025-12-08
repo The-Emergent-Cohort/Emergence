@@ -582,14 +582,16 @@ class TopicConfidenceTracker(nn.Module):
         - Calibrated: 100% (knows what and why)
         - Guessing/Overconfident: 75% ("let's make sure")
 
-        Mastered topics: No more XP (you've proven yourself).
+        Graduated topics (exam-proven): No more XP (you've proven yourself).
 
         XP cannot go below 0.
         """
         with torch.no_grad():
             if isinstance(topic_idx, int):
-                # Skip XP for mastered topics - you've proven yourself
-                if self.topic_mastered[topic_idx]:
+                # Skip XP for GRADUATED topics (exam-proven), not just streak-mastered
+                # Streak mastery = sign you might be ready, still need to prove via exam
+                self._init_exam_state()
+                if self.topic_graduated[topic_idx]:
                     return
 
                 level = max(1, self.get_level(topic_idx))
