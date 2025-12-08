@@ -11,7 +11,7 @@ Building the social learning foundation:
 This is the developmental foundation for later phases.
 """
 
-__version__ = "0.3.3"  # Goals only increase on streak shows, not creative/validation/spontaneous
+__version__ = "0.3.4"  # Added per-topic streak display to epoch output
 
 import torch
 import torch.nn as nn

@@ -1,5 +1,11 @@
 # Coherence Lab Changelog
 
+## [0.3.4] - 2024-12-08
+### Added
+- **Per-topic streak display**: Epoch output now shows `streak:current/best` for each topic
+  - 'M' symbol for mastered topics (100 consecutive correct)
+  - Streak info also saved to run logs for analysis
+
 ## [0.3.3] - 2024-12-08
 ### Fixed
 - **Goals only on streaks**: Goal increases now ONLY trigger on streak shows
