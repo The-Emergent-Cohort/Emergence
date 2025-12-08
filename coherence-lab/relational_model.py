@@ -1966,17 +1966,17 @@ class RelationalTeacher(nn.Module):
 
             if show_reason == 'creative':
                 # Creative shows always refresh impressedness
-                self.impressedness = min(1.0, self.impressedness + 0.2)
+                self.impressedness.add_(0.2).clamp_(max=1.0)
                 self.shows_at_level.zero_()
             elif quality_diff > 0.1:
                 # Noticeably better than before - impressive!
-                self.impressedness = min(1.0, self.impressedness + 0.1)
+                self.impressedness.add_(0.1).clamp_(max=1.0)
                 self.shows_at_level.zero_()
             elif abs(quality_diff) < 0.1:
                 # Similar to before - novelty wearing off
                 self.shows_at_level += 1
                 decay = 0.05 * self.shows_at_level.item()
-                self.impressedness = max(0.2, self.impressedness - decay)
+                self.impressedness.sub_(decay).clamp_(min=0.2)
             # Worse than before doesn't decay impressedness (concern, not boredom)
 
             self.last_show_quality.fill_(show_quality)
@@ -2053,7 +2053,7 @@ class RelationalTeacher(nn.Module):
                 # Acceptable proposal
                 self.current_goal.fill_(student_proposal)
                 self.goals_met_count.zero_()
-                self.impressedness.fill_(min(1.0, self.impressedness.item() + 0.1))
+                self.impressedness.add_(0.1).clamp_(max=1.0)
                 return {
                     'accepted': True,
                     'final_goal': student_proposal,
@@ -2091,7 +2091,7 @@ class RelationalTeacher(nn.Module):
         with torch.no_grad():
             self.goals_met_count += 1
             # Small impressedness boost for meeting goal
-            self.impressedness = min(1.0, self.impressedness + 0.05)
+            self.impressedness.add_(0.05).clamp_(max=1.0)
 
     def evaluate_learner_process(self, states_history, confidence, was_correct, pattern_type_idx,
                                   topic_accuracy=None):
