@@ -11,7 +11,7 @@ Building the social learning foundation:
 This is the developmental foundation for later phases.
 """
 
-__version__ = "0.4.1"  # XP scaling: difficulty/level formula + farming detection
+__version__ = "0.4.2"  # Pure level scaling (removed static difficulty)
 
 import torch
 import torch.nn as nn
@@ -134,15 +134,9 @@ def train_day_with_approval(model, loader, optimizer, criterion, device, pattern
                 topic_idx = pattern_to_idx[pattern_types[idx_item]]
                 was_correct_item = correct[idx].item()
                 topic_level = model.learner.self_model.topic_tracker.get_level(topic_idx)
-                topic_difficulty = model.learner.self_model.topic_tracker.topic_difficulty[topic_idx].item()
 
-                # === FARMING DETECTION ===
-                # High level on easy topic + not creative/streak = wasting time
-                is_farming = (topic_level >= 4 and topic_difficulty <= 1.5 and
-                              reason in ('validation', 'spontaneous'))
-                if is_farming:
-                    # Teacher notices: "You already know this. Move on."
-                    model.learner.self_model.topic_tracker.award_xp(topic_idx, -2)  # Farming penalty
+                # Note: Farming is naturally prevented by level scaling (1/level XP)
+                # High level = diminishing returns = move on to harder content
 
                 if reason == 'creative':
                     if was_correct_item:
@@ -288,22 +282,8 @@ def main(args):
     # Attach registry to model
     model.set_topic_registry(topic_registry)
 
-    # === SET TOPIC DIFFICULTIES ===
-    # Higher difficulty = harder = more XP per action (prevents farming easy topics)
-    # Based on empirical pattern complexity:
-    topic_difficulties = {
-        'alternating': 1.0,      # Easy - just flip between two values
-        'repeating': 1.0,        # Easy - same value repeats
-        'incrementing': 1.5,     # Medium - arithmetic progression
-        'fixed_offset': 2.0,     # Medium-hard - look back N positions
-        'periodic_repeat': 2.5,  # Hard - complex period detection
-    }
-    for pattern_name, difficulty in topic_difficulties.items():
-        if pattern_name in pattern_to_idx:
-            model.learner.self_model.topic_tracker.set_topic_difficulty(
-                pattern_to_idx[pattern_name], difficulty
-            )
-    print(f"Topic difficulties: {topic_difficulties}")
+    # XP uses pure level scaling (1/level) - no static topic difficulty
+    # Higher levels naturally get less XP = move on to harder content
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     criterion = nn.CrossEntropyLoss()
@@ -330,7 +310,6 @@ def main(args):
             acc, conf, gap = model.learner.self_model.topic_tracker.get_calibration(idx)
             streak, best_streak, mastered = model.learner.self_model.topic_tracker.get_streak_info(idx)
             xp, level, progress, xp_high = model.learner.self_model.topic_tracker.get_xp_info(idx)
-            difficulty = model.learner.self_model.topic_tracker.topic_difficulty[idx].item()
             topic_calibration[pattern_name] = {
                 'accuracy': acc,
                 'confidence': conf,
@@ -342,8 +321,7 @@ def main(args):
                 'xp': xp,
                 'level': level,
                 'level_progress': progress,
-                'xp_high': xp_high,
-                'difficulty': difficulty
+                'xp_high': xp_high
             }
 
         # Developmental state
@@ -395,14 +373,11 @@ def main(args):
             level = cal.get('level', 0)
             progress = cal.get('level_progress', 0)
             xp = cal.get('xp', 0)
-            diff = cal.get('difficulty', 1.0)
             acc_symbol = "O" if acc >= 0.95 else ("o" if acc >= 0.85 else ".")
             cal_symbol = {'calibrated': 'C', 'guessing': '?', 'overconfident': '!', 'unknown': '.'}[cal_status]
             # Level bar: █ for each level, ░ for progress to next
             level_bar = "█" * level + ("░" if progress > 0.5 else "") + "·" * (10 - level - (1 if progress > 0.5 else 0))
-            # Difficulty stars: ★ for each 0.5 difficulty
-            diff_stars = "★" * int(diff * 2)
-            print(f"    {pt:15s}: {acc:.1%} {acc_symbol} {cal_symbol} L{level:2d} {level_bar} ({xp:.0f}xp) {diff_stars}")
+            print(f"    {pt:15s}: {acc:.1%} {acc_symbol} {cal_symbol} L{level:2d} {level_bar} ({xp:.0f}xp)")
         import sys; sys.stdout.flush()
 
         if val_metrics['accuracy'] > best_acc:

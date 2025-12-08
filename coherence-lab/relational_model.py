@@ -391,11 +391,8 @@ class TopicConfidenceTracker(nn.Module):
         self.register_buffer('topic_xp_high', torch.zeros(n_topics))  # High water mark
         self.max_level = 10  # Mastery level
 
-        # Topic difficulty ratings (can be set externally)
-        # Higher = harder = more XP per action
-        # Formula: actual_xp = base_xp * difficulty / max(1, current_level)
-        # This prevents low-level farming: high level on easy topic = less XP
-        self.register_buffer('topic_difficulty', torch.ones(n_topics))  # Default: all equal
+        # Note: XP uses pure level scaling (1/level) - no static difficulty
+        # Higher levels naturally get diminishing XP returns
 
     def update(self, topic_idx, was_correct, predicted_confidence):
         """
@@ -445,10 +442,9 @@ class TopicConfidenceTracker(nn.Module):
                     # Check for mastery
                     if self.topic_streak[idx] >= self.mastery_threshold:
                         self.topic_mastered[idx] = True
-                    # Basic XP for correct answer (scaled by difficulty/level)
-                    difficulty = self.topic_difficulty[idx].item()
+                    # Basic XP for correct answer (scaled by 1/level)
                     level = max(1, self.get_level(idx))
-                    scaled_xp = 1.0 * difficulty / level
+                    scaled_xp = 1.0 / level
                     self.topic_xp[idx] += scaled_xp
                     if self.topic_xp[idx] > self.topic_xp_high[idx]:
                         self.topic_xp_high[idx] = self.topic_xp[idx].clone()
@@ -577,31 +573,27 @@ class TopicConfidenceTracker(nn.Module):
 
     def award_xp(self, topic_idx, amount, reason=None):
         """
-        Award (or deduct) XP for a topic, scaled by difficulty and level.
+        Award (or deduct) XP for a topic, scaled by level.
 
-        Formula: actual_xp = base_amount * difficulty / max(1, current_level)
+        Formula: actual_xp = base_amount / max(1, current_level)
 
-        This prevents low-level farming:
-        - High level on easy topic = diminished XP
-        - Low level on hard topic = bonus XP
+        Pure RPG-style level scaling:
+        - L1 on any topic: full XP (it's hard for you)
+        - L5 on any topic: 1/5th XP (it's trivial now)
+        - Penalties are NOT scaled (always hurt the same)
 
-        Base amounts:
-        - Correct answer: +1 (handled in update())
-        - Streak show (correct): +streak_length
-        - Creative show (correct): +5
-        - Creative show (wrong): -3 (penalties are NOT scaled - always hurt)
-        - Validation show: 0
+        The "difficulty" is your level relationship to the content,
+        not a static property of the topic. When XP dries up, move on.
 
         XP cannot go below 0.
         """
         with torch.no_grad():
             if isinstance(topic_idx, int):
-                difficulty = self.topic_difficulty[topic_idx].item()
                 level = max(1, self.get_level(topic_idx))
 
-                # Scale positive XP by difficulty/level; penalties stay fixed
+                # Scale positive XP by 1/level; penalties stay fixed
                 if amount > 0:
-                    scaled_amount = amount * difficulty / level
+                    scaled_amount = amount / level
                 else:
                     scaled_amount = amount  # Penalties not scaled
 
@@ -615,11 +607,6 @@ class TopicConfidenceTracker(nn.Module):
                 self.topic_xp.clamp_(min=0)
                 mask = self.topic_xp > self.topic_xp_high
                 self.topic_xp_high[mask] = self.topic_xp[mask]
-
-    def set_topic_difficulty(self, topic_idx, difficulty):
-        """Set difficulty rating for a topic. Higher = harder = more XP."""
-        with torch.no_grad():
-            self.topic_difficulty[topic_idx] = difficulty
 
     def get_total_xp(self):
         """Get total XP across all topics."""
@@ -702,19 +689,15 @@ class TopicConfidenceTracker(nn.Module):
             # Expand XP buffers
             new_xp = torch.zeros(new_size, device=device)
             new_xp_high = torch.zeros(new_size, device=device)
-            new_difficulty = torch.ones(new_size, device=device)  # Default difficulty 1.0
 
             new_xp[:self.n_topics] = self.topic_xp
             new_xp_high[:self.n_topics] = self.topic_xp_high
-            new_difficulty[:self.n_topics] = self.topic_difficulty
 
             del self.topic_xp
             del self.topic_xp_high
-            del self.topic_difficulty
 
             self.register_buffer('topic_xp', new_xp)
             self.register_buffer('topic_xp_high', new_xp_high)
-            self.register_buffer('topic_difficulty', new_difficulty)
 
             self.n_topics = new_size
 

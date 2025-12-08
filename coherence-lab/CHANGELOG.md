@@ -1,5 +1,15 @@
 # Coherence Lab Changelog
 
+## [0.4.2] - 2024-12-08
+### Changed
+- **Pure level scaling**: Simplified XP formula to `actual_xp = base / level`
+  - Removed static topic difficulty - difficulty is now relative to YOUR level
+  - RPG-style: what's hard at L1 is trivial at L10 (same content, different XP)
+  - Penalties still NOT scaled (always hurt the same)
+- **Removed farming detection**: Level scaling naturally prevents farming
+  - High level = diminishing returns = move on to harder content
+  - No need for explicit penalties
+
 ## [0.4.1] - 2024-12-08
 ### Added
 - **XP Scaling Formula**: `actual_xp = base × difficulty / level`
