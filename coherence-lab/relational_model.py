@@ -621,6 +621,180 @@ class TopicConfidenceTracker(nn.Module):
                               device=self.topic_count.device)
         return levels[active].float().mean().item()
 
+    # === EXAMINATION SYSTEM ===
+    # Level transitions require passing an exam - no auto-leveling
+
+    def _init_exam_state(self):
+        """Initialize exam state buffers (called from __init__ or lazy)."""
+        if not hasattr(self, 'exam_eligible'):
+            device = self.topic_xp.device
+            self.register_buffer('exam_eligible', torch.zeros(self.n_topics, dtype=torch.bool, device=device))
+            self.register_buffer('exam_cooldown', torch.zeros(self.n_topics, dtype=torch.long, device=device))
+            self.register_buffer('topic_graduated', torch.zeros(self.n_topics, dtype=torch.bool, device=device))
+            self.register_buffer('exam_attempts', torch.zeros(self.n_topics, dtype=torch.long, device=device))
+            self.register_buffer('exam_passes', torch.zeros(self.n_topics, dtype=torch.long, device=device))
+
+    def get_exam_size(self, level):
+        """
+        Get exam size for a level (binary scaled).
+
+        L1-3:  8 problems  (2^3)
+        L4-6:  16 problems (2^4)
+        L7-9:  32 problems (2^5)
+        L10:   64 problems (2^6) - full mastery test
+        """
+        if level <= 3:
+            return 8
+        elif level <= 6:
+            return 16
+        elif level <= 9:
+            return 32
+        else:
+            return 64
+
+    def get_pass_threshold(self, level):
+        """
+        Pass threshold scales with level.
+
+        L1-3:  75% (learning, some slack)
+        L4-6:  80% (intermediate)
+        L7-9:  85% (advanced)
+        L10:   90% (mastery requires excellence)
+        """
+        if level <= 3:
+            return 0.75
+        elif level <= 6:
+            return 0.80
+        elif level <= 9:
+            return 0.85
+        else:
+            return 0.90
+
+    def check_exam_eligible(self, topic_idx):
+        """
+        Check if topic is eligible for level-up exam.
+
+        Eligible when:
+        - XP >= threshold for next level
+        - Not on cooldown from failed exam
+        - Not already graduated (L10 passed)
+        """
+        self._init_exam_state()
+
+        with torch.no_grad():
+            current_level = self.get_level(topic_idx)
+            if current_level >= self.max_level:
+                return False  # Already at max
+
+            if self.topic_graduated[topic_idx]:
+                return False  # Already graduated
+
+            if self.exam_cooldown[topic_idx] > 0:
+                return False  # On cooldown
+
+            # Check if XP meets next level threshold
+            next_level = current_level + 1
+            threshold = self.xp_threshold(next_level)
+            current_xp = self.topic_xp[topic_idx].item()
+
+            eligible = current_xp >= threshold
+            self.exam_eligible[topic_idx] = eligible
+            return eligible
+
+    def take_exam(self, topic_idx, correct_count, total_count):
+        """
+        Take level-up exam. Returns result dict.
+
+        Args:
+            topic_idx: Topic being tested
+            correct_count: Number correct on exam
+            total_count: Total exam problems
+
+        Returns dict with:
+            passed: bool
+            score: float (0-1)
+            threshold: float (required to pass)
+            new_level: int (if passed)
+            xp_lost: float (if failed)
+            cooldown: int (epochs until retry, if failed)
+        """
+        self._init_exam_state()
+
+        with torch.no_grad():
+            current_level = self.get_level(topic_idx)
+            target_level = current_level + 1
+            threshold = self.get_pass_threshold(target_level)
+            score = correct_count / max(1, total_count)
+
+            self.exam_attempts[topic_idx] += 1
+
+            if score >= threshold:
+                # PASSED - level up!
+                self.exam_passes[topic_idx] += 1
+                self.exam_eligible[topic_idx] = False
+                self.exam_cooldown[topic_idx] = 0
+
+                # If passed L10, topic is graduated
+                if target_level >= self.max_level:
+                    self.topic_graduated[topic_idx] = True
+                    self.topic_mastered[topic_idx] = True
+
+                return {
+                    'passed': True,
+                    'score': score,
+                    'threshold': threshold,
+                    'new_level': target_level,
+                    'xp_lost': 0.0,
+                    'cooldown': 0,
+                    'graduated': target_level >= self.max_level
+                }
+            else:
+                # FAILED - XP penalty and cooldown
+                # Lose 25-50% of current level's XP based on how badly failed
+                fail_severity = (threshold - score) / threshold  # 0-1, higher = worse
+                penalty_rate = 0.25 + 0.25 * fail_severity  # 25-50%
+
+                # XP in current level = current_xp - previous_threshold
+                prev_threshold = self.xp_threshold(current_level)
+                current_xp = self.topic_xp[topic_idx].item()
+                level_xp = current_xp - prev_threshold
+
+                xp_lost = level_xp * penalty_rate
+                self.topic_xp[topic_idx] -= xp_lost
+                self.topic_xp[topic_idx].clamp_(min=prev_threshold)  # Don't drop below level start
+
+                # Cooldown scales with level (higher level = longer wait)
+                cooldown = max(1, current_level)  # 1-10 epochs
+                self.exam_cooldown[topic_idx] = cooldown
+                self.exam_eligible[topic_idx] = False
+
+                return {
+                    'passed': False,
+                    'score': score,
+                    'threshold': threshold,
+                    'new_level': current_level,  # No change
+                    'xp_lost': xp_lost,
+                    'cooldown': cooldown,
+                    'graduated': False
+                }
+
+    def tick_cooldowns(self):
+        """Decrement exam cooldowns (call once per epoch)."""
+        self._init_exam_state()
+        with torch.no_grad():
+            self.exam_cooldown = (self.exam_cooldown - 1).clamp_(min=0)
+
+    def get_exam_stats(self, topic_idx):
+        """Get exam statistics for a topic."""
+        self._init_exam_state()
+        return {
+            'eligible': self.exam_eligible[topic_idx].item(),
+            'cooldown': self.exam_cooldown[topic_idx].item(),
+            'graduated': self.topic_graduated[topic_idx].item(),
+            'attempts': self.exam_attempts[topic_idx].item(),
+            'passes': self.exam_passes[topic_idx].item()
+        }
+
     def get_adjusted_confidence(self, topic_idx, raw_confidence):
         """
         Adjust raw prediction confidence based on topic calibration.
@@ -698,6 +872,32 @@ class TopicConfidenceTracker(nn.Module):
 
             self.register_buffer('topic_xp', new_xp)
             self.register_buffer('topic_xp_high', new_xp_high)
+
+            # Expand exam buffers (if initialized)
+            if hasattr(self, 'exam_eligible'):
+                new_eligible = torch.zeros(new_size, dtype=torch.bool, device=device)
+                new_cooldown = torch.zeros(new_size, dtype=torch.long, device=device)
+                new_graduated = torch.zeros(new_size, dtype=torch.bool, device=device)
+                new_attempts = torch.zeros(new_size, dtype=torch.long, device=device)
+                new_passes = torch.zeros(new_size, dtype=torch.long, device=device)
+
+                new_eligible[:self.n_topics] = self.exam_eligible
+                new_cooldown[:self.n_topics] = self.exam_cooldown
+                new_graduated[:self.n_topics] = self.topic_graduated
+                new_attempts[:self.n_topics] = self.exam_attempts
+                new_passes[:self.n_topics] = self.exam_passes
+
+                del self.exam_eligible
+                del self.exam_cooldown
+                del self.topic_graduated
+                del self.exam_attempts
+                del self.exam_passes
+
+                self.register_buffer('exam_eligible', new_eligible)
+                self.register_buffer('exam_cooldown', new_cooldown)
+                self.register_buffer('topic_graduated', new_graduated)
+                self.register_buffer('exam_attempts', new_attempts)
+                self.register_buffer('exam_passes', new_passes)
 
             self.n_topics = new_size
 

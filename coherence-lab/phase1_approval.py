@@ -11,7 +11,7 @@ Building the social learning foundation:
 This is the developmental foundation for later phases.
 """
 
-__version__ = "0.4.2"  # Pure level scaling (removed static difficulty)
+__version__ = "0.5.0"  # Examination system for level transitions
 
 import torch
 import torch.nn as nn
@@ -379,6 +379,65 @@ def main(args):
             level_bar = "█" * level + ("░" if progress > 0.5 else "") + "·" * (10 - level - (1 if progress > 0.5 else 0))
             print(f"    {pt:15s}: {acc:.1%} {acc_symbol} {cal_symbol} L{level:2d} {level_bar} ({xp:.0f}xp)")
         import sys; sys.stdout.flush()
+
+        # === EXAMINATION SYSTEM ===
+        # Check for topics ready for level-up exams
+        tracker = model.learner.self_model.topic_tracker
+        tracker.tick_cooldowns()  # Decrement any cooldowns from failed exams
+
+        exam_results = []
+        for pattern_name, idx in pattern_to_idx.items():
+            if tracker.check_exam_eligible(idx):
+                # Generate exam batch for this topic
+                current_level = tracker.get_level(idx)
+                target_level = current_level + 1
+                exam_size = tracker.get_exam_size(target_level)
+
+                # Create exam problems (fresh generation, not from training data)
+                exam_data = PatternDataset(
+                    n_examples=exam_size,
+                    seed=epoch * 1000 + idx,  # Reproducible but different each epoch
+                    pattern_types=[pattern_name]  # Only this topic
+                )
+                exam_loader = DataLoader(exam_data, batch_size=exam_size, collate_fn=collate_fn)
+
+                # Run exam (no gradient, just evaluation)
+                model.eval()
+                correct_count = 0
+                for batch in exam_loader:
+                    tokens = batch['tokens'].to(device)
+                    targets = batch['target'].to(device)
+                    seq_lens = batch['seq_len']
+                    with torch.no_grad():
+                        details = model(tokens, seq_lens, targets=targets, return_details=True)
+                        preds = details['logits'].argmax(dim=-1)
+                        correct_count += (preds == targets).sum().item()
+                model.train()
+
+                # Take the exam
+                result = tracker.take_exam(idx, correct_count, exam_size)
+                result['topic'] = pattern_name
+                result['target_level'] = target_level
+                exam_results.append(result)
+
+        # Display exam results (formative, not judgmental)
+        if exam_results:
+            print("  Exams:")
+            for r in exam_results:
+                if r['passed']:
+                    status = f"Ready for L{r['new_level']}"
+                    if r['graduated']:
+                        status += " - GRADUATED!"
+                    print(f"    {r['topic']:15s}: {r['score']:.0%} >= {r['threshold']:.0%} - {status}")
+                else:
+                    print(f"    {r['topic']:15s}: {r['score']:.0%} < {r['threshold']:.0%} - More practice needed (cooldown: {r['cooldown']} epochs)")
+            # Add exam results to history
+            history[-1]['exams'] = exam_results
+
+        # Count graduated topics
+        graduated_count = sum(1 for idx in pattern_to_idx.values() if tracker.get_exam_stats(idx)['graduated'])
+        if graduated_count > 0:
+            print(f"  Graduated: {graduated_count}/{len(pattern_types)} topics")
 
         if val_metrics['accuracy'] > best_acc:
             best_acc = val_metrics['accuracy']

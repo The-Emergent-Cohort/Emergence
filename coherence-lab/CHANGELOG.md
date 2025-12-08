@@ -1,5 +1,18 @@
 # Coherence Lab Changelog
 
+## [0.5.0] - 2024-12-08
+### Added
+- **Examination System**: Level transitions require passing an exam
+  - No auto-leveling on XP threshold - must prove competence
+  - Binary-scaled exam sizes: L1-3=8, L4-6=16, L7-9=32, L10=64 problems
+  - Pass thresholds scale with level: 75%→80%→85%→90%
+  - Failure penalty: 25-50% of current level XP (based on how badly failed)
+  - Cooldown: 1-10 epochs before retry (scales with level)
+  - L10 pass = **GRADUATED** - topic done until final comprehensive
+- **Formative assessment framing**: "Ready" vs "More practice needed" (not pass/fail)
+- Exam stats tracking: attempts, passes, graduated status
+- Enables future instructor/class models with standardized skill measurement
+
 ## [0.4.2] - 2024-12-08
 ### Changed
 - **Pure level scaling**: Simplified XP formula to `actual_xp = base / level`
