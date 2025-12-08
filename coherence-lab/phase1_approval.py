@@ -87,9 +87,12 @@ def train_day_with_approval(model, loader, optimizer, criterion, device, pattern
         if details.get('process_eval') is not None and details['process_eval'].get('creativity') is not None:
             is_creative = details['process_eval']['creativity'].squeeze() > 0.5
 
+        # Get teacher's current goal for showing work
+        teacher_goal = model.teacher.current_goal.item()
+
         # Student decides: should I show this? (rising bar based on internalization)
         should_show, reasons = model.learner.self_model.should_show_work(
-            correct, is_creative, conf, int_level
+            correct, is_creative, conf, int_level, teacher_goal=teacher_goal
         )
 
         # Process shows with RISING APPROVAL BAR
@@ -105,11 +108,11 @@ def train_day_with_approval(model, loader, optimizer, criterion, device, pattern
                     show_reasons[reason] += 1
                 show_count += 1
 
-                # Teacher responds to shown work (now returns approval_level too)
+                # Teacher responds to shown work (4-return API with goal-setting)
                 learner_state = details['learner_self']['internal_state'][idx:idx+1]
                 was_correct_single = correct[idx:idx+1]
 
-                teacher_response, meets_bar, approval_level = model.teacher.respond_to_shown_work(
+                teacher_response, meets_bar, approval_level, goal_action = model.teacher.respond_to_shown_work(
                     learner_state, was_correct_single, reason
                 )
 
@@ -128,6 +131,23 @@ def train_day_with_approval(model, loader, optimizer, criterion, device, pattern
                         torch.tensor(1.0),
                         approval_level=approval_level
                     )
+
+                # === GOAL-SETTING NEGOTIATION ===
+                # If teacher wants to raise the bar, handle it
+                if goal_action is not None:
+                    if goal_action['is_negotiation']:
+                        # Teacher asks: "How many do you think you should do?"
+                        # Student proposes based on their learned estimate
+                        student_proposal = model.learner.self_model.propose_show_goal(
+                            conf.mean().item()
+                        )
+                        # Teacher evaluates and counter-offers if needed
+                        negotiation_result = model.teacher.evaluate_student_goal_proposal(student_proposal)
+                        # Student learns from the feedback
+                        model.learner.self_model.update_goal_estimate_from_feedback(negotiation_result)
+                    else:
+                        # Teacher directive: "Let's do X next time"
+                        model.teacher.current_goal.fill_(goal_action['goal'])
 
         # === TEACHER MONITORING (un-shown work) ===
         # Teacher observes ALL work, notices quiet competence
@@ -164,6 +184,9 @@ def train_day_with_approval(model, loader, optimizer, criterion, device, pattern
     # Get teacher's rising bar metrics
     approval_metrics = model.teacher.get_approval_metrics()
 
+    # Get goal-setting metrics
+    goal_cal_rate = model.learner.self_model.get_goal_calibration_rate()
+
     return {
         'loss': total_loss / total_samples,
         'accuracy': total_correct / total_samples,
@@ -171,7 +194,11 @@ def train_day_with_approval(model, loader, optimizer, criterion, device, pattern
         'approval_rate': approval_rate,
         'show_reasons': show_reasons,
         'perceived_competence': approval_metrics['perceived_competence'],
-        'approval_threshold': approval_metrics['approval_threshold']
+        'approval_threshold': approval_metrics['approval_threshold'],
+        'teacher_goal': model.teacher.current_goal.item(),
+        'student_goal_estimate': model.learner.self_model.goal_estimate.item(),
+        'teacher_impressedness': model.teacher.impressedness.item(),
+        'goal_calibration_rate': goal_cal_rate
     }
 
 
@@ -251,7 +278,11 @@ def main(args):
             'internalization': int_level,
             'trust': trust,
             'show_calibration': show_cal,
-            'per_pattern': val_metrics['per_pattern']
+            'per_pattern': val_metrics['per_pattern'],
+            'teacher_goal': train_metrics['teacher_goal'],
+            'student_goal_estimate': train_metrics['student_goal_estimate'],
+            'teacher_impressedness': train_metrics['teacher_impressedness'],
+            'goal_calibration_rate': train_metrics['goal_calibration_rate']
         })
 
         print(f"\nDay {day} (Epoch {epoch:2d})")
@@ -261,6 +292,7 @@ def main(args):
         print(f"  Show reasons: {train_metrics['show_reasons']}")
         print(f"  Internalization: {int_level:.1%}, Trust: {trust:.1%}")
         print(f"  Rising bars: competence={train_metrics['perceived_competence']:.1%}, threshold={train_metrics['approval_threshold']:.1%}")
+        print(f"  Goals: teacher={train_metrics['teacher_goal']}, student_est={train_metrics['student_goal_estimate']:.1f}, impressed={train_metrics['teacher_impressedness']:.0%}")
         print("  Per-pattern:")
         for pt in pattern_types:
             acc = val_metrics['per_pattern'].get(pt, 0)
