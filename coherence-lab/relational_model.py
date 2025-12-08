@@ -806,10 +806,14 @@ class TopicConfidenceTracker(nn.Module):
                 target_threshold = self.xp_threshold(target_level)
                 confirmed_threshold = self.xp_threshold(confirmed)
                 current_xp = self.topic_xp[topic_idx].item()
-                excess_xp = current_xp - target_threshold  # XP above what you tried to prove
 
-                # Drop to target threshold minus 25% penalty
-                new_xp = target_threshold - (excess_xp * penalty_rate) if excess_xp > 0 else target_threshold - 1
+                # Penalty: lose 25% of excess XP above target, BUT cap at 50% of current
+                # This prevents one bad exam from nuking all progress
+                excess_xp = current_xp - target_threshold
+                penalty_xp = excess_xp * penalty_rate if excess_xp > 0 else 1
+                max_loss = current_xp * 0.5  # Never lose more than half
+                actual_penalty = min(penalty_xp, max_loss)
+                new_xp = current_xp - actual_penalty
                 new_xp = max(new_xp, confirmed_threshold)  # Don't drop below confirmed level
                 xp_lost = current_xp - new_xp
                 self.topic_xp[topic_idx] = new_xp
