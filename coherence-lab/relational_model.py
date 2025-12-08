@@ -660,18 +660,19 @@ class SelfModel(nn.Module):
 
             elif proposal_type == 'adjust_show_rate':
                 # Adjust how often we show work
-                self.show_calibration += magnitude * 0.1
+                self.show_calibration.add_(magnitude * 0.1).clamp_(0.0, 1.0)
 
             elif proposal_type == 'reset_topic':
                 # Reset tracking for confused topic
                 if hasattr(self.topic_tracker, 'topic_accuracy'):
+                    # Indexed assignment works for tensor elements
                     self.topic_tracker.topic_accuracy[topic_idx] = 0.5
                     self.topic_tracker.topic_confidence[topic_idx] = 0.5
                     self.topic_tracker.topic_count[topic_idx] = 0
 
             elif proposal_type == 'consolidate_learning':
                 # Mark learning as consolidated - increase calibration confidence
-                self.show_calibration = min(1.0, self.show_calibration + 0.1)
+                self.show_calibration.add_(0.1).clamp_(max=1.0)
 
             elif proposal_type == 'request_unknown':
                 # This is a request for help - no self-modification
