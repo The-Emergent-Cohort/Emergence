@@ -799,22 +799,17 @@ class TopicConfidenceTracker(nn.Module):
                     'graduated': graduated
                 }
             else:
-                # FAILED - drop to target level threshold minus 25% of excess
-                # You don't keep XP above the level you couldn't prove
-                penalty_rate = 0.25
-
+                # FAILED - put you partway through the level you failed
+                # Intent: setback, not destruction. You were close, try again.
                 target_threshold = self.xp_threshold(target_level)
                 confirmed_threshold = self.xp_threshold(confirmed)
                 current_xp = self.topic_xp[topic_idx].item()
 
-                # Penalty: lose 25% of excess XP above target, BUT cap at 50% of current
-                # This prevents one bad exam from nuking all progress
-                excess_xp = current_xp - target_threshold
-                penalty_xp = excess_xp * penalty_rate if excess_xp > 0 else 1
-                max_loss = current_xp * 0.5  # Never lose more than half
-                actual_penalty = min(penalty_xp, max_loss)
-                new_xp = current_xp - actual_penalty
-                new_xp = max(new_xp, confirmed_threshold)  # Don't drop below confirmed level
+                # Put you at 50% of the way through the level you failed
+                # e.g., fail L2 (threshold 40), confirmed L1 (threshold 10)
+                # new_xp = 10 + (40-10)*0.5 = 10 + 15 = 25
+                level_span = target_threshold - confirmed_threshold
+                new_xp = confirmed_threshold + level_span * 0.5
                 xp_lost = current_xp - new_xp
                 self.topic_xp[topic_idx] = new_xp
 
