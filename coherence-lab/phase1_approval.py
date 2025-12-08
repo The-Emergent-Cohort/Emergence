@@ -639,6 +639,22 @@ def main(args):
         if diagnosis['is_curriculum_gap']:
             print(f"    ⚠ CURRICULUM GAP: Missing bridging concepts for {topic}!")
 
+    def on_teaching_moment(moment_info, topic_to_idx_map, trk):
+        """Gentle hint after exam failure - not stuck, just a learning moment."""
+        topic = moment_info['topic']
+        reason = moment_info['reason']
+
+        print(f"\n  [Teaching moment: {topic} needs practice ({reason})]")
+
+        # Diagnose and suggest bridging concepts (hints only, no curriculum order checks)
+        diagnosis = diagnose_stuckness(topic, topic_to_idx_map, trk, sequencer.current_section_idx)
+
+        if diagnosis['bridges']:
+            print(f"    Hint: Practice with foundations - {diagnosis['bridges']}")
+        elif CURRICULUM_BRIDGES.get(topic):
+            # Mention bridges even if they're strong (for awareness)
+            print(f"    Related concepts: {CURRICULUM_BRIDGES[topic]}")
+
     def on_section_exam(section, results, passed):
         print(f"\n  === SECTION EXAM: {section['name']} ===")
         for r in results:
@@ -686,6 +702,7 @@ def main(args):
         callbacks={
             'on_epoch_start': on_epoch_start,
             'on_epoch_end': on_epoch_end,
+            'on_teaching_moment': on_teaching_moment,
             'on_stuck_topic': on_stuck_topic,
             'on_section_exam': on_section_exam,
             'on_section_complete': on_section_complete,

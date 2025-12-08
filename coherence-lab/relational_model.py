@@ -882,23 +882,40 @@ class TopicConfidenceTracker(nn.Module):
 
     def check_stuck(self, topic_idx, epochs_threshold=2):
         """
-        Check if topic is stuck and might benefit from teacher intervention.
+        Check if topic is truly stuck (not making progress).
 
-        Stuck means:
-        - 2+ epochs without level increase, OR
-        - Recent exam failure
+        Stuck means 2+ epochs without level increase.
+        Note: Exam failure alone is NOT stuck - that's a teaching moment!
 
         Returns: (is_stuck, reason)
         """
         self._init_stuckness_state()
 
         epochs_stuck = self.epochs_since_level_up[topic_idx].item()
-        exam_failed = self.last_exam_failed[topic_idx].item()
 
-        if exam_failed:
-            return True, 'exam_failed'
         if epochs_stuck >= epochs_threshold:
             return True, f'no_progress_{epochs_stuck}_epochs'
+        return False, None
+
+    def check_teaching_moment(self, topic_idx):
+        """
+        Check if topic just failed an exam - good time for teacher hints.
+
+        Unlike stuck, this is a one-time teaching opportunity:
+        - Student tried, didn't pass yet
+        - Good time to mention bridging concepts
+        - Clears after checking (one-shot)
+
+        Returns: (is_teaching_moment, reason)
+        """
+        self._init_stuckness_state()
+
+        exam_failed = self.last_exam_failed[topic_idx].item()
+        if exam_failed:
+            # Clear the flag after reading (one-shot teaching moment)
+            with torch.no_grad():
+                self.last_exam_failed[topic_idx] = False
+            return True, 'exam_failed'
         return False, None
 
     def record_teacher_proposal(self, topic_idx):

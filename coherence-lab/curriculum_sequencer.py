@@ -362,8 +362,23 @@ class CurriculumSequencer:
                         idx = self.topic_to_idx[topic_name]
                         self.tracker.tick_stuckness(idx)
 
+            # === TEACHING MOMENTS ===
+            # Check for exam failures - good time for gentle hints
+            teaching_moments = []
+            if hasattr(self.tracker, 'check_teaching_moment'):
+                for topic_name in all_training_topics:
+                    idx = self.topic_to_idx[topic_name]
+                    is_moment, reason = self.tracker.check_teaching_moment(idx)
+                    if is_moment:
+                        teaching_moments.append({'topic': topic_name, 'idx': idx, 'reason': reason})
+
+            # Callback: teacher offers hints on exam failure
+            if teaching_moments and 'on_teaching_moment' in callbacks:
+                for moment_info in teaching_moments:
+                    callbacks['on_teaching_moment'](moment_info, self.topic_to_idx, self.tracker)
+
             # === TEACHER STUCKNESS CHECK ===
-            # Check if any active topics are stuck and need intervention
+            # Check if any active topics are truly stuck (no progress)
             stuck_topics = []
             if hasattr(self.tracker, 'check_stuck'):
                 for topic_name in active_topics:
@@ -372,7 +387,7 @@ class CurriculumSequencer:
                     if is_stuck:
                         stuck_topics.append({'topic': topic_name, 'idx': idx, 'reason': reason})
 
-            # Callback: teacher proposal for stuck topics
+            # Callback: teacher intervention for stuck topics
             if stuck_topics and 'on_stuck_topic' in callbacks:
                 for stuck_info in stuck_topics:
                     callbacks['on_stuck_topic'](stuck_info, self.topic_to_idx, self.tracker)
@@ -432,6 +447,7 @@ class CurriculumSequencer:
                 'level_exams': level_exam_results,
                 'section_exam': section_exam_results,
                 'final_exam': final_exam_results,
+                'teaching_moments': teaching_moments,
                 'stuck_topics': stuck_topics,
                 'progress': self.get_progress_summary()
             }
