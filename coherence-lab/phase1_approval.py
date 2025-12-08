@@ -475,7 +475,7 @@ def main(args):
         sections=CURRICULUM_SECTIONS,
         topic_to_idx=pattern_to_idx,
         tracker=tracker,
-        section_exam_level=5,
+        section_exam_level=10,  # Must reach max level before section exam
         section_exam_size=24,
         section_exam_threshold=0.90,
         final_exam_size=32,
