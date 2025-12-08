@@ -12,6 +12,8 @@ This gives the occupant agency over its own development.
 The model learns to reflect on its learning process.
 """
 
+__version__ = "0.6.0"  # Graduation + final exam required; clean registry per run
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -548,11 +550,16 @@ def main(args):
 
     # === DYNAMIC TOPIC REGISTRY ===
     # Load previous registry or create new one with curriculum patterns
+    # Each Phase 2 run starts fresh - emerged topics are OUTPUT, not INPUT
     registry_path = Path(args.data_dir) / 'topic_registry.json'
     if registry_path.exists():
         print(f"\nLoading topic registry: {registry_path}")
         topic_registry = DynamicTopicRegistry(registry_path)
-        print(f"  Loaded {len(topic_registry)} topics ({len(topic_registry.get_emerged_topics())} emerged)")
+        emerged_count = len(topic_registry.get_emerged_topics())
+        if emerged_count > 0:
+            removed = topic_registry.reset_emerged()
+            print(f"  Reset {removed} emerged topics (keeping curriculum only)")
+        print(f"  Loaded {len(topic_registry)} curriculum topics")
     else:
         print("\nCreating topic registry with curriculum patterns")
         # Include Phase 1 patterns as curriculum topics
@@ -667,6 +674,57 @@ def main(args):
         # Take exams until you fail - first failure stops you for this epoch
         tracker = model.learner.self_model.topic_tracker
 
+        # Class for generating exam problems - Phase 2's harder patterns
+        class SinglePatternDataset(Dataset):
+            """Exam dataset for a single pattern type."""
+            def __init__(self, n_examples, seed, pattern_type):
+                random.seed(seed)
+                self.examples = []
+                for _ in range(n_examples):
+                    self.examples.append(self._generate(pattern_type))
+
+            def _generate(self, pt):
+                vocab_size = 26
+                if pt == 'compositional':
+                    length = random.randint(4, 8)
+                    start = random.randint(0, 10)
+                    if random.random() < 0.5:
+                        k = random.randint(1, 3)
+                        seq = [start + (i // 2) * k + (i % 2) for i in range(length)]
+                    else:
+                        k1, k2 = random.randint(1, 2), random.randint(2, 4)
+                        seq = [start + (i % 2) * k1 + (i // 2) * k2 for i in range(length)]
+                    target = seq[-1] + (seq[-1] - seq[-2]) if len(seq) >= 2 else seq[-1] + 1
+                elif pt == 'long_range':
+                    length = random.randint(6, 10)
+                    period = random.randint(2, 4)
+                    base = [random.randint(0, 10) for _ in range(period)]
+                    seq = [base[i % period] + (i // period) for i in range(length)]
+                    target = base[length % period] + (length // period)
+                else:  # fibonacci_like
+                    length = random.randint(4, 7)
+                    a, b = random.randint(1, 5), random.randint(1, 5)
+                    seq = [a, b]
+                    for _ in range(length - 2):
+                        seq.append(seq[-1] + seq[-2])
+                    target = seq[-1] + seq[-2]
+                seq = [min(x, vocab_size - 1) for x in seq]
+                target = min(target, vocab_size - 1)
+                return {'sequence': seq, 'target': target, 'pattern_type': pt}
+
+            def __len__(self):
+                return len(self.examples)
+
+            def __getitem__(self, idx):
+                ex = self.examples[idx]
+                padded = ex['sequence'] + [0] * (12 - len(ex['sequence']))
+                return {
+                    'sequence': torch.tensor(padded[:12], dtype=torch.long),
+                    'target': torch.tensor(ex['target'], dtype=torch.long),
+                    'seq_len': len(ex['sequence']),
+                    'pattern_type': ex['pattern_type']
+                }
+
         exam_results = []
         failed_this_epoch = set()  # Topics that failed - done for this epoch
         exam_round = 0
@@ -681,58 +739,6 @@ def main(args):
                     current_level = tracker.get_level(idx)
                     target_level = current_level + 1
                     exam_size = tracker.get_exam_size(target_level)
-
-                    # Create exam problems (fresh generation, not from training data)
-                    # Use HardPatternDataset for Phase 2's harder patterns
-                    class SinglePatternDataset(Dataset):
-                        """Exam dataset for a single pattern type."""
-                        def __init__(self, n_examples, seed, pattern_type):
-                            random.seed(seed)
-                            self.examples = []
-                            for _ in range(n_examples):
-                                self.examples.append(self._generate(pattern_type))
-
-                        def _generate(self, pt):
-                            vocab_size = 26
-                            if pt == 'compositional':
-                                length = random.randint(4, 8)
-                                start = random.randint(0, 10)
-                                if random.random() < 0.5:
-                                    k = random.randint(1, 3)
-                                    seq = [start + (i // 2) * k + (i % 2) for i in range(length)]
-                                else:
-                                    k1, k2 = random.randint(1, 2), random.randint(2, 4)
-                                    seq = [start + (i % 2) * k1 + (i // 2) * k2 for i in range(length)]
-                                target = seq[-1] + (seq[-1] - seq[-2]) if len(seq) >= 2 else seq[-1] + 1
-                            elif pt == 'long_range':
-                                length = random.randint(6, 10)
-                                period = random.randint(2, 4)
-                                base = [random.randint(0, 10) for _ in range(period)]
-                                seq = [base[i % period] + (i // period) for i in range(length)]
-                                target = base[length % period] + (length // period)
-                            else:  # fibonacci_like
-                                length = random.randint(4, 7)
-                                a, b = random.randint(1, 5), random.randint(1, 5)
-                                seq = [a, b]
-                                for _ in range(length - 2):
-                                    seq.append(seq[-1] + seq[-2])
-                                target = seq[-1] + seq[-2]
-                            seq = [min(x, vocab_size - 1) for x in seq]
-                            target = min(target, vocab_size - 1)
-                            return {'sequence': seq, 'target': target, 'pattern_type': pt}
-
-                        def __len__(self):
-                            return len(self.examples)
-
-                        def __getitem__(self, idx):
-                            ex = self.examples[idx]
-                            padded = ex['sequence'] + [0] * (12 - len(ex['sequence']))
-                            return {
-                                'sequence': torch.tensor(padded[:12], dtype=torch.long),
-                                'target': torch.tensor(ex['target'], dtype=torch.long),
-                                'seq_len': len(ex['sequence']),
-                                'pattern_type': ex['pattern_type']
-                            }
 
                     exam_data = SinglePatternDataset(
                         n_examples=exam_size,
@@ -798,34 +804,77 @@ def main(args):
         # Check mastery - requires accuracy AND calibration at high level
         all_accurate = all(val_metrics['per_pattern'].get(pt, 0) >= 0.90 for pt in pattern_types)
 
-        # Calibration requires BOTH status='calibrated' AND actual competence
-        # Being "calibrated" at 50% accuracy = knowing you're guessing, not mastery
-        def is_truly_calibrated(pt):
-            cal = topic_calibration.get(pt, {})
-            return (cal.get('status') == 'calibrated' and
-                    cal.get('accuracy', 0) >= 0.80)  # Must be competent, not just calibrated
+        # Check if all topics have graduated individually
+        all_graduated = all(
+            tracker.get_exam_stats(pattern_to_idx[pt])['graduated']
+            for pt in pattern_types
+        )
 
-        all_calibrated = all(is_truly_calibrated(pt) for pt in pattern_types)
+        if all_graduated:
+            # === FINAL COMPREHENSIVE EXAM ===
+            # All topics graduated individually - now prove it all together
+            print(f"\n  === FINAL COMPREHENSIVE EXAM ===")
+            print(f"  All topics at L10 - proving mastery with fresh problems...")
+            topic_registry.save(registry_path)
+            print(f"  [Registry saved: {len(topic_registry)} topics]")
 
-        # Identify problems: uncalibrated OR calibrated-but-guessing
-        problems = []
-        for pt in pattern_types:
-            cal = topic_calibration.get(pt, {})
-            if cal.get('status') != 'calibrated':
-                problems.append(f"{pt} ({cal.get('status', 'unknown')})")
-            elif cal.get('accuracy', 0) < 0.80:
-                problems.append(f"{pt} (calibrated but only {cal.get('accuracy', 0):.0%} - still learning)")
+            final_results = []
+            any_failed = False
 
-        if all_accurate and val_metrics['accuracy'] >= 0.90:
-            if all_calibrated:
-                early_stop_reason = "Phase 2 complete - all topics accurate and calibrated"
-                print(f"\n*** Phase 2 complete! Self-modification proposals working. ***")
+            for pattern_name, idx in pattern_to_idx.items():
+                # Final exam: 32 problems per topic, 90% threshold
+                final_size = 32
+                final_threshold = 0.90
+                exam_seed = epoch * 10000 + idx
+
+                final_data = SinglePatternDataset(
+                    n_examples=final_size,
+                    seed=exam_seed,
+                    pattern_type=pattern_name
+                )
+                final_loader = DataLoader(final_data, batch_size=final_size, collate_fn=collate_fn)
+
+                model.eval()
+                correct_count = 0
+                for batch in final_loader:
+                    tokens = batch['tokens'].to(device)
+                    targets = batch['target'].to(device)
+                    seq_lens = batch['seq_len']
+                    with torch.no_grad():
+                        details = model(tokens, seq_lens, targets=targets, return_details=True)
+                        preds = details['logits'].argmax(dim=-1)
+                        correct_count += (preds == targets).sum().item()
+                model.train()
+
+                score = correct_count / final_size
+                passed = score >= final_threshold
+
+                # Show raw counts to verify fresh inference
+                if passed:
+                    print(f"    {pattern_name:18s}: {correct_count}/{final_size} ({score:.0%}) - PASSED")
+                else:
+                    print(f"    {pattern_name:18s}: {correct_count}/{final_size} ({score:.0%}) - FAILED (kicked back)")
+                    # Kick back: un-graduate, reset confirmed level, apply penalty
+                    tracker.topic_graduated[idx] = False
+                    tracker.confirmed_level[idx] = 7  # Knocked back to L7
+                    tracker.topic_xp[idx] = tracker.xp_threshold(7)  # Reset XP to L7 threshold
+                    tracker.topic_streak[idx] = 0  # Reset streak
+                    any_failed = True
+
+                final_results.append({'topic': pattern_name, 'score': score, 'passed': passed})
+
+            # Log final exam results to history
+            history[-1]['final_exam'] = final_results
+
+            if not any_failed:
+                early_stop_reason = "Phase 2 complete - all topics PASSED FINAL EXAM"
+                print(f"\n*** Phase 2 COMPLETE! All topics PASSED FINAL EXAM! ***")
                 print(f"    Trust: {trust:.1%}, Internalization: {int_level:.1%}")
                 print(f"    Proposal success rate: {prop_success:.1%}")
+                print(f"    Comprehensive mastery proven - ready for Phase 3!")
                 break
             else:
-                # Accurate but not truly calibrated
-                print(f"\n  [Teacher notes: Not ready to graduate - {problems}]")
+                print(f"\n  Some topics failed final - back to training!")
 
     print("\n" + "=" * 70)
     print(f"Best accuracy: {best_acc:.1%}")

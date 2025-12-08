@@ -152,6 +152,24 @@ class DynamicTopicRegistry:
             if info['origin'] != 'curriculum'
         ]
 
+    def reset_emerged(self):
+        """
+        Remove all emerged topics, keeping only curriculum.
+        For clean Phase 2 runs that shouldn't inherit from prior runs.
+        """
+        emerged_ids = [tid for tid, info in self.topics.items()
+                       if info['origin'] != 'curriculum']
+        for tid in emerged_ids:
+            name = self.topics[tid]['name']
+            del self.topics[tid]
+            del self.name_to_id[name]
+        # Reset next_id to just after curriculum topics
+        if self.topics:
+            self.next_id = max(self.topics.keys()) + 1
+        else:
+            self.next_id = 0
+        return len(emerged_ids)  # Return count of removed topics
+
     def summary(self):
         """Get summary string."""
         curriculum = sum(1 for t in self.topics.values() if t['origin'] == 'curriculum')
