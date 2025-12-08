@@ -502,7 +502,6 @@ class SelfModel(nn.Module):
                 # This is the negotiated/set goal from teacher
                 elif self.streak_count >= streak_threshold and was_correct[i]:
                     reason = 'streak'
-                    self.streak_count.zero_()  # Reset after showing
 
                 # Uncertain but correct → seeking validation
                 # Early: show when not sure (confidence < 0.5)
@@ -518,6 +517,8 @@ class SelfModel(nn.Module):
                 if reason is not None:
                     should_show[i] = True
                     show_reasons[i] = reason
+                    # Reset streak on ANY show - counting toward next goal
+                    self.streak_count.zero_()
 
         return should_show, show_reasons
 
