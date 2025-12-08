@@ -200,29 +200,36 @@ def run_exam(model, topic, n_problems, seed, device, pattern_to_idx):
     return correct, n_problems
 
 
-def save_checkpoint(model, epoch, section_idx, section_passed, data_dir, suffix=''):
-    """Save model checkpoint."""
+def save_checkpoint(model, epoch, section_idx, section_passed, data_dir, session_id, proposals=None, suffix=''):
+    """Save model checkpoint with session ID and proposals."""
     checkpoint = {
+        'session_id': session_id,
         'state_dict': model.state_dict(),
         'epoch': epoch,
         'section_idx': section_idx,
         'section_passed': section_passed,
+        'proposals': proposals or {},  # Teacher proposals, stuck patterns, etc.
+        'timestamp': datetime.now().isoformat(),
     }
-    path = Path(data_dir) / f'checkpoint{suffix}.pt'
+    path = Path(data_dir) / f'{session_id}_checkpoint{suffix}.pt'
     torch.save(checkpoint, path)
     return path
 
 
 def main(args):
+    # Session ID for this run
+    session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     data_dir = Path(args.data_dir)
     data_dir.mkdir(exist_ok=True)
 
-    # Log file - append mode
-    log_file = data_dir / 'training.log'
+    # Log file - session specific, append mode
+    log_file = data_dir / f'{session_id}_training.log'
 
     print("=" * 70)
     print("COHERENCE LAB - Unified Training")
+    print(f"Session: {session_id}")
     print(f"Device: {device}")
     print("=" * 70)
 
@@ -253,18 +260,38 @@ def main(args):
     # Resume from checkpoint if requested
     start_section = 0
     section_passed = [False] * len(CURRICULUM)
+    prior_proposals = {}
 
     if args.resume:
-        checkpoint_path = data_dir / 'checkpoint.pt'
-        if checkpoint_path.exists():
+        # Find checkpoint - either specific file or most recent
+        if args.resume_from:
+            checkpoint_path = Path(args.resume_from)
+        else:
+            # Find most recent checkpoint
+            checkpoints = list(data_dir.glob('*_checkpoint.pt'))
+            checkpoint_path = max(checkpoints, key=lambda p: p.stat().st_mtime) if checkpoints else None
+
+        if checkpoint_path and checkpoint_path.exists():
             print(f"\nResuming from {checkpoint_path}")
             checkpoint = torch.load(checkpoint_path, map_location=device)
             model.load_state_dict(checkpoint['state_dict'])
             start_section = checkpoint.get('section_idx', 0)
             section_passed = checkpoint.get('section_passed', section_passed)
+            prior_proposals = checkpoint.get('proposals', {})
+            prior_session = checkpoint.get('session_id', 'unknown')
+            print(f"  Prior session: {prior_session}")
             print(f"  Starting at section {start_section}, passed: {section_passed}")
+            if prior_proposals:
+                print(f"  Prior proposals: {list(prior_proposals.keys())}")
         else:
             print(f"\nNo checkpoint found, starting fresh")
+
+    # Track proposals during this session
+    proposals = {
+        'stuck_patterns': {},  # pattern -> count
+        'teacher_hints': [],   # list of hints given
+        'curriculum_issues': [],  # any detected ordering issues
+    }
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     criterion = nn.CrossEntropyLoss()
@@ -321,14 +348,16 @@ def main(args):
             print(f"  Maintenance: {info['maintenance_topics']}")
 
     def on_epoch_end(epoch, record):
-        # Append to log (crash-safe)
+        # Append to log (crash-safe, session-tagged)
         log_record = {
+            'session_id': session_id,
             'epoch': epoch,
             'section': record['section'],
             'section_name': record['section_name'],
             'is_play_day': record.get('is_play_day', False),
             'train_acc': record.get('train_metrics', {}).get('accuracy'),
             'eval_acc': record.get('eval_metrics', {}).get('accuracy'),
+            'proposals': proposals.copy(),
             'timestamp': datetime.now().isoformat()
         }
         append_to_log(log_file, log_record)
@@ -367,19 +396,20 @@ def main(args):
     def on_section_complete(section_idx, next_section):
         print(f"\n  *** SECTION {section_idx+1} PASSED! ***")
 
-        # Checkpoint after section
+        # Checkpoint after section (with session ID and proposals)
+        epoch_num = sequencer.history[-1]['epoch'] if sequencer.history else 0
         path = save_checkpoint(
-            model, sequencer.history[-1]['epoch'] if sequencer.history else 0,
+            model, epoch_num,
             sequencer.current_section_idx, sequencer.section_passed.copy(),
-            data_dir, f'_section{section_idx+1}'
+            data_dir, session_id, proposals, f'_section{section_idx+1}'
         )
         print(f"  Checkpoint saved: {path}")
 
         # Also update main checkpoint
         save_checkpoint(
-            model, sequencer.history[-1]['epoch'] if sequencer.history else 0,
+            model, epoch_num,
             sequencer.current_section_idx, sequencer.section_passed.copy(),
-            data_dir
+            data_dir, session_id, proposals
         )
 
         if next_section:
@@ -407,10 +437,22 @@ def main(args):
             print(f"{'*'*60}")
 
     def on_stuck_topic(stuck_info, topic_to_idx_map, trk):
-        print(f"\n  [Stuck: {stuck_info['topic']} - {stuck_info['reason']}]")
-        bridges = BRIDGES.get(stuck_info['topic'], [])
+        topic = stuck_info['topic']
+        reason = stuck_info['reason']
+        print(f"\n  [Stuck: {topic} - {reason}]")
+
+        # Track in proposals
+        proposals['stuck_patterns'][topic] = proposals['stuck_patterns'].get(topic, 0) + 1
+
+        bridges = BRIDGES.get(topic, [])
         if bridges:
             print(f"    Hint: Practice {bridges}")
+            proposals['teacher_hints'].append({
+                'epoch': sequencer.history[-1]['epoch'] if sequencer.history else 0,
+                'topic': topic,
+                'hint': f'Practice {bridges}',
+                'reason': reason
+            })
 
     # === RUN ===
     result = sequencer.run(
@@ -431,11 +473,20 @@ def main(args):
     )
 
     # Final checkpoint
-    save_checkpoint(model, result['epochs'], sequencer.current_section_idx, sequencer.section_passed, data_dir)
+    save_checkpoint(
+        model, result['epochs'],
+        sequencer.current_section_idx, sequencer.section_passed,
+        data_dir, session_id, proposals
+    )
 
     print("\n" + "=" * 70)
+    print(f"Session: {session_id}")
     print(f"Completed: {result['completed']} in {result['epochs']} epochs")
     print(f"Sections passed: {sum(sequencer.section_passed)}/{len(CURRICULUM)}")
+    if proposals['stuck_patterns']:
+        print(f"Stuck patterns: {proposals['stuck_patterns']}")
+    print(f"Checkpoints: {session_id}_checkpoint*.pt")
+    print(f"Log: {log_file}")
     print("=" * 70)
 
     return result
@@ -452,7 +503,11 @@ if __name__ == '__main__':
     parser.add_argument('--d-model', type=int, default=64)
     parser.add_argument('--n-heads', type=int, default=4)
     parser.add_argument('--n-think-steps', type=int, default=5)
-    parser.add_argument('--resume', action='store_true', help='Resume from checkpoint')
+    parser.add_argument('--resume', action='store_true', help='Resume from most recent checkpoint')
+    parser.add_argument('--resume-from', type=str, help='Resume from specific checkpoint file')
 
     args = parser.parse_args()
+    # --resume-from implies --resume
+    if args.resume_from:
+        args.resume = True
     main(args)
