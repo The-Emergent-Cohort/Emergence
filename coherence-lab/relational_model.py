@@ -685,11 +685,13 @@ class TopicConfidenceTracker(nn.Module):
 
         Eligible when:
         - XP >= threshold for next level (based on confirmed_level, not XP-level)
+        - Streak >= target_level × 10 (must prove consistency first)
         - Not on cooldown from failed exam
         - Not already graduated (L10 passed)
 
         Uses confirmed_level (exam-verified) not get_level() (XP-based).
         XP gets you eligible to test, but you must pass to advance.
+        Streak requirement proves consistency before testing.
         """
         self._init_exam_state()
 
@@ -709,7 +711,16 @@ class TopicConfidenceTracker(nn.Module):
             threshold = self.xp_threshold(next_level)
             current_xp = self.topic_xp[topic_idx].item()
 
-            eligible = current_xp >= threshold
+            if current_xp < threshold:
+                return False  # Not enough XP
+
+            # Check streak requirement: need target_level × 10 best streak
+            # L1 needs 10, L5 needs 50, L10 needs 100
+            # Use best_streak (not current) - once you've proven it, you're eligible
+            streak_required = next_level * 10
+            best_streak = self.topic_best_streak[topic_idx].item()
+
+            eligible = best_streak >= streak_required
             self.exam_eligible[topic_idx] = eligible
             return eligible
 

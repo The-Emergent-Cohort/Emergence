@@ -1,5 +1,13 @@
 # Coherence Lab Changelog
 
+## [0.5.15] - 2024-12-08
+### Added
+- **Streak prerequisite for exams**: Must prove consistency before testing
+  - L1 exam requires 10 best_streak, L5 requires 50, L10 requires 100
+  - Uses best_streak (not current) - once you've proven it, you're eligible
+  - Struggling topics need to build streaks before advancing
+  - Strong topics naturally meet requirement as they train
+
 ## [0.5.14] - 2024-12-08
 ### Changed
 - **Per-topic streak tracking**: Streaks now tracked per-topic, not globally

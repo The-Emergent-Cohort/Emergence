@@ -11,7 +11,7 @@ Building the social learning foundation:
 This is the developmental foundation for later phases.
 """
 
-__version__ = "0.5.14"  # Per-topic streak tracking for show decisions
+__version__ = "0.5.15"  # Streak prerequisite for exams (level × 10)
 
 import torch
 import torch.nn as nn
