@@ -350,7 +350,8 @@ def train_day_with_proposals(model, loader, optimizer, criterion, device, patter
                 else:
                     # Standard proposal types
                     topic_idx = proposal['topic_idx'][0].item()
-                    topic_names = list(topic_calibration.keys()) if topic_calibration else []
+                    # Use pattern_to_idx (always populated) not topic_calibration (empty on epoch 1)
+                    topic_names = list(pattern_to_idx.keys())
                     topic_name = topic_names[topic_idx] if topic_idx < len(topic_names) else f"topic_{topic_idx}"
                     magnitude = proposal['magnitude'].mean().item()
                     proposal_detail['topic'] = topic_name
