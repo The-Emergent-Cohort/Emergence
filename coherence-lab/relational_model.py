@@ -1606,12 +1606,13 @@ class RelationalLearner(nn.Module):
     """
 
     def __init__(self, vocab_size=26, d_model=64, max_seq_len=12,
-                 n_heads=4, n_think_steps=5):
+                 n_heads=4, n_think_steps=5, n_patterns=9):
         super().__init__()
 
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.n_think_steps = n_think_steps
+        self.n_patterns = n_patterns
 
         # Perception (world interaction)
         self.token_embed = nn.Embedding(vocab_size, d_model)
@@ -1653,8 +1654,8 @@ class RelationalLearner(nn.Module):
             nn.Linear(d_model, vocab_size)
         )
 
-        # Pattern classifier (auxiliary) - 5 types now with periodic_repeat
-        self.pattern_head = nn.Linear(d_model, 5)
+        # Pattern classifier (auxiliary) - dynamic based on curriculum
+        self.pattern_head = nn.Linear(d_model, n_patterns)
 
     def perceive(self, tokens, seq_lens=None):
         """Perceive the world (encode sequence)."""
@@ -3223,11 +3224,11 @@ class RelationalSystem(nn.Module):
     """
 
     def __init__(self, vocab_size=26, d_model=64, max_seq_len=12,
-                 n_heads=4, n_think_steps=5, n_topics=10):
+                 n_heads=4, n_think_steps=5, n_topics=10, n_patterns=9):
         super().__init__()
 
         self.learner = RelationalLearner(
-            vocab_size, d_model, max_seq_len, n_heads, n_think_steps
+            vocab_size, d_model, max_seq_len, n_heads, n_think_steps, n_patterns
         )
         self.teacher = RelationalTeacher(d_model)
 

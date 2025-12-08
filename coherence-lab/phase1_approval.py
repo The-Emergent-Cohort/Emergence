@@ -311,12 +311,13 @@ def main(args):
 
     print(f"Train: {len(train_data)}, Val: {len(val_data)}")
 
-    # Model - explicit n_topics=10 to match phase 2 checkpoint loading
+    # Model - n_topics=10 for phase 2 compat, n_patterns matches curriculum
     model = RelationalSystem(
         d_model=args.d_model,
         n_heads=args.n_heads,
         n_think_steps=args.n_think_steps,
-        n_topics=10
+        n_topics=10,
+        n_patterns=len(pattern_types)
     ).to(device)
 
     n_params = sum(p.numel() for p in model.parameters())

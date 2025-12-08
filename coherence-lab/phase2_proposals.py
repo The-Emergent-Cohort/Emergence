@@ -500,13 +500,14 @@ def main(args):
 
     print(f"Train: {len(train_data)}, Val: {len(val_data)}")
 
-    # Model - use n_topics=10 to match phase 1 checkpoint
-    # (phase 2 only uses 3 topics but needs compatible tensor sizes)
+    # Model - use n_topics=10, n_patterns=9 to match phase 1 checkpoint
+    # (phase 2 only uses 3 hard patterns but needs compatible tensor sizes)
     model = RelationalSystem(
         d_model=args.d_model,
         n_heads=args.n_heads,
         n_think_steps=args.n_think_steps,
-        n_topics=10
+        n_topics=10,
+        n_patterns=9  # Must match Phase 1's expanded curriculum
     ).to(device)
 
     # Load phase 1 checkpoint if available
