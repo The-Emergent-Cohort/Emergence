@@ -2420,8 +2420,9 @@ class RelationalTeacher(nn.Module):
             # Update how impressed teacher is (novelty wears off)
             self.update_impressedness(approval_level, show_reason)
 
-            # Check if it's time to raise the bar
-            if self.should_set_new_goal():
+            # Check if it's time to raise the bar - ONLY on streak shows
+            # Streaks are the actual goal achievement, not creative/validation shows
+            if show_reason == 'streak' and self.should_set_new_goal():
                 # Decide: directive ("let's do 5") or negotiation ("how many do you think?")
                 # Early: more directive (teacher setting expectations)
                 # Later: more negotiation (student learning self-assessment)

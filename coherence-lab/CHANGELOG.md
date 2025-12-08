@@ -1,5 +1,12 @@
 # Coherence Lab Changelog
 
+## [0.3.3] - 2024-12-08
+### Fixed
+- **Goals only on streaks**: Goal increases now ONLY trigger on streak shows
+  - Creative, validation, and spontaneous shows don't raise the bar
+  - Streaks are the actual goal achievement - "get X correct in a row, then show"
+  - This matches the pedagogical intent: prove consistent competence, not just enthusiasm
+
 ## [0.3.2] - 2024-12-08
 ### Fixed
 - **Boredom re-triggering**: Teacher boredom (`impressedness < 0.5`) was causing
