@@ -150,12 +150,13 @@ def train_epoch(model, loader, optimizer, criterion, device, pattern_to_idx):
         loss.backward()
         optimizer.step()
 
-        # Approval-seeking behavior
+        # Approval-seeking behavior (pass pattern_indices for per-topic streak tracking)
         int_level = torch.sigmoid(model.learner.other_model.internalization_level).item()
         is_creative = torch.zeros(tokens.size(0), dtype=torch.bool, device=device)
+        pattern_indices = torch.tensor([pattern_to_idx[p] for p in pattern_types], device=device)
 
         should_show, reasons = model.learner.self_model.should_show_work(
-            correct, is_creative, conf, int_level
+            correct, is_creative, conf, int_level, pattern_indices=pattern_indices
         )
 
         if should_show.any():

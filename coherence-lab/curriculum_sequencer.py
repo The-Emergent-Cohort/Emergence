@@ -146,7 +146,12 @@ class CurriculumSequencer:
 
         for topic_name in get_section_topics(section):
             idx = self.topic_to_idx[topic_name]
-            current_level = self.tracker.get_level(idx)
+
+            # Use confirmed_level (exam-verified), not XP-based level
+            if hasattr(self.tracker, 'confirmed_level'):
+                current_level = self.tracker.confirmed_level[idx].item()
+            else:
+                current_level = self.tracker.get_level(idx)
 
             # Must reach minimum level to take section exam
             if current_level < self.section_exam_level:
@@ -230,12 +235,29 @@ class CurriculumSequencer:
         return not any_failed, results
 
     def check_section_ready(self) -> bool:
-        """Check if all topics in current section are ready for section exam."""
+        """Check if all topics in current section are ready for section exam.
+
+        Uses confirmed_level (exam-verified) not get_level() (XP-based).
+        You must PASS level-up exams to unlock section exams.
+        """
         current_section = self.sections[self.current_section_idx]
-        return all(
-            self.tracker.get_level(self.topic_to_idx[t]) >= self.section_exam_level
-            for t in get_section_topics(current_section)
-        )
+
+        # Ensure exam state is initialized
+        if hasattr(self.tracker, '_init_exam_state'):
+            self.tracker._init_exam_state()
+
+        for t in get_section_topics(current_section):
+            idx = self.topic_to_idx[t]
+            # Use confirmed_level (exam-verified), not XP-based level
+            if hasattr(self.tracker, 'confirmed_level'):
+                level = self.tracker.confirmed_level[idx].item()
+            else:
+                level = self.tracker.get_level(idx)
+
+            if level < self.section_exam_level:
+                return False
+
+        return True
 
     def advance_section(self) -> bool:
         """
