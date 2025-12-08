@@ -218,14 +218,15 @@ def main(args):
     print(f"Device: {device}")
 
     # Easy patterns for foundation building
-    pattern_types = ['alternating', 'repeating', 'incrementing', 'fixed_offset']
+    # periodic_repeat added to prep for long_range (teaches "look back N positions")
+    pattern_types = ['alternating', 'repeating', 'incrementing', 'fixed_offset', 'periodic_repeat']
     pattern_to_idx = {p: i for i, p in enumerate(pattern_types)}
     print(f"Pattern types: {pattern_types}")
 
     # Generate data
     print("\nGenerating easy pattern data...")
-    train_data = PatternDataset(n_examples=args.n_train, seed=42)
-    val_data = PatternDataset(n_examples=args.n_val, seed=123)
+    train_data = PatternDataset(n_examples=args.n_train, seed=42, pattern_types=pattern_types)
+    val_data = PatternDataset(n_examples=args.n_val, seed=123, pattern_types=pattern_types)
 
     train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
     val_loader = DataLoader(val_data, batch_size=args.batch_size, collate_fn=collate_fn)

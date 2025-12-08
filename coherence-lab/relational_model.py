@@ -2565,13 +2565,30 @@ class RelationalSystem(nn.Module):
 # =============================================================================
 
 class PatternDataset(Dataset):
-    def __init__(self, n_examples=50000, vocab_size=26, seed=None):
+    """
+    Pattern dataset for Phase 1 training.
+
+    Pattern types:
+    - alternating: [a,b,a,b,...] → look back 2
+    - repeating: [a,a,a,...] → look back 1
+    - incrementing: [1,2,3,4,...] → look back 1, add 1
+    - fixed_offset: [2,5,8,11,...] → look back 1, add k
+    - periodic_repeat: [a,b,c,a,b,c,...] → look back period (3-4)
+
+    Use pattern_types parameter to control which patterns are included.
+    """
+    def __init__(self, n_examples=50000, vocab_size=26, seed=None,
+                 pattern_types=None):
         if seed:
             random.seed(seed)
         self.vocab_size = vocab_size
+        # Default to original 4 patterns for backward compatibility
+        if pattern_types is None:
+            pattern_types = ['alternating', 'repeating', 'incrementing', 'fixed_offset']
+        self.pattern_types = pattern_types
         self.examples = []
         for _ in range(n_examples):
-            pattern_type = random.choice(['alternating', 'repeating', 'incrementing', 'fixed_offset'])
+            pattern_type = random.choice(self.pattern_types)
             self.examples.append(self._generate(pattern_type))
 
     def _generate(self, pt):
@@ -2590,12 +2607,25 @@ class PatternDataset(Dataset):
             start = random.randint(0, max(0, self.vocab_size - length - 1))
             seq = [start + i for i in range(length)]
             target = start + length
-        else:  # fixed_offset
+        elif pt == 'fixed_offset':
             length = random.randint(3, 5)
             k = random.randint(1, 3)
             start = random.randint(0, max(0, self.vocab_size - k * length - 1))
             seq = [start + i * k for i in range(length)]
             target = start + length * k
+        elif pt == 'periodic_repeat':
+            # Pattern repeats with period 3-4: [a,b,c,a,b,c,a,b,c,...]
+            # Teaches: "look back N positions" - prep for long_range
+            period = random.randint(3, 4)
+            base = random.sample(range(self.vocab_size), period)
+            # Generate 2-3 full cycles plus partial
+            n_cycles = random.randint(2, 3)
+            extra = random.randint(0, period - 1)
+            seq = (base * n_cycles) + base[:extra]
+            # Target is what comes next in the cycle
+            target = base[extra % period]
+        else:
+            raise ValueError(f"Unknown pattern type: {pt}")
         return {'sequence': seq, 'target': target, 'pattern_type': pt}
 
     def __len__(self):
