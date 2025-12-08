@@ -252,6 +252,55 @@ def train_day_with_proposals(model, loader, optimizer, criterion, device, patter
                 proposal_type = proposal['type_name'][0]
                 proposal_types[proposal_type] = proposal_types.get(proposal_type, 0) + 1
 
+                # === DETAILED PROPOSAL LOGGING ===
+                # What is the student actually proposing?
+                proposal_detail = {
+                    'type': proposal_type,
+                    'trigger': trigger,
+                    'confidence': proposal['confidence'].mean().item(),
+                    'batch_idx': batch_idx,
+                    'recent_accuracy': recent_accuracy,
+                }
+
+                # Add type-specific details
+                if proposal_type == 'propose_novel':
+                    novel_cat = proposal.get('novel_category', ['unknown'])[0]
+                    uncertainty = proposal.get('uncertainty_level', torch.tensor(0))
+                    if isinstance(uncertainty, torch.Tensor):
+                        uncertainty = uncertainty.mean().item()
+                    proposal_detail['novel_category'] = novel_cat
+                    proposal_detail['uncertainty_level'] = uncertainty
+                    print(f"      [PROPOSE_NOVEL] Category: {novel_cat}, Uncertainty: {uncertainty:.2f}")
+                    print(f"        Trigger: {trigger}, Recent acc: {recent_accuracy:.1%}")
+
+                elif proposal_type == 'request_unknown':
+                    uncertainty = proposal.get('uncertainty_level', torch.tensor(0))
+                    if isinstance(uncertainty, torch.Tensor):
+                        uncertainty = uncertainty.mean().item()
+                    proposal_detail['uncertainty_level'] = uncertainty
+                    # Show which topics triggered this
+                    ambiguous_topics = []
+                    if topic_calibration:
+                        for t_name, cal in topic_calibration.items():
+                            acc = cal.get('accuracy', 0.5)
+                            conf = cal.get('confidence', 0.5)
+                            if 0.4 < acc < 0.7 and 0.4 < conf < 0.7:
+                                ambiguous_topics.append(f"{t_name}({acc:.0%})")
+                    proposal_detail['ambiguous_topics'] = ambiguous_topics
+                    print(f"      [REQUEST_UNKNOWN] 'Something feels off...'")
+                    print(f"        Ambiguous topics: {ambiguous_topics or 'general confusion'}")
+                    print(f"        Uncertainty: {uncertainty:.2f}, Recent acc: {recent_accuracy:.1%}")
+
+                else:
+                    # Standard proposal types
+                    topic_idx = proposal['topic_idx'][0].item()
+                    topic_names = list(topic_calibration.keys()) if topic_calibration else []
+                    topic_name = topic_names[topic_idx] if topic_idx < len(topic_names) else f"topic_{topic_idx}"
+                    magnitude = proposal['magnitude'].mean().item()
+                    proposal_detail['topic'] = topic_name
+                    proposal_detail['magnitude'] = magnitude
+                    print(f"      [{proposal_type.upper()}] Topic: {topic_name}, Magnitude: {magnitude:.2f}")
+
                 # Show proposal to teacher
                 evaluation, response = model.teacher.evaluate_self_modification_proposal(
                     proposal, cognitive_state, topic_calibration
@@ -264,6 +313,23 @@ def train_day_with_proposals(model, loader, optimizer, criterion, device, patter
                     proposals_modified += 1
                 else:
                     proposals_redirected += 1
+
+                # Log teacher's response
+                decision = evaluation['decision']
+                proposal_detail['teacher_decision'] = decision
+                if evaluation.get('probing_response'):
+                    probes = evaluation['probing_response'].get('probes', [])
+                    proposal_detail['teacher_probes'] = [p.get('message', '') for p in probes]
+                    print(f"        Teacher probes: {probes[0].get('message', '') if probes else 'none'}")
+                elif evaluation.get('novel_evaluation'):
+                    novel_eval = evaluation['novel_evaluation']
+                    proposal_detail['novel_verdict'] = novel_eval.get('verdict')
+                    proposal_detail['novel_message'] = novel_eval.get('message')
+                    print(f"        Teacher: {novel_eval.get('message', decision)}")
+                else:
+                    print(f"        Teacher decision: {decision}")
+                    if evaluation.get('redirect_reason'):
+                        print(f"        Reason: {evaluation['redirect_reason']}")
 
                 # Apply if approved
                 if evaluation['is_approved']:
