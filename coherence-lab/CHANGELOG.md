@@ -1,5 +1,14 @@
 # Coherence Lab Changelog
 
+## [0.5.17] - 2024-12-08
+### Changed
+- **Level-scaled creativity threshold**: Higher level = higher bar for "creative"
+  - L0: creativity > 0.5 (low bar, encourage exploration)
+  - L5: creativity > 0.7 (moderate bar)
+  - L10: creativity > 0.9 (high bar, only truly novel ideas)
+  - Prevents creative shows from interrupting streaks at high levels
+  - What's "creative" at L1 is routine at L10
+
 ## [0.5.16] - 2024-12-08
 ### Fixed
 - **Display shows confirmed level, not XP level**: Was showing misleading "potential" levels
