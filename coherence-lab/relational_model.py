@@ -3440,12 +3440,12 @@ class PatternDataset(Dataset):
             # Target is what comes next in the cycle
             target = base[extra % period]
         elif pt == 'counting':
-            # Simple position counting: 0, 1, 2, 3, 4, 5...
-            # Teaches: explicit position awareness
+            # Pure position counting: 0, 1, 2, 3, 4, 5...
+            # Teaches: explicit position awareness (distinct from incrementing)
+            # Always starts at 0 - this IS the position, not "some value + position"
             length = random.randint(4, 8)
-            start = random.randint(0, max(0, self.vocab_size - length - 2))
-            seq = [start + i for i in range(length)]
-            target = start + length
+            seq = list(range(length))  # Always 0, 1, 2, 3...
+            target = length  # Next position
         elif pt == 'modular':
             # Cycle position: 0, 1, 2, 0, 1, 2, 0, 1, 2...
             # Teaches: i % period (where am I in the cycle?)
