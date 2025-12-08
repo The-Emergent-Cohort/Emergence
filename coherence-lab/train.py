@@ -330,8 +330,8 @@ def main(args):
     def eval_fn(mdl):
         return evaluate(mdl, val_loader, device, pattern_to_idx)
 
-    def exam_fn(mdl, topic, n_problems, seed, dev):
-        return run_exam(mdl, topic, n_problems, seed, dev, pattern_to_idx)
+    def exam_fn(mdl, topic, n_problems, seed, device):
+        return run_exam(mdl, topic, n_problems, seed, device, pattern_to_idx)
 
     # === CALLBACKS ===
     last_section = [start_section]  # Track for checkpoint triggers
