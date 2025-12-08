@@ -11,7 +11,7 @@ Building the social learning foundation:
 This is the developmental foundation for later phases.
 """
 
-__version__ = "0.3.1"  # Fixed goal runaway: additive increments (+2 to +5), mastery cap at 100
+__version__ = "0.3.2"  # Boost impressedness after goal-setting to prevent boredom re-triggering
 
 import torch
 import torch.nn as nn

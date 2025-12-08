@@ -1,5 +1,12 @@
 # Coherence Lab Changelog
 
+## [0.3.2] - 2024-12-08
+### Fixed
+- **Boredom re-triggering**: Teacher boredom (`impressedness < 0.5`) was causing
+  `should_set_new_goal()` to fire on every shown item, escalating 3→8→13→...→100 instantly
+  - Setting a new goal now boosts `impressedness` to at least 0.6 (teacher becomes engaged)
+  - This prevents the boredom trigger from repeatedly firing
+
 ## [0.3.1] - 2024-12-08
 ### Fixed
 - **Goal runaway bug**: Compound scaling (1.25-1.50x) caused goals to explode 3→8→12→18→...→1000

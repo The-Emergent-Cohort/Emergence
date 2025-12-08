@@ -2582,6 +2582,10 @@ class RelationalTeacher(nn.Module):
             # Reset goals_met_count to prevent immediate re-triggering
             self.goals_met_count.zero_()
 
+            # Setting a new goal is engaging - teacher becomes invested again
+            # This prevents boredom from triggering repeated goal-setting
+            self.impressedness.clamp_(min=0.6)
+
             return {
                 'goal': new_goal,
                 'is_negotiation': is_negotiation,
