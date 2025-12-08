@@ -11,7 +11,7 @@ Building the social learning foundation:
 This is the developmental foundation for later phases.
 """
 
-__version__ = "0.5.9"  # No XP cap - accumulate freely, exams verify
+__version__ = "0.5.10"  # Final comprehensive exam
 
 import torch
 import torch.nn as nn
@@ -488,17 +488,69 @@ def main(args):
             topic_registry.save(registry_path)
             print(f"  [Registry saved: {len(topic_registry)} topics]")
 
-        # Check graduation - all topics must pass L10 exam
+        # Check if all topics have graduated individually
         all_graduated = all(
             tracker.get_exam_stats(pattern_to_idx[pt])['graduated']
             for pt in pattern_types
         )
 
         if all_graduated:
-            print(f"\n*** Phase 1 complete! All topics GRADUATED (passed L10 exam). ***")
-            print(f"    Trust: {trust:.1%}, Internalization: {int_level:.1%}")
-            print(f"    All topics exam-proven - ready for Phase 2!")
-            break
+            # === FINAL COMPREHENSIVE EXAM ===
+            # All topics graduated individually - now prove it all together
+            print(f"\n  === FINAL COMPREHENSIVE EXAM ===")
+            print(f"  All topics at L10 - now prove mastery across the board!")
+
+            final_results = []
+            any_failed = False
+
+            for pattern_name, idx in pattern_to_idx.items():
+                # Final exam: 32 problems per topic, 90% threshold
+                final_size = 32
+                final_threshold = 0.90
+
+                final_data = PatternDataset(
+                    n_examples=final_size,
+                    seed=epoch * 10000 + idx,  # Different seed for final
+                    pattern_types=[pattern_name]
+                )
+                final_loader = DataLoader(final_data, batch_size=final_size, collate_fn=collate_fn)
+
+                model.eval()
+                correct_count = 0
+                for batch in final_loader:
+                    tokens = batch['tokens'].to(device)
+                    targets = batch['target'].to(device)
+                    seq_lens = batch['seq_len']
+                    with torch.no_grad():
+                        details = model(tokens, seq_lens, targets=targets, return_details=True)
+                        preds = details['logits'].argmax(dim=-1)
+                        correct_count += (preds == targets).sum().item()
+                model.train()
+
+                score = correct_count / final_size
+                passed = score >= final_threshold
+
+                if passed:
+                    print(f"    {pattern_name:15s}: {score:.0%} >= {final_threshold:.0%} - PASSED FINAL")
+                else:
+                    print(f"    {pattern_name:15s}: {score:.0%} < {final_threshold:.0%} - FAILED FINAL (kicked back)")
+                    # Kick back: un-graduate, reset confirmed level, apply penalty
+                    tracker.topic_graduated[idx] = False
+                    tracker.confirmed_level[idx] = 7  # Knocked back to L7
+                    tracker.topic_xp[idx] = tracker.xp_threshold(7)  # Reset XP to L7 threshold
+                    tracker.topic_streak[idx] = 0  # Reset streak
+                    any_failed = True
+
+                final_results.append({'topic': pattern_name, 'score': score, 'passed': passed})
+
+            if not any_failed:
+                print(f"\n*** Phase 1 COMPLETE! All topics PASSED FINAL EXAM! ***")
+                print(f"    Trust: {trust:.1%}, Internalization: {int_level:.1%}")
+                print(f"    Comprehensive mastery proven - ready for Phase 2!")
+                break
+            else:
+                print(f"\n  Some topics failed final - back to training!")
+                # Don't break - continue training
 
     print("\n" + "=" * 70)
     print(f"Best accuracy: {best_acc:.1%}")
