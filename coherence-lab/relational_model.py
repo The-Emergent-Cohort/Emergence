@@ -386,6 +386,14 @@ class SelfModel(nn.Module):
         # "I'm 65% confident on fibonacci, but scoring 75% - some are guesses"
         self.topic_tracker = TopicConfidenceTracker(n_topics=n_topics)
 
+        # === GOAL-SETTING LEARNING ===
+        # Student learns to set appropriate goals through negotiation with teacher
+        # "How many should I do before showing?" - learns to calibrate this
+        self.register_buffer('goal_estimate', torch.tensor(3.0))  # Student's current estimate
+        self.register_buffer('goal_learning_rate', torch.tensor(0.2))  # How fast to update estimate
+        self.register_buffer('goal_proposals_made', torch.tensor(0))
+        self.register_buffer('goal_proposals_accepted', torch.tensor(0))  # Track calibration
+
         # Self-modification proposals
         # "I think I need to adjust my confidence on topic X"
         self.proposal_generator = None  # Initialized later to avoid circular dependency
@@ -439,7 +447,8 @@ class SelfModel(nn.Module):
         _, new_memory = self.experience_memory(exp, memory_state)
         return new_memory
 
-    def should_show_work(self, was_correct, is_creative, confidence, internalization_level):
+    def should_show_work(self, was_correct, is_creative, confidence, internalization_level,
+                         teacher_goal=None):
         """
         Decide whether to present work to teacher for approval.
 
@@ -449,7 +458,8 @@ class SelfModel(nn.Module):
         - Later: only show genuinely interesting/uncertain work
         - Mature: rarely show routine work, self-validated
 
-        This is the student's internal standard developing.
+        teacher_goal: if provided, the negotiated goal from teacher
+                     (e.g., "show me after 5 correct")
         """
         batch_size = was_correct.size(0)
         device = was_correct.device
@@ -458,9 +468,13 @@ class SelfModel(nn.Module):
         show_reasons = ['none'] * batch_size
 
         with torch.no_grad():
-            # === RISING THRESHOLDS ===
-            # Streak threshold rises: 3 → 5 → 7 as internalization grows
-            streak_threshold = 3 + int(4 * internalization_level)
+            # === STREAK THRESHOLD ===
+            # Use teacher's goal if available, else internal formula
+            if teacher_goal is not None:
+                streak_threshold = teacher_goal
+            else:
+                # Fallback: rises with internalization (3 → 7)
+                streak_threshold = 3 + int(4 * internalization_level)
 
             # Confidence threshold for validation-seeking rises
             # Early: seek validation when confidence < 0.5
@@ -484,9 +498,8 @@ class SelfModel(nn.Module):
                 if is_creative[i] and was_correct[i]:
                     reason = 'creative'
 
-                # Streak shows pride - but bar rises with internalization
-                # Early: 3 in a row is exciting!
-                # Later: need 5-7 in a row to feel worth sharing
+                # Streak meets goal - time to show!
+                # This is the negotiated/set goal from teacher
                 elif self.streak_count >= streak_threshold and was_correct[i]:
                     reason = 'streak'
                     self.streak_count.zero_()  # Reset after showing
@@ -521,6 +534,70 @@ class SelfModel(nn.Module):
                 # Update calibration based on approval rate
                 approval_rate = self.approved_shows.float() / self.total_shows.float()
                 self.show_calibration = 0.9 * self.show_calibration + 0.1 * approval_rate
+
+    # =========================================================================
+    # GOAL-SETTING LEARNING
+    # Student learns to propose appropriate goals through teacher feedback
+    # =========================================================================
+
+    def propose_show_goal(self, confidence_level):
+        """
+        Propose a goal for how many correct before showing.
+
+        Student uses their internal estimate, slightly adjusted by confidence:
+        - High confidence → might propose slightly higher
+        - Low confidence → might propose slightly lower (need more validation)
+
+        Returns:
+            proposed_goal: int
+        """
+        with torch.no_grad():
+            base = self.goal_estimate.item()
+
+            # Confidence adjustment: high confidence allows aiming slightly higher
+            conf = confidence_level if isinstance(confidence_level, float) else confidence_level.item()
+            adjustment = (conf - 0.5) * 1.0  # ±0.5 based on confidence
+
+            proposed = int(round(base + adjustment))
+            proposed = max(2, min(10, proposed))  # Clamp to reasonable range
+
+            self.goal_proposals_made += 1
+            return proposed
+
+    def update_goal_estimate_from_feedback(self, teacher_response):
+        """
+        Learn from teacher's response to our goal proposal.
+
+        If accepted: small reinforcement (we're well-calibrated)
+        If countered up: increase our estimate (we aimed too low)
+        If countered down: decrease our estimate (we aimed too high)
+
+        This is how the student learns to set appropriate goals!
+        """
+        with torch.no_grad():
+            lr = self.goal_learning_rate.item()
+            final_goal = teacher_response['final_goal']
+
+            if teacher_response['accepted']:
+                # Good calibration! Small move toward the accepted value
+                self.goal_proposals_accepted += 1
+                delta = (final_goal - self.goal_estimate.item()) * lr * 0.5
+            elif teacher_response['counter_direction'] == 'up':
+                # We aimed too low - learn to aim higher
+                delta = (final_goal - self.goal_estimate.item()) * lr
+            else:  # counter_direction == 'down'
+                # We aimed too high - learn to aim lower
+                delta = (final_goal - self.goal_estimate.item()) * lr
+
+            self.goal_estimate += delta
+            # Keep estimate in reasonable range
+            self.goal_estimate.clamp_(2.0, 10.0)
+
+    def get_goal_calibration_rate(self):
+        """How well calibrated are our goal proposals?"""
+        if self.goal_proposals_made.item() < 1:
+            return 0.5  # No data yet
+        return self.goal_proposals_accepted.float().item() / self.goal_proposals_made.float().item()
 
     def init_proposal_generator(self, d_model, n_topics=10):
         """Initialize proposal generator (called after model creation to avoid circular deps)."""
@@ -1658,6 +1735,15 @@ class RelationalTeacher(nn.Module):
         self.register_buffer('unshown_streak', torch.tensor(0))  # Quiet competence streak
         self.register_buffer('last_monitored_correct', torch.tensor(0.0))
 
+        # === IMPRESSEDNESS / NOVELTY TRACKING ===
+        # Like a parent: thrilled by first scribbles, but novelty wears off
+        # Drives natural goal-setting: "How about 5 before you show me next time?"
+        self.register_buffer('impressedness', torch.tensor(1.0))  # Starts high (everything exciting)
+        self.register_buffer('shows_at_level', torch.tensor(0))   # Shows at current quality level
+        self.register_buffer('current_goal', torch.tensor(3))     # Current "show me after X" goal
+        self.register_buffer('goals_met_count', torch.tensor(0))  # Times goal was met
+        self.register_buffer('last_show_quality', torch.tensor(0.0))  # Quality of last show
+
         # Process evaluator for watching HOW learner thinks
         self.process_evaluator = ProcessEvaluator(d_model)
 
@@ -1741,9 +1827,10 @@ class RelationalTeacher(nn.Module):
         Early: everything gets "great job!"
         Later: routine correct answers get "good", only impressive work gets "great!"
 
-        Returns: (response, strong_approval, approval_level)
+        Returns: (response, strong_approval, approval_level, goal_action)
         - strong_approval: True if this met the rising bar
         - approval_level: 0.0-1.0 scale of how impressed the teacher is
+        - goal_action: None or dict with goal-setting info if it's time to raise the bar
         """
         with torch.no_grad():
             # Update perceived competence (EMA of correctness)
@@ -1757,6 +1844,8 @@ class RelationalTeacher(nn.Module):
             # At 50% competence: threshold = 0.3 (low bar)
             # At 90% competence: threshold = 0.7 (high bar)
             self.approval_threshold = 0.3 + 0.5 * self.perceived_competence
+
+        goal_action = None
 
         if was_correct.any():
             # Determine if this MEETS the rising bar
@@ -1776,6 +1865,8 @@ class RelationalTeacher(nn.Module):
                 # If competence is high, streak is expected (lower approval)
                 approval_level = 1.0 - 0.3 * self.perceived_competence.item()
                 response = self.generate_encouragement(learner_state)
+                # Record that they met the goal
+                self.record_goal_met()
             elif show_reason == 'validation':
                 # Seeking validation - meets bar if competence is low (learning)
                 # If competence high, this is "you should know this by now"
@@ -1788,11 +1879,23 @@ class RelationalTeacher(nn.Module):
                 approval_level = 0.6 if meets_bar else 0.3
                 response = self.generate_encouragement(learner_state)
 
-            return response, meets_bar, approval_level
+            # === IMPRESSEDNESS & GOAL-SETTING ===
+            # Update how impressed teacher is (novelty wears off)
+            self.update_impressedness(approval_level, show_reason)
+
+            # Check if it's time to raise the bar
+            if self.should_set_new_goal():
+                # Decide: directive ("let's do 5") or negotiation ("how many do you think?")
+                # Early: more directive (teacher setting expectations)
+                # Later: more negotiation (student learning self-assessment)
+                is_negotiation = self.perceived_competence.item() > 0.6
+                goal_action = self.set_new_goal(is_negotiation=is_negotiation)
+
+            return response, meets_bar, approval_level, goal_action
         else:
             # Wrong but showed - always positive! Safe to show failures
             # This always "meets bar" because showing mistakes is brave
-            return self.generate_encouragement(learner_state), True, 0.5
+            return self.generate_encouragement(learner_state), True, 0.5, None
 
     def monitor_unshown_work(self, was_correct_batch, was_shown_batch):
         """
@@ -1835,8 +1938,160 @@ class RelationalTeacher(nn.Module):
         return {
             'perceived_competence': self.perceived_competence.item(),
             'approval_threshold': self.approval_threshold.item(),
-            'unshown_streak': self.unshown_streak.item()
+            'unshown_streak': self.unshown_streak.item(),
+            'impressedness': self.impressedness.item(),
+            'current_goal': self.current_goal.item(),
+            'goals_met_count': self.goals_met_count.item()
         }
+
+    # =========================================================================
+    # GOAL-SETTING DYNAMICS
+    # Like a parent: excited by early shows, but gradually raises the bar
+    # "How about you do 5 before showing me next time?"
+    # =========================================================================
+
+    def update_impressedness(self, show_quality, show_reason):
+        """
+        Update teacher impressedness after a show.
+
+        Impressedness decays with repeated similar shows (novelty wears off).
+        Resets/increases with genuinely impressive shows.
+
+        Args:
+            show_quality: 0-1 measure of how good this show was
+            show_reason: why the student showed (creative, streak, validation, etc.)
+        """
+        with torch.no_grad():
+            quality_diff = show_quality - self.last_show_quality.item()
+
+            if show_reason == 'creative':
+                # Creative shows always refresh impressedness
+                self.impressedness = min(1.0, self.impressedness + 0.2)
+                self.shows_at_level.zero_()
+            elif quality_diff > 0.1:
+                # Noticeably better than before - impressive!
+                self.impressedness = min(1.0, self.impressedness + 0.1)
+                self.shows_at_level.zero_()
+            elif abs(quality_diff) < 0.1:
+                # Similar to before - novelty wearing off
+                self.shows_at_level += 1
+                decay = 0.05 * self.shows_at_level.item()
+                self.impressedness = max(0.2, self.impressedness - decay)
+            # Worse than before doesn't decay impressedness (concern, not boredom)
+
+            self.last_show_quality.fill_(show_quality)
+
+    def should_set_new_goal(self):
+        """
+        Check if it's time to set a new goal (raise the bar).
+
+        Triggers when:
+        - Impressedness has dropped (teacher getting bored)
+        - Student has met current goal multiple times
+        """
+        with torch.no_grad():
+            bored = self.impressedness.item() < 0.5
+            goals_routine = self.goals_met_count.item() >= 3
+            return bored or goals_routine
+
+    def set_new_goal(self, is_negotiation=False):
+        """
+        Set a new show goal based on perceived competence.
+
+        Returns:
+            dict with:
+                - goal: the new streak/count goal
+                - is_negotiation: whether to ask student first
+                - teacher_suggestion: what teacher thinks is appropriate
+        """
+        with torch.no_grad():
+            competence = self.perceived_competence.item()
+
+            # Base goal increases with competence
+            # Low competence (0.3): goal = 3
+            # Medium competence (0.6): goal = 5
+            # High competence (0.9): goal = 7-8
+            base_goal = 3 + int(5 * competence)
+
+            # Add 1-2 to current goal (incremental raising)
+            new_goal = max(self.current_goal.item() + 1, base_goal)
+            new_goal = min(new_goal, 10)  # Cap at 10
+
+            return {
+                'goal': new_goal,
+                'is_negotiation': is_negotiation,
+                'teacher_suggestion': new_goal,
+                'reason': 'bored' if self.impressedness.item() < 0.5 else 'routine'
+            }
+
+    def evaluate_student_goal_proposal(self, student_proposal):
+        """
+        Evaluate a student's proposed goal and counter-offer if needed.
+
+        Student proposes: "I think I should do X before showing you"
+        Teacher: accepts, counters up, or counters down
+
+        Returns:
+            dict with:
+                - accepted: bool
+                - final_goal: the negotiated goal
+                - counter_direction: 'up', 'down', or None
+                - feedback: message type for student
+        """
+        with torch.no_grad():
+            competence = self.perceived_competence.item()
+            current = self.current_goal.item()
+
+            # What teacher thinks is appropriate
+            expected = 3 + int(5 * competence)
+            expected = max(current, expected)  # Don't go below current
+
+            # Tolerance: within 1 of expected is acceptable
+            diff = student_proposal - expected
+
+            if abs(diff) <= 1:
+                # Acceptable proposal
+                self.current_goal.fill_(student_proposal)
+                self.goals_met_count.zero_()
+                self.impressedness.fill_(min(1.0, self.impressedness.item() + 0.1))
+                return {
+                    'accepted': True,
+                    'final_goal': student_proposal,
+                    'counter_direction': None,
+                    'feedback': 'good_calibration'
+                }
+            elif diff < -1:
+                # Student proposing too low - counter up
+                # "Let's aim a bit higher - try X"
+                counter = expected
+                self.current_goal.fill_(counter)
+                self.goals_met_count.zero_()
+                return {
+                    'accepted': False,
+                    'final_goal': counter,
+                    'counter_direction': 'up',
+                    'feedback': 'aim_higher'
+                }
+            else:
+                # Student proposing too high - counter down
+                # "That's ambitious! Let's start with X"
+                counter = expected + 1  # Give a bit more than expected, but not their full ask
+                counter = min(counter, student_proposal - 1)  # At least 1 below their ask
+                self.current_goal.fill_(counter)
+                self.goals_met_count.zero_()
+                return {
+                    'accepted': False,
+                    'final_goal': counter,
+                    'counter_direction': 'down',
+                    'feedback': 'too_ambitious'
+                }
+
+    def record_goal_met(self):
+        """Record that student met the current goal."""
+        with torch.no_grad():
+            self.goals_met_count += 1
+            # Small impressedness boost for meeting goal
+            self.impressedness = min(1.0, self.impressedness + 0.05)
 
     def evaluate_learner_process(self, states_history, confidence, was_correct, pattern_type_idx,
                                   topic_accuracy=None):
