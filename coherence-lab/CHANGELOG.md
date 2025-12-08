@@ -1,5 +1,14 @@
 # Coherence Lab Changelog
 
+## [0.5.16] - 2024-12-08
+### Fixed
+- **Display shows confirmed level, not XP level**: Was showing misleading "potential" levels
+  - Was: L8 displayed when XP was high enough (but no exams passed)
+  - Now: L0 displayed until you PASS exams to confirm each level
+  - Display was showing XP-based level, but exam system used confirmed_level
+  - This made it look like streak prerequisites weren't working (L8 with 15 streak)
+  - Reality: confirmed_level was L1, streak correctly blocking L2 exam
+
 ## [0.5.15] - 2024-12-08
 ### Added
 - **Streak prerequisite for exams**: Must prove consistency before testing
