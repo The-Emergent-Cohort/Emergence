@@ -1,5 +1,13 @@
 # Coherence Lab Changelog
 
+## [0.5.9] - 2024-12-08
+### Changed
+- **No XP cap**: XP accumulates freely during epoch
+  - Removed the cap that limited XP to next exam threshold
+  - Exams verify what you've earned - fail penalty drops you back
+  - Enables true multi-level advancement per epoch
+  - Earn 500 XP? Take exams for all levels up to that threshold
+
 ## [0.5.8] - 2024-12-08
 ### Changed
 - **Simplified exam flow**: No more cooldowns, just fail-and-retry

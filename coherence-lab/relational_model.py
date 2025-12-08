@@ -607,18 +607,9 @@ class TopicConfidenceTracker(nn.Module):
                 else:
                     scaled_amount = amount  # Penalties not scaled
 
-                # Cap XP at next exam threshold (gated by confirmed_level)
-                # Must pass exam to exceed - no free leveling
-                self._init_exam_state()
-                confirmed = self.confirmed_level[topic_idx].item()
-                if confirmed < self.max_level:
-                    next_threshold = self.xp_threshold(confirmed + 1)
-                    new_xp = self.topic_xp[topic_idx] + scaled_amount
-                    self.topic_xp[topic_idx] = min(new_xp, next_threshold)
-                else:
-                    # At max confirmed level, no cap
-                    self.topic_xp[topic_idx] += scaled_amount
-
+                # XP accumulates freely - exams verify what you've earned
+                # If you fail an exam, penalty drops you back
+                self.topic_xp[topic_idx] += scaled_amount
                 self.topic_xp[topic_idx].clamp_(min=0)
                 if self.topic_xp[topic_idx] > self.topic_xp_high[topic_idx]:
                     self.topic_xp_high[topic_idx] = self.topic_xp[topic_idx].clone()
