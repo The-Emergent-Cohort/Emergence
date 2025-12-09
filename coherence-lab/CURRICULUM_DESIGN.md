@@ -209,6 +209,85 @@ PHASE_CONFIG = {
 
 ---
 
+## Playdays
+
+Every 5th epoch on a topic is a **playday** - a break from structured learning that reinforces mastery through play.
+
+### Structure by Section
+
+| Section | Activities | Awards | Description |
+|---------|-----------|--------|-------------|
+| 1A | Free play | None | Pure exploration with blocks |
+| 1B | Turn-taking | Accuracy, Patience, Curiosity | Introduces waiting your turn |
+| 1C+ | Turn-taking, Creative challenges | Accuracy, Patience, Curiosity, Creativity | Structured play + awards |
+| 2A+ | All above + Collaboration | Above + Helpfulness | Working together |
+
+### Playday Components
+
+1. **Review Session**: Quick celebration of mastered patterns
+2. **Free Play**: Unstructured exploration time
+3. **Guided Activities**: Structured games that presage upcoming patterns
+4. **Star Awards**: Gold/silver/bronze for different categories (ties allowed!)
+5. **PARTY TIME**: When everyone gets all gold stars
+
+### Design Principle
+
+Playdays are curriculum-defined (see `PlaydaySpec` in `developmental_curriculum.py`) so activities and awards scale with developmental maturity.
+
+---
+
+## Question Period
+
+At the start of each epoch (after the first on a topic), students surface their uncertainties.
+
+### Purpose
+
+- Students show where they're confused before training begins
+- Teacher can provide targeted scaffolding
+- Especially valuable during "grind" epochs - a question might unlock a puzzle
+
+### Implementation
+
+1. Sample diagnostic examples from active patterns
+2. Each student predicts with confidence
+3. Track uncertainty (wrong answer OR low confidence)
+4. Report patterns where class is struggling
+5. Future: Add scaffolding hints based on uncertainties
+
+---
+
+## Student Notebooks
+
+Students have **working notebooks** - temporary scaffolding for learning.
+
+### Purpose
+
+- Scratch space for working things out
+- Notes on tricky patterns
+- Self-tracking of uncertainties
+- "Cramming" before mastery exams
+
+### Lifecycle
+
+1. **Create** when entering a phase
+2. **Use** during learning epochs
+3. **Cram** before mastery exam - review notes
+4. **Graduate**: Clear most, keep flagged "still need reminder" items
+5. Flagged items carry forward as slim reference
+
+### Design Principles
+
+- Notebooks are *ephemeral* - the process matters, not the artifact
+- Knowledge gets internalized; notebooks eventually abandoned
+- Heavy use early (1A/1B), lighter as mastery deepens
+- Individual to each student - their evidence of learning, not teacher's assessment
+
+### Analogy
+
+Like school notebooks - keep them for the unit, study for the test, then new semester, new notebook. Nobody keeps their 3rd grade math notebook forever.
+
+---
+
 ## Research References
 
 - Piaget: Cognitive development stages
@@ -216,6 +295,7 @@ PHASE_CONFIG = {
 - bAbI Tasks: Multi-step reasoning prerequisites
 - Curriculum Learning: Easy-to-hard progression benefits
 - Pattern Learning in Children: Repeating before growing patterns
+- Interactive Notebooks: Multi-sensory learning, student-owned evidence
 
 ---
 
