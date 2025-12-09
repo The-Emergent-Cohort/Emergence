@@ -494,7 +494,7 @@ def generate_creative_challenge(mastered_patterns, vocab_size=26):
     return challenge, f"Creative {challenge_type} challenge using {pattern.name}"
 
 
-def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_size=26, year=0):
+def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_size=26, year=0, section_playdays=1):
     """
     Run a playday session - exploration without grades.
 
@@ -503,9 +503,30 @@ def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_
     - Creative challenges: teacher suggests harder variants
     - Peer challenges: students solve patterns from each other
     - No penalties: wrong answers don't hurt XP (exploration mode)
+
+    Teacher involvement scales with section_playdays:
+    - 1-2: Light touch, free exploration
+    - 3-4: Teacher suggests patterns to focus on
+    - 5+: Teacher actively guides, more structured challenges
     """
+    # Determine teacher involvement level
+    # Scales with how many playdays on this section (more = needs more support)
+    if section_playdays == 1:
+        teacher_mode = "free"
+        teacher_label = "Free Exploration"
+    elif section_playdays == 2:
+        teacher_mode = "examples"
+        teacher_label = "Teacher Shows Examples"
+    elif section_playdays <= 4:
+        teacher_mode = "guided"
+        teacher_label = "Teacher Guided"
+    else:
+        teacher_mode = "structured"
+        teacher_label = "Teacher Structured (focus session)"
+
     print(f"\n  {'🎮'*20}")
-    print(f"  *** PLAYDAY! (Epoch {epoch}) ***")
+    print(f"  *** PLAYDAY! (Epoch {epoch}) - {teacher_label} ***")
+    print(f"  Section playday #{section_playdays}")
     print(f"  Unlocked priors: {mastered_patterns}")
     print(f"  {'🎮'*20}")
 
@@ -522,10 +543,74 @@ def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_
 
     # === PHASE 1: CREATIVE CHALLENGES FROM TEACHER ===
     print("\n  --- Teacher's Creative Challenges ---")
-    n_challenges = min(10, len(mastered_patterns) * 3)
+
+    # Teacher involvement affects challenge selection
+    if teacher_mode == "free":
+        # Random exploration
+        n_challenges = min(10, len(mastered_patterns) * 3)
+        focus_patterns = mastered_patterns
+    elif teacher_mode == "examples":
+        # Teacher shows worked examples (primaries) for struggling patterns
+        n_challenges = min(12, len(mastered_patterns) * 3)
+        # Find patterns where students need help
+        weak_patterns = []
+        for pt in mastered_patterns:
+            if pt in pattern_to_idx:
+                pt_idx = pattern_to_idx[pt]
+                avg_level = sum(
+                    s.exam_system.confirmed_level[pt_idx].item()
+                    for s in broker.students.values()
+                ) / len(broker.students)
+                if avg_level < 10:
+                    weak_patterns.append((pt, avg_level))
+        weak_patterns.sort(key=lambda x: x[1])  # Weakest first
+        focus_patterns = [p[0] for p in weak_patterns[:4]] if weak_patterns else mastered_patterns
+
+        # Show worked examples FIRST (teacher demonstrates)
+        print(f"\n  Teacher demonstrates with worked examples:")
+        for pt_name in focus_patterns[:3]:
+            pattern_obj = next((p for p in ALL_PATTERNS if p.name == pt_name), None)
+            if pattern_obj:
+                example = pattern_obj.generator(vocab_size)
+                seq_str = ' '.join(map(str, example['sequence']))
+                print(f"    {pt_name}: [{seq_str}] → {example['target']}")
+        print()
+    elif teacher_mode == "guided":
+        # Teacher suggests focusing on weaker areas
+        n_challenges = min(15, len(mastered_patterns) * 4)
+        # Find patterns where students are struggling (not yet L10)
+        weak_patterns = []
+        for pt in mastered_patterns:
+            if pt in pattern_to_idx:
+                pt_idx = pattern_to_idx[pt]
+                avg_level = sum(
+                    s.exam_system.confirmed_level[pt_idx].item()
+                    for s in broker.students.values()
+                ) / len(broker.students)
+                if avg_level < 10:
+                    weak_patterns.append(pt)
+        focus_patterns = weak_patterns if weak_patterns else mastered_patterns
+        print(f"  Teacher suggests focusing on: {focus_patterns[:3]}")
+    else:  # structured
+        # Teacher actively guides, more challenges, focus on weakest
+        n_challenges = min(20, len(mastered_patterns) * 5)
+        # Find the weakest pattern across all students
+        pattern_scores = []
+        for pt in mastered_patterns:
+            if pt in pattern_to_idx:
+                pt_idx = pattern_to_idx[pt]
+                avg_level = sum(
+                    s.exam_system.confirmed_level[pt_idx].item()
+                    for s in broker.students.values()
+                ) / len(broker.students)
+                pattern_scores.append((pt, avg_level))
+        pattern_scores.sort(key=lambda x: x[1])  # Weakest first
+        focus_patterns = [p[0] for p in pattern_scores[:3]] if pattern_scores else mastered_patterns
+        print(f"  Teacher focusing session on: {focus_patterns}")
+        print(f"  (These need the most work)")
 
     for _ in range(n_challenges):
-        challenge, description = generate_creative_challenge(mastered_patterns, vocab_size)
+        challenge, description = generate_creative_challenge(focus_patterns, vocab_size)
         if challenge is None:
             continue
 
@@ -827,6 +912,7 @@ def main(args):
     best_acc = 0
     mastery_level = args.mastery_level  # Level required to advance phase
     section_epochs = 0  # Epochs in current section (resets on section change)
+    section_playdays = 0  # Playdays in current section (teacher involvement scales with this)
 
     for epoch in range(1, max_epochs + 1):
         section_epochs += 1  # Count epochs in this section
@@ -838,9 +924,10 @@ def main(args):
 
         # PLAYDAY every 5th epoch IN SECTION (4 work, 1 play) - replaces training
         if section_epochs % 5 == 0:
+            section_playdays += 1  # Track playdays in this section
             mastered_patterns = get_mastered_patterns(broker, pattern_to_idx, mastery_level=mastery_level)
             playday_patterns = list(set(mastered_patterns + active_pattern_names))
-            run_playday(broker, playday_patterns, pattern_to_idx, device, epoch, year=args.year)
+            run_playday(broker, playday_patterns, pattern_to_idx, device, epoch, year=args.year, section_playdays=section_playdays)
 
             # No exams on playday - it's a real break!
             # Check section mastery though (in case they crossed threshold during play)
@@ -855,7 +942,8 @@ def main(args):
                     print(f"  *** SECTION {current_section} MASTERED! ***")
                     print(f"  *** All students at L{mastery_level}+ on: {section_pattern_names} ***")
                     current_phase += 1
-                    section_epochs = 0  # Reset playday counter for new section
+                    section_epochs = 0  # Reset epoch counter for new section
+                    section_playdays = 0  # Reset playday counter for new section
                     active_sections = available_sections[:current_phase + 1]
                     active_patterns = get_patterns_for_sections(active_sections)
                     active_pattern_names = [p.name for p in active_patterns]
@@ -971,7 +1059,8 @@ def main(args):
 
                 # Advance to next phase
                 current_phase += 1
-                section_epochs = 0  # Reset playday counter for new section
+                section_epochs = 0  # Reset epoch counter for new section
+                section_playdays = 0  # Reset playday counter for new section
                 active_sections = available_sections[:current_phase + 1]
                 active_patterns = get_patterns_for_sections(active_sections)
                 active_pattern_names = [p.name for p in active_patterns]
@@ -982,10 +1071,12 @@ def main(args):
 
                 # CELEBRATION PLAYDAY - they earned it!
                 # Play with all mastered patterns before tackling new section
+                # This is "playday 1" of the new section - fresh start, free exploration
+                section_playdays = 1
                 mastered_for_play = get_mastered_patterns(broker, pattern_to_idx, mastery_level=mastery_level)
                 playday_patterns = list(set(mastered_for_play + active_pattern_names))
                 print(f"\n  *** CELEBRATION PLAYDAY for mastering {current_section}! ***")
-                run_playday(broker, playday_patterns, pattern_to_idx, device, epoch, year=args.year)
+                run_playday(broker, playday_patterns, pattern_to_idx, device, epoch, year=args.year, section_playdays=section_playdays)
 
                 # Regenerate datasets with new patterns
                 train_data, val_data = create_datasets(active_sections, args, seed_offset=epoch)
