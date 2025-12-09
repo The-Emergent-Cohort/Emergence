@@ -656,7 +656,7 @@ def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_
         n_challenges = min(10, len(mastered_patterns) * 3)
         focus_patterns = mastered_patterns
     elif teacher_mode == "examples":
-        # Teacher shows worked examples (primaries) for struggling patterns
+        # Teacher shows worked examples (primaries) then students predict-then-confirm
         n_challenges = min(12, len(mastered_patterns) * 3)
         # Find patterns where students need help
         weak_patterns = []
@@ -672,14 +672,59 @@ def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_
         weak_patterns.sort(key=lambda x: x[1])  # Weakest first
         focus_patterns = [p[0] for p in weak_patterns[:4]] if weak_patterns else mastered_patterns
 
-        # Show worked examples FIRST (teacher demonstrates)
-        print(f"\n  Teacher demonstrates with worked examples:")
+        # PREDICT-THEN-CONFIRM cycle for each focus pattern
+        print(f"\n  --- Predict-Then-Confirm (Example-Problem Pairs) ---")
         for pt_name in focus_patterns[:3]:
             pattern_obj = next((p for p in ALL_PATTERNS if p.name == pt_name), None)
-            if pattern_obj:
-                example = pattern_obj.generator(vocab_size)
-                seq_str = ' '.join(map(str, example['sequence']))
-                print(f"    {pt_name}: [{seq_str}] → {example['target']}")
+            if pattern_obj is None:
+                continue
+
+            # 1. WORKED EXAMPLE - Teacher demonstrates (I Do)
+            worked_example = pattern_obj.generator(vocab_size)
+            seq_str = ' '.join(map(str, worked_example['sequence']))
+            print(f"\n    [{pt_name}] Teacher: 'Watch this pattern...'")
+            print(f"      Worked example: [{seq_str}] → {worked_example['target']}")
+
+            # 2. SIMILAR PROBLEM - Student predicts (We Do)
+            similar_problem = pattern_obj.generator(vocab_size)
+            max_len = 12
+            seq = similar_problem['sequence']
+            padded = seq + [0] * (max_len - len(seq))
+            tokens = torch.tensor(padded[:max_len], dtype=torch.long).unsqueeze(0).to(device)
+            target = similar_problem['target']
+            seq_len_val = [len(seq)]
+            sim_seq_str = ' '.join(map(str, seq))
+
+            print(f"      Now you try: [{sim_seq_str}] → ?")
+
+            # 3. Each student predicts
+            predictions = {}
+            for name, student in broker.students.items():
+                student.eval()
+                with torch.no_grad():
+                    logits, conf, _ = student(tokens, seq_len_val)
+                    pred = logits.argmax(dim=-1).item()
+                    predictions[name] = pred
+
+            # 4. CONFIRM - Reveal answer with feedback
+            print(f"      Answer: {target}")
+            for name, pred in predictions.items():
+                correct = (pred == target)
+                if correct:
+                    print(f"        {name}: ✓ (predicted {pred})")
+                    # Prediction success XP (stronger encoding from correct prediction)
+                    if pt_name in pattern_to_idx:
+                        pt_idx = pattern_to_idx[pt_name]
+                        broker.students[name].topic_tracker.award_xp(pt_idx, 0.5)
+                    results[name]['creative_correct'] += 1
+                else:
+                    print(f"        {name}: ✗ (predicted {pred}, was {target})")
+                    # Even incorrect predictions help - prediction error drives learning
+                    if pt_name in pattern_to_idx:
+                        pt_idx = pattern_to_idx[pt_name]
+                        broker.students[name].topic_tracker.award_xp(pt_idx, 0.2)
+                results[name]['creative_total'] += 1
+                results[name]['patterns_explored'].add(pt_name)
         print()
     elif teacher_mode == "guided":
         # Teacher suggests focusing on weaker areas
