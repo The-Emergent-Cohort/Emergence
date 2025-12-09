@@ -58,6 +58,18 @@ def gen_predecessor_chain(vocab_size: int) -> Dict:
     return {'sequence': seq, 'target': target}
 
 
+def gen_add_one(vocab_size: int) -> Dict:
+    """[n, 1] → n+1 - Explicit addition of one (bridges chains to arithmetic)."""
+    n = random.randint(0, min(10, vocab_size - 2))
+    return {'sequence': [n, 1], 'target': n + 1}
+
+
+def gen_subtract_one(vocab_size: int) -> Dict:
+    """[n, 1] → n-1 - Explicit subtraction of one (bridges chains to arithmetic)."""
+    n = random.randint(1, min(10, vocab_size - 1))
+    return {'sequence': [n, 1], 'target': n - 1}
+
+
 # Classroom-grounded patterns (self-referential math)
 # 3 students, 4 entities total, when 1 leads → 2 participate
 
@@ -528,12 +540,14 @@ class PatternType:
 # Single-number +1/-1 is ambiguous: [3]→? could be 2 or 4
 # They'll learn +1/-1 from chains and two-input addition first
 YEAR_0_PATTERNS = [
-    # 0A: Chains (context-rich) - easy wins, they master these fast
+    # 0A: Fundamentals - chains + explicit +1/-1 (the building blocks)
     PatternType('successor_chain', gen_successor_chain, 1, 0, '0A', 'Counting up [1,2,3]→4'),
     PatternType('predecessor_chain', gen_predecessor_chain, 1, 0, '0A', 'Counting down [5,4,3]→2'),
+    PatternType('add_one', gen_add_one, 1, 0, '0A', 'Plus one [n,1]→n+1'),
+    PatternType('subtract_one', gen_subtract_one, 1, 0, '0A', 'Minus one [n,1]→n-1'),
     PatternType('count_sequence', gen_count_sequence, 2, 0, '0A', 'How many? [a,b,c]→3'),
 
-    # 0B: Two-input arithmetic (unambiguous - operation clear from structure)
+    # 0B: Two-input arithmetic (generalizes from +1/-1 to any numbers)
     PatternType('add_two', gen_add_two, 1, 0, '0B', 'Add [a,b]→a+b'),
     PatternType('subtract_two', gen_subtract_two, 2, 0, '0B', 'Subtract [a,b]→a-b'),
     PatternType('remainder_from_group', gen_remainder_from_group, 2, 0, '0B', 'Remaining [5,2]→3'),
