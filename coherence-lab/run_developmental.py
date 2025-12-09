@@ -678,6 +678,42 @@ def main(args):
             print(f"Phase {current_phase + 1}/{len(available_sections)}: {active_sections}")
         print("=" * 70)
 
+        # PLAYDAY every 5th epoch (4 work, 1 play) - replaces training
+        if epoch % 5 == 0:
+            mastered_patterns = get_mastered_patterns(broker, pattern_to_idx, mastery_level=mastery_level)
+            playday_patterns = list(set(mastered_patterns + active_pattern_names))
+            run_playday(broker, playday_patterns, pattern_to_idx, device, epoch)
+
+            # Still run exams on playday (they earned it!)
+            exam_results = run_exams(broker, active_pattern_names, pattern_to_idx, device, epoch)
+            total_exams = sum(len(r) for r in exam_results.values())
+            if total_exams > 0:
+                print(f"\n  Exams this epoch: {total_exams}")
+
+            # Check section mastery and graduation (same as regular epoch)
+            # Skip to end of loop - no training on playday
+            if phased and current_phase < len(available_sections) - 1:
+                current_section = active_sections[-1]
+                section_pattern_names = [p.name for p in get_patterns_by_section(current_section)]
+                mastered, details = check_section_mastery(
+                    broker, section_pattern_names, pattern_to_idx, mastery_level
+                )
+                if mastered:
+                    print(f"\n  {'*'*50}")
+                    print(f"  *** SECTION {current_section} MASTERED! ***")
+                    print(f"  *** All students at L{mastery_level}+ on: {section_pattern_names} ***")
+                    current_phase += 1
+                    active_sections = available_sections[:current_phase + 1]
+                    active_patterns = get_patterns_for_sections(active_sections)
+                    active_pattern_names = [p.name for p in active_patterns]
+                    print(f"  *** Unlocking section {available_sections[current_phase]}! ***")
+                    print(f"  *** Active patterns now: {active_pattern_names} ***")
+                    print(f"  {'*'*50}")
+                    train_data, val_data = create_datasets(active_sections, args, seed_offset=epoch)
+                    train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
+                    val_loader = DataLoader(val_data, batch_size=args.batch_size, collate_fn=collate_fn)
+            continue  # Skip training on playday
+
         # Tutoring pairs (only for active patterns)
         tutoring_pairs = identify_tutoring_pairs(broker, active_pattern_names, pattern_to_idx)
         active_tutoring = sum(len(p) for p in tutoring_pairs.values())
@@ -732,14 +768,6 @@ def main(args):
         total_exams = sum(len(r) for r in exam_results.values())
         if total_exams > 0:
             print(f"\n  Exams this epoch: {total_exams}")
-
-        # PLAYDAY every 6 epochs - exploration time!
-        if epoch % 6 == 0:
-            mastered_patterns = get_mastered_patterns(broker, pattern_to_idx, mastery_level=mastery_level)
-            # Include BOTH mastered priors AND current active patterns
-            # Seeing how they relate is part of the learning!
-            playday_patterns = list(set(mastered_patterns + active_pattern_names))
-            run_playday(broker, playday_patterns, pattern_to_idx, device, epoch)
 
         # Class average
         class_acc = sum(v['accuracy'] for v in val_results.values()) / len(val_results)
