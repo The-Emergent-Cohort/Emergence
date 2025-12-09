@@ -26,9 +26,14 @@ from systems import ExaminationSystem
 from systems.progression import TopicTracker
 
 # Section order for phased training
-# Note: 1F (Trap Patterns) tests overconfidence - add after students master 1A-1E
-# Note: 1G (Basic Arithmetic) - fundamental math operations (add, subtract, compare, multiply)
-YEAR_1_SECTIONS = ['1A', '1B', '1C', '1D', '1E', '1F', '1G']
+# REORDERED: Arithmetic (1G) comes BEFORE patterns that depend on it!
+# - 1A, 1B: Pure memory (no arithmetic needed)
+# - 1G: Basic arithmetic (+, -, compare) - THE FOUNDATION
+# - 1D: Direction (incrementing = +1 chain, decrementing = -1 chain)
+# - 1E: Rate (fixed_offset = +N chain)
+# - 1C: Position (alternating = mod 2, ternary = mod 3) - needs cycle understanding
+# - 1F: Traps (test overconfidence)
+YEAR_1_SECTIONS = ['1A', '1B', '1G', '1D', '1E', '1C', '1F']
 YEAR_2_SECTIONS = ['2A', '2B', '2C', '2D', '2E']
 ALL_SECTIONS = YEAR_1_SECTIONS + YEAR_2_SECTIONS
 
