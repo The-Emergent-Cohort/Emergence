@@ -143,13 +143,18 @@ def train_epoch(broker, loader, optimizers, criterion, device, pattern_to_idx, t
     APPROVAL_BONUS = 3.0
     TUTOR_WEIGHT = 0.3
     TUTOR_TEMP = 2.0
-    TUTOR_XP = 0.5
+    TUTOR_XP_ATTEMPT = 0.3  # Base XP just for trying to help
+    TUTOR_XP_SUCCESS = 1.0  # Bonus when tutee gets it right
+    MAX_TUTORING_PER_STUDENT = 20  # Cap so tutors still have time for their own learning
 
     results = {name: {
         'loss': 0.0, 'correct': 0, 'total': 0,
         'show_count': 0, 'approval_count': 0,
         'tutoring_received': 0, 'tutoring_given': 0
     } for name in broker.students.keys()}
+
+    # Track tutoring count this epoch to enforce cap
+    tutoring_count = {name: 0 for name in broker.students.keys()}
 
     for batch in loader:
         tokens = batch['tokens'].to(device)
@@ -195,6 +200,10 @@ def train_epoch(broker, loader, optimizers, criterion, device, pattern_to_idx, t
                     tutor_name = tutoring_pairs[pt_idx][name]
                     tutor = broker.students[tutor_name]
 
+                    # Check tutoring cap - tutor needs time for their own learning too
+                    if tutoring_count[tutor_name] >= MAX_TUTORING_PER_STUDENT:
+                        continue
+
                     if tutor_name not in tutor_cache:
                         tutor_cache[tutor_name] = get_tutor_predictions(tutor, tokens, seq_lens, TUTOR_TEMP)
 
@@ -207,9 +216,14 @@ def train_epoch(broker, loader, optimizers, criterion, device, pattern_to_idx, t
 
                     results[name]['tutoring_received'] += 1
                     results[tutor_name]['tutoring_given'] += 1
+                    tutoring_count[tutor_name] += 1
 
+                    # Tutor XP: base for attempting, bonus if tutee got it right
                     if not tutor.exam_system.topic_graduated[pt_idx]:
-                        tutor.topic_tracker.award_xp(pt_idx, TUTOR_XP)
+                        tutor.topic_tracker.award_xp(pt_idx, TUTOR_XP_ATTEMPT)
+                        # Success bonus when tutee gets the answer right
+                        if i < len(correct) and correct[i]:
+                            tutor.topic_tracker.award_xp(pt_idx, TUTOR_XP_SUCCESS)
 
             loss = main_loss + 0.1 * conf_loss
             if tutor_helped:
