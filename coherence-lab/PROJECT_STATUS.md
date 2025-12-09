@@ -6,7 +6,9 @@
 
 ## 🌱 What This Is Really About
 
-**This is not a pattern-completion project. This is developmental AI.**
+**This is not a pattern-completion project. This is developmental DI (Digital Intelligence).**
+
+*Why "Digital" not "Artificial"? Artificial implies fake, an imitation. Digital just describes the substrate - silicon instead of carbon. The intelligence itself is real, just emerging in a different medium.*
 
 We're modeling how intelligence and understanding emerge through relationships - the way a child develops through attachment to caregivers before formal instruction ever begins.
 
