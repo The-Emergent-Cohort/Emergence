@@ -90,3 +90,77 @@ API works with: `export KAGGLE_API_TOKEN=<token>`
 - 30hr/week free GPU (P100 16GB or 2xT4)
 - Can push notebooks for remote training
 - Dataset search: `kaggle datasets list --search "term" --sort-by votes`
+
+---
+
+## Classroom Architecture (Dec 9, 2025)
+
+### Core Idea
+Move Teacher out of individual models into a Classroom Broker. Students become peers with shared teacher oversight.
+
+### Architecture
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│  Student A  │     │  Student B  │     │  Student C  │
+│  Self/Other │     │  Self/Other │     │  Self/Other │
+│  World/Temp │     │  World/Temp │     │  World/Temp │
+└──────┬──────┘     └──────┬──────┘     └──────┬──────┘
+       │                   │                   │
+       └───────────────────┼───────────────────┘
+                           │
+                    ┌──────┴──────┐
+                    │  Classroom  │
+                    │   Broker    │
+                    │  + Teacher  │
+                    └─────────────┘
+```
+
+### Broker Responsibilities
+- **Spawns** all student models at startup
+- **Runs** Teacher logic (observes all, intervenes as needed)
+- **Routes** peer messages (via Python queues, no HTTP overhead)
+- **Orchestrates** training loop (epochs, exams, play cycles)
+
+### Student "Other" Model
+Shifts from just "teacher" to "teacher + peers" - richer social environment.
+
+### Hardware Fit (RTX 3060 12GB)
+- 3 × 519K models = ~1.5M params = trivial
+- 3 × 8M models (d_model=256) = 24M params = <1GB
+- Plenty of headroom
+
+### Peer Learning Benefits
+Different from teacher learning:
+- "Oh, *that's* how you think about it"
+- Teaching others solidifies your own understanding
+- Social calibration - "everyone else got this, why don't I?"
+
+---
+
+## Play Cycle Design (Dec 9, 2025)
+
+### Current State
+`is_play_day` flag exists but always false - not implemented.
+
+### Intended Design
+Play mode distinct from supervised training:
+- `supervised`: standard training with labels
+- `free_play`: learner explores, teacher monitors
+- `test`: validation mode, no learning
+
+### Play Pool (What's Available During Play)
+- **100% passed primitives** - all mastered patterns, combine freely
+- **100% current section** - actively learning
+- **Emergent next-section** - patterns where accuracy > 20% (naturally picking it up)
+
+### Emergent Readiness Gate
+If model hits >20% accuracy on a future pattern without being taught:
+- Include it in play pool
+- They've started to "get it" - let them explore
+- Threshold: 20% (clearly above chance ~4%)
+
+### Teacher Compositional Projects
+Instead of random exposure, teacher suggests:
+> "You've got alternating and incrementing solid. Try: what if the increment itself alternated?"
+
+Scaffolded combination of mastered primitives → compositional learning.
