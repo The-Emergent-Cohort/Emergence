@@ -65,9 +65,9 @@ def gen_add_one(vocab_size: int) -> Dict:
 
 
 def gen_subtract_one(vocab_size: int) -> Dict:
-    """[n, 1] → n-1 - Explicit subtraction of one (bridges chains to arithmetic)."""
-    n = random.randint(1, min(10, vocab_size - 1))
-    return {'sequence': [n, 1], 'target': n - 1}
+    """[1, n] → n-1 - Explicit subtraction of one (1 first = subtract)."""
+    n = random.randint(2, min(10, vocab_size - 1))  # n >= 2 so result >= 1
+    return {'sequence': [1, n], 'target': n - 1}
 
 
 # Classroom-grounded patterns (self-referential math)
@@ -544,7 +544,7 @@ YEAR_0_PATTERNS = [
     PatternType('successor_chain', gen_successor_chain, 1, 0, '0A', 'Counting up [1,2,3]→4'),
     PatternType('predecessor_chain', gen_predecessor_chain, 1, 0, '0A', 'Counting down [5,4,3]→2'),
     PatternType('add_one', gen_add_one, 1, 0, '0A', 'Plus one [n,1]→n+1'),
-    PatternType('subtract_one', gen_subtract_one, 1, 0, '0A', 'Minus one [n,1]→n-1'),
+    PatternType('subtract_one', gen_subtract_one, 1, 0, '0A', 'Minus one [1,n]→n-1'),
     PatternType('count_sequence', gen_count_sequence, 2, 0, '0A', 'How many? [a,b,c]→3'),
 
     # 0B: Two-input arithmetic (b >= 2, generalizes from +1/-1)
