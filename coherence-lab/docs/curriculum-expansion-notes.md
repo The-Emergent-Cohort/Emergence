@@ -164,3 +164,62 @@ Instead of random exposure, teacher suggests:
 > "You've got alternating and incrementing solid. Try: what if the increment itself alternated?"
 
 Scaffolded combination of mastered primitives → compositional learning.
+
+---
+
+## Distributed Architecture (Dec 9, 2025)
+
+### Vision
+Teacher/Broker runs on Haven (NAS), orchestrates students anywhere - local GPU, Kaggle, or other remotes.
+
+### Architecture
+```
+┌─────────────────────────────────────────────────────┐
+│  Haven (NAS/Docker)                                 │
+│  ┌─────────────────────────────────────────────┐   │
+│  │  Teacher/Broker                              │   │
+│  │  - Curriculum logic (CPU only)               │   │
+│  │  - Message routing                           │   │
+│  │  - Intervention decisions                    │   │
+│  │  - Always-on, low power                      │   │
+│  └──────────────────┬──────────────────────────┘   │
+│                     │ API Bridge                    │
+└─────────────────────┼───────────────────────────────┘
+                      │
+        ┌─────────────┼─────────────┐
+        │             │             │
+        ▼             ▼             ▼
+   ┌─────────┐   ┌─────────┐   ┌─────────┐
+   │Local GPU│   │Local GPU│   │ Kaggle  │
+   │Student A│   │Student B│   │Student C│
+   │(RTX3060)│   │(RTX3060)│   │ (P100)  │
+   └─────────┘   └─────────┘   └─────────┘
+```
+
+### Key Design Principle
+**Teacher doesn't need GPU** - pure orchestration logic. Can run on NAS indefinitely.
+
+### API Bridge Abstraction
+The bridge abstracts student location:
+- **Local student**: Python queue (microseconds)
+- **Remote student**: HTTP/REST (slower, but epochs are seconds anyway)
+
+Teacher sends same messages regardless of where student lives:
+- Problems to solve
+- Receive answers/confidence/state
+- Peer message routing
+
+### Benefits
+- **Haven runs 24/7** - always-on orchestration
+- **Local GPU** - fast iterations when at workstation
+- **Kaggle** - parallel/overnight training (30hr/week free)
+- **Future scaling** - add more remotes without changing Teacher logic
+
+### Implementation Notes
+Even if not using Haven/Kaggle immediately, design the API bridge interface now:
+- `StudentInterface` base class
+- `LocalStudent(StudentInterface)` - Python queues
+- `RemoteStudent(StudentInterface)` - HTTP/REST
+- Teacher only talks to `StudentInterface`
+
+This way local-only works today, distributed works tomorrow.
