@@ -3,6 +3,7 @@
 Run Developmental Curriculum Training
 
 Trains students through Years 1-2 of the developmental curriculum.
+Supports phased training: master each section before adding the next.
 """
 
 import argparse
@@ -18,10 +19,15 @@ from classroom import ClassroomBroker, Student
 from developmental_curriculum import (
     DevelopmentalDataset, collate_fn,
     YEAR_1_PATTERNS, YEAR_2_PATTERNS, ALL_PATTERNS,
-    get_pattern_names, print_curriculum
+    get_pattern_names, get_patterns_by_section, print_curriculum
 )
 from systems import ExaminationSystem
 from systems.progression import TopicTracker
+
+# Section order for phased training
+YEAR_1_SECTIONS = ['1A', '1B', '1C', '1D', '1E']
+YEAR_2_SECTIONS = ['2A', '2B', '2C', '2D', '2E']
+ALL_SECTIONS = YEAR_1_SECTIONS + YEAR_2_SECTIONS
 
 
 def identify_tutoring_pairs(broker, pattern_names, pattern_to_idx, level_gap=3):
@@ -76,6 +82,54 @@ def get_tutor_predictions(tutor, tokens, seq_lens, temperature=2.0):
         soft_targets = F.softmax(logits / temperature, dim=-1)
     tutor.train()
     return soft_targets
+
+
+def check_section_mastery(broker, section_patterns, pattern_to_idx, mastery_level=3):
+    """
+    Check if all students have mastered all patterns in a section.
+
+    Mastery = confirmed level >= mastery_level for all patterns in section.
+    Returns: (is_mastered, details_dict)
+    """
+    details = {}
+    all_mastered = True
+
+    for name, student in broker.students.items():
+        details[name] = {}
+        for pt in section_patterns:
+            if pt not in pattern_to_idx:
+                continue
+            pt_idx = pattern_to_idx[pt]
+            if pt_idx >= student.exam_system.n_topics:
+                continue
+
+            confirmed = student.exam_system.confirmed_level[pt_idx].item()
+            details[name][pt] = confirmed
+
+            if confirmed < mastery_level:
+                all_mastered = False
+
+    return all_mastered, details
+
+
+def get_active_sections(year, current_phase):
+    """Get list of active sections based on year and phase."""
+    if year == 1:
+        sections = YEAR_1_SECTIONS
+    elif year == 2:
+        sections = YEAR_2_SECTIONS
+    else:  # year 0 = both
+        sections = ALL_SECTIONS
+
+    return sections[:current_phase + 1]
+
+
+def get_patterns_for_sections(sections):
+    """Get all patterns for a list of sections."""
+    patterns = []
+    for section in sections:
+        patterns.extend(get_patterns_by_section(section))
+    return patterns
 
 
 def train_epoch(broker, loader, optimizers, criterion, device, pattern_to_idx, tutoring_pairs=None):
@@ -303,6 +357,21 @@ def run_exams(broker, pattern_names, pattern_to_idx, device, epoch):
     return results
 
 
+def create_datasets(sections, args, seed_offset=0):
+    """Create train/val datasets for given sections."""
+    train_data = DevelopmentalDataset(
+        n_examples=args.train_size,
+        seed=42 + seed_offset,
+        sections=sections
+    )
+    val_data = DevelopmentalDataset(
+        n_examples=args.val_size,
+        seed=123 + seed_offset,
+        sections=sections
+    )
+    return train_data, val_data
+
+
 def main(args):
     session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -314,41 +383,49 @@ def main(args):
     print(f"Session: {session_id}")
     print(f"Device: {device}")
     print(f"Year(s): {args.year}")
+    print(f"Phased: {args.phase}")
     print("=" * 70)
 
     # Print curriculum
     print_curriculum()
 
-    # Select patterns based on year
-    if args.year == 0:
-        patterns = ALL_PATTERNS
-        year_list = [1, 2]
+    # Determine available sections for this year
+    if args.year == 1:
+        available_sections = YEAR_1_SECTIONS
+    elif args.year == 2:
+        available_sections = YEAR_2_SECTIONS
+    else:  # year 0 = both
+        available_sections = ALL_SECTIONS
+
+    # For non-phased training, use all sections at once
+    if not args.phase:
+        active_sections = available_sections
+        current_phase = len(available_sections) - 1
     else:
-        year_list = [args.year]
-        patterns = [p for p in ALL_PATTERNS if p.year == args.year]
+        # Phased training starts with first section only
+        active_sections = [available_sections[0]]
+        current_phase = 0
 
-    pattern_names = [p.name for p in patterns]
-    pattern_to_idx = {name: i for i, name in enumerate(pattern_names)}
-    n_topics = len(pattern_names)
+    # Get ALL patterns for topic tracking (need full size for exam system)
+    all_year_patterns = get_patterns_for_sections(available_sections)
+    all_pattern_names = [p.name for p in all_year_patterns]
+    pattern_to_idx = {name: i for i, name in enumerate(all_pattern_names)}
+    n_topics = len(all_pattern_names)
 
-    print(f"\nTraining on {n_topics} patterns: {pattern_names}")
+    # Get current active patterns
+    active_patterns = get_patterns_for_sections(active_sections)
+    active_pattern_names = [p.name for p in active_patterns]
 
-    # Create datasets
-    train_data = DevelopmentalDataset(
-        n_examples=args.train_size,
-        seed=42,
-        year=year_list if args.year == 0 else args.year
-    )
-    val_data = DevelopmentalDataset(
-        n_examples=args.val_size,
-        seed=123,
-        year=year_list if args.year == 0 else args.year
-    )
+    print(f"\nTotal topics: {n_topics} patterns")
+    print(f"Active sections: {active_sections}")
+    print(f"Active patterns: {active_pattern_names}")
 
+    # Create initial datasets (only active sections)
+    train_data, val_data = create_datasets(active_sections, args)
     train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
     val_loader = DataLoader(val_data, batch_size=args.batch_size, collate_fn=collate_fn)
 
-    # Create classroom
+    # Create classroom (sized for ALL patterns, not just active)
     broker = ClassroomBroker(
         student_names=['nova', 'rêve', 'alex'],
         d_model=args.d_model,
@@ -377,17 +454,20 @@ def main(args):
     # Training loop
     history = []
     best_acc = 0
+    mastery_level = args.mastery_level  # Level required to advance phase
 
     for epoch in range(1, args.epochs + 1):
         print(f"\n{'='*70}")
         print(f"Epoch {epoch}/{args.epochs}")
+        if args.phase:
+            print(f"Phase {current_phase + 1}/{len(available_sections)}: {active_sections}")
         print("=" * 70)
 
-        # Tutoring pairs
-        tutoring_pairs = identify_tutoring_pairs(broker, pattern_names, pattern_to_idx)
-        active = sum(len(p) for p in tutoring_pairs.values())
-        if active > 0:
-            print(f"\n  Peer tutoring: {active} pairs")
+        # Tutoring pairs (only for active patterns)
+        tutoring_pairs = identify_tutoring_pairs(broker, active_pattern_names, pattern_to_idx)
+        active_tutoring = sum(len(p) for p in tutoring_pairs.values())
+        if active_tutoring > 0:
+            print(f"\n  Peer tutoring: {active_tutoring} pairs")
 
         # Train
         train_results = train_epoch(
@@ -421,7 +501,7 @@ def main(args):
         if epoch <= 3 or epoch % 5 == 0:
             nova = broker.students['nova']
             print(f"\n  Per-pattern (Nova):")
-            for pt in pattern_names[:8]:  # First 8 patterns
+            for pt in active_pattern_names[:8]:  # First 8 active patterns
                 if pt in val_results['nova']['per_pattern']:
                     acc = val_results['nova']['per_pattern'][pt]
                     pt_idx = pattern_to_idx[pt]
@@ -432,8 +512,8 @@ def main(args):
                         bar = '█' * int(acc * 10) + '·' * (10 - int(acc * 10))
                         print(f"    {pt:20s}: {acc:3.0%} {bar} L{confirmed}(+{xp_level-confirmed}) ({xp:.0f}xp)")
 
-        # Exams
-        exam_results = run_exams(broker, pattern_names, pattern_to_idx, device, epoch)
+        # Exams (only for active patterns)
+        exam_results = run_exams(broker, active_pattern_names, pattern_to_idx, device, epoch)
         total_exams = sum(len(r) for r in exam_results.values())
         if total_exams > 0:
             print(f"\n  Exams this epoch: {total_exams}")
@@ -448,13 +528,53 @@ def main(args):
             torch.save({
                 'epoch': epoch,
                 'broker_state': broker.state_dict(),
-                'class_accuracy': class_acc
+                'class_accuracy': class_acc,
+                'active_sections': active_sections
             }, data_dir / f'developmental_{session_id}_best.pt')
 
-        # Graduation check
+        # PHASED TRAINING: Check if ready to advance
+        if args.phase and current_phase < len(available_sections) - 1:
+            # Check mastery on current section (the latest added one)
+            current_section = active_sections[-1]
+            section_pattern_names = [p.name for p in get_patterns_by_section(current_section)]
+
+            mastered, details = check_section_mastery(
+                broker, section_pattern_names, pattern_to_idx, mastery_level
+            )
+
+            if mastered:
+                print(f"\n  {'*'*50}")
+                print(f"  *** SECTION {current_section} MASTERED! ***")
+                print(f"  *** All students at L{mastery_level}+ on: {section_pattern_names} ***")
+
+                # Advance to next phase
+                current_phase += 1
+                active_sections = available_sections[:current_phase + 1]
+                active_patterns = get_patterns_for_sections(active_sections)
+                active_pattern_names = [p.name for p in active_patterns]
+
+                print(f"  *** Unlocking section {available_sections[current_phase]}! ***")
+                print(f"  *** Active patterns now: {active_pattern_names} ***")
+                print(f"  {'*'*50}")
+
+                # Regenerate datasets with new patterns
+                train_data, val_data = create_datasets(active_sections, args, seed_offset=epoch)
+                train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
+                val_loader = DataLoader(val_data, batch_size=args.batch_size, collate_fn=collate_fn)
+
+            else:
+                # Show progress toward mastery
+                print(f"\n  Section {current_section} progress (need L{mastery_level}):")
+                for name, levels in details.items():
+                    level_str = ", ".join(f"{p}:L{l}" for p, l in levels.items())
+                    print(f"    {name}: {level_str}")
+
+        # Graduation check (all patterns at L10)
         all_graduated = True
         for student in broker.students.values():
-            for pt_idx in range(min(n_topics, student.exam_system.n_topics)):
+            for pt_idx in range(n_topics):
+                if pt_idx >= student.exam_system.n_topics:
+                    continue
                 if not student.exam_system.topic_graduated[pt_idx]:
                     all_graduated = False
                     break
@@ -468,7 +588,12 @@ def main(args):
             print(f"{'*'*60}")
             break
 
-        history.append({'epoch': epoch, 'class_acc': class_acc})
+        history.append({
+            'epoch': epoch,
+            'class_acc': class_acc,
+            'phase': current_phase,
+            'active_sections': active_sections.copy()
+        })
 
     # Final summary
     print("\n" + "=" * 70)
@@ -477,6 +602,9 @@ def main(args):
     print(f"Session: {session_id}")
     print(f"Epochs: {epoch}")
     print(f"Best accuracy: {best_acc:.1%}")
+    if args.phase:
+        print(f"Final phase: {current_phase + 1}/{len(available_sections)}")
+        print(f"Active sections: {active_sections}")
 
     print("\nFinal standings:")
     for name, student in broker.students.items():
@@ -488,6 +616,8 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--year', type=int, default=1, help='Year to train (1, 2, or 0 for both)')
+    parser.add_argument('--phase', action='store_true', help='Phased training: master each section before next')
+    parser.add_argument('--mastery_level', type=int, default=3, help='Level required to advance phase (default: 3)')
     parser.add_argument('--epochs', type=int, default=900, help='Default: topics × 100 (Year 1=900, Both=2100)')
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--lr', type=float, default=1e-3)
