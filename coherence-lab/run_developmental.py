@@ -969,6 +969,13 @@ def main(args):
                 print(f"  *** Active patterns now: {active_pattern_names} ***")
                 print(f"  {'*'*50}")
 
+                # CELEBRATION PLAYDAY - they earned it!
+                # Play with all mastered patterns before tackling new section
+                mastered_for_play = get_mastered_patterns(broker, pattern_to_idx, mastery_level=mastery_level)
+                playday_patterns = list(set(mastered_for_play + active_pattern_names))
+                print(f"\n  *** CELEBRATION PLAYDAY for mastering {current_section}! ***")
+                run_playday(broker, playday_patterns, pattern_to_idx, device, epoch)
+
                 # Regenerate datasets with new patterns
                 train_data, val_data = create_datasets(active_sections, args, seed_offset=epoch)
                 train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
