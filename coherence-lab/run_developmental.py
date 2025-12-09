@@ -861,23 +861,27 @@ def main(args):
                     val_loader = DataLoader(val_data, batch_size=args.batch_size, collate_fn=collate_fn)
             continue  # Skip training on playday
 
-        # Tutoring pairs (only for active patterns)
-        tutoring_pairs = identify_tutoring_pairs(broker, active_pattern_names, pattern_to_idx)
-        active_tutoring = sum(len(p) for p in tutoring_pairs.values())
-        if active_tutoring > 0:
-            print(f"\n  Peer tutoring: {active_tutoring} pairs")
-            # Verbose: show who's tutoring whom on what
-            tutor_summary = {}  # tutor -> [(learner, pattern), ...]
-            for pt_idx, pairs in tutoring_pairs.items():
-                if pairs and pt_idx < len(active_pattern_names):
-                    pattern = active_pattern_names[pt_idx]
-                    for learner, tutor in pairs.items():
-                        if tutor not in tutor_summary:
-                            tutor_summary[tutor] = []
-                        tutor_summary[tutor].append((learner, pattern))
-            for tutor, assignments in tutor_summary.items():
-                learners = ', '.join(f"{l}({p})" for l, p in assignments)
-                print(f"    {tutor} → {learners}")
+        # Tutoring pairs (only for active patterns, Year 1+ only)
+        # Year 0 is cooperative exploration - no hierarchy yet
+        if args.year >= 1:
+            tutoring_pairs = identify_tutoring_pairs(broker, active_pattern_names, pattern_to_idx)
+            active_tutoring = sum(len(p) for p in tutoring_pairs.values())
+            if active_tutoring > 0:
+                print(f"\n  Peer tutoring: {active_tutoring} pairs")
+                # Verbose: show who's tutoring whom on what
+                tutor_summary = {}  # tutor -> [(learner, pattern), ...]
+                for pt_idx, pairs in tutoring_pairs.items():
+                    if pairs and pt_idx < len(active_pattern_names):
+                        pattern = active_pattern_names[pt_idx]
+                        for learner, tutor in pairs.items():
+                            if tutor not in tutor_summary:
+                                tutor_summary[tutor] = []
+                            tutor_summary[tutor].append((learner, pattern))
+                for tutor, assignments in tutor_summary.items():
+                    learners = ', '.join(f"{l}({p})" for l, p in assignments)
+                    print(f"    {tutor} → {learners}")
+        else:
+            tutoring_pairs = {}  # No tutoring in Year 0
 
         # Train
         train_results = train_epoch(
