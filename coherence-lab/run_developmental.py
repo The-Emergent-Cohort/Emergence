@@ -2,11 +2,7 @@
 """
 Run Developmental Curriculum Training
 
-Trains students through Years 0-2 of the developmental curriculum.
-Year 0: Quantitative Primitives (number sense - the foundation)
-Year 1: Sensorimotor Foundations (patterns)
-Year 2: Relational & Physical Understanding
-
+Trains students through Years 1-2 of the developmental curriculum.
 Supports phased training: master each section before adding the next.
 """
 
@@ -22,7 +18,7 @@ from datetime import datetime
 from classroom import ClassroomBroker, Student
 from developmental_curriculum import (
     DevelopmentalDataset, collate_fn,
-    YEAR_0_PATTERNS, YEAR_1_PATTERNS, YEAR_2_PATTERNS, ALL_PATTERNS,
+    YEAR_1_PATTERNS, YEAR_2_PATTERNS, ALL_PATTERNS,
     get_pattern_names, get_patterns_by_section, print_curriculum
 )
 import random
@@ -30,27 +26,9 @@ from systems import ExaminationSystem
 from systems.progression import TopicTracker
 
 # Section order for phased training
-# YEAR 0: Number sense FIRST - the substrate of all reasoning
-# PRINCIPLE: All patterns unambiguous (2+ inputs OR unique single-input mapping)
-# - 0A: chains (context-rich: [1,2,3]→4)
-# - 0B: two-input arithmetic (add, subtract, remainder)
-# - 0C: scaling (double, half - single input but unique mappings)
-# - 0D: comparison & algebra (greater_than, less_than, missing_addend)
-YEAR_0_SECTIONS = ['0A', '0B', '0C', '0D']
-
-# YEAR 1: Patterns build on number sense
-# - 1A, 1B: Pure memory (constancy, repetition)
-# - 1C: Position (alternating, ternary - cyclic patterns)
-# - 1D: Direction (incrementing, decrementing)
-# - 1E: Rate (fixed_offset, variable_step)
-# - 1F: Traps (test overconfidence)
-# - 1G: Abstract single-number (successor, predecessor - NOW learnable)
-# - 1H: Extended arithmetic (compare, add_three, multiply)
-YEAR_1_SECTIONS = ['1A', '1B', '1C', '1D', '1E', '1F', '1G', '1H']
-
+YEAR_1_SECTIONS = ['1A', '1B', '1C', '1D', '1E']
 YEAR_2_SECTIONS = ['2A', '2B', '2C', '2D', '2E']
-
-ALL_SECTIONS = YEAR_0_SECTIONS + YEAR_1_SECTIONS + YEAR_2_SECTIONS
+ALL_SECTIONS = YEAR_1_SECTIONS + YEAR_2_SECTIONS
 
 
 def identify_tutoring_pairs(broker, pattern_names, pattern_to_idx, level_gap=3):
@@ -137,13 +115,11 @@ def check_section_mastery(broker, section_patterns, pattern_to_idx, mastery_leve
 
 def get_active_sections(year, current_phase):
     """Get list of active sections based on year and phase."""
-    if year == 0:
-        sections = YEAR_0_SECTIONS
-    elif year == 1:
-        sections = YEAR_0_SECTIONS + YEAR_1_SECTIONS  # Year 1 includes Year 0
+    if year == 1:
+        sections = YEAR_1_SECTIONS
     elif year == 2:
-        sections = YEAR_0_SECTIONS + YEAR_1_SECTIONS + YEAR_2_SECTIONS  # Full curriculum
-    else:
+        sections = YEAR_2_SECTIONS
+    else:  # year 0 = both
         sections = ALL_SECTIONS
 
     return sections[:current_phase + 1]
@@ -494,111 +470,7 @@ def generate_creative_challenge(mastered_patterns, vocab_size=26):
     return challenge, f"Creative {challenge_type} challenge using {pattern.name}"
 
 
-# Section purpose descriptions (playful for Year 0)
-SECTION_PURPOSES = {
-    '0A': "Learning to count and see what comes next! Numbers are friends that follow each other.",
-    '0B': "Putting numbers together and taking them apart. Addition and subtraction are like giving and sharing!",
-    '0C': "Comparing things - which is bigger? Which is smaller? Finding patterns in how numbers relate.",
-    '1A': "Sequences get longer and trickier! Patterns can repeat in many ways.",
-    '1B': "Numbers can do fancy dances - stepping by 2s, 3s, or even backwards!",
-    '1C': "Mixing it up - using all our number skills together.",
-}
-
-
-def run_class_session(broker, new_section, pattern_to_idx, device, vocab_size=26, year=0):
-    """
-    Run a class session when a new section unlocks.
-
-    Structure (I Do, We Do):
-    1. State the PURPOSE of what we're learning (playfully framed for Year 0)
-    2. Teacher shows worked examples for new patterns (I Do)
-    3. Guided practice - student tries, immediate feedback (We Do)
-
-    This happens BEFORE regular training on new patterns begins.
-    """
-    print(f"\n  {'📚'*20}")
-    print(f"  *** CLASS SESSION: {new_section} ***")
-
-    # 1. PURPOSE - why are we learning this?
-    purpose = SECTION_PURPOSES.get(new_section, "Learning new and exciting patterns!")
-    print(f"\n  📖 Today's lesson: {purpose}")
-
-    # Get new patterns for this section
-    new_patterns = get_patterns_by_section(new_section)
-    if not new_patterns:
-        print(f"  No new patterns for section {new_section}")
-        return
-
-    print(f"  New patterns: {[p.name for p in new_patterns]}")
-
-    # 2. WORKED EXAMPLES (I Do) - Teacher demonstrates each new pattern
-    print(f"\n  --- Teacher Demonstrates (I Do) ---")
-    for pattern in new_patterns:
-        # Show 2 worked examples per pattern
-        print(f"\n  {pattern.name}:")
-        for i in range(2):
-            example = pattern.generator(vocab_size)
-            seq_str = ' '.join(map(str, example['sequence']))
-            print(f"    Example {i+1}: [{seq_str}] → {example['target']}")
-
-    # 3. GUIDED PRACTICE (We Do) - Students try, teacher gives immediate feedback
-    print(f"\n  --- Guided Practice (We Do) ---")
-    print(f"  Students try similar problems. Teacher validates immediately.")
-
-    results = {name: {'correct': 0, 'total': 0} for name in broker.students.keys()}
-
-    for pattern in new_patterns:
-        print(f"\n  Pattern: {pattern.name}")
-
-        # Generate 3 practice problems per pattern
-        for trial in range(3):
-            example = pattern.generator(vocab_size)
-            max_len = 12
-            seq = example['sequence']
-            padded = seq + [0] * (max_len - len(seq))
-            tokens = torch.tensor(padded[:max_len], dtype=torch.long).unsqueeze(0).to(device)
-            target = example['target']
-            seq_len = [len(seq)]
-            seq_str = ' '.join(map(str, seq))
-
-            for name, student in broker.students.items():
-                student.eval()
-                with torch.no_grad():
-                    logits, conf, _ = student(tokens, seq_len)
-                    pred = logits.argmax(dim=-1).item()
-                    correct = (pred == target)
-
-                results[name]['total'] += 1
-
-                # Immediate feedback (the key pedagogical moment)
-                if correct:
-                    results[name]['correct'] += 1
-                    # Small reinforcement for correct guided practice
-                    if pattern.name in pattern_to_idx:
-                        pt_idx = pattern_to_idx[pattern.name]
-                        student.topic_tracker.award_xp(pt_idx, 0.3)  # Guided practice XP
-
-            # Show one example of feedback (not all to avoid spam)
-            if trial == 0:
-                sample_student = list(broker.students.keys())[0]
-                sample_pred = results[sample_student]['correct'] > 0  # Simplified
-                print(f"    [{seq_str}] → ?")
-                print(f"    Teacher: The answer is {target}.")
-
-    # Summary
-    print(f"\n  --- Guided Practice Results ---")
-    for name in broker.students.keys():
-        acc = results[name]['correct'] / max(1, results[name]['total'])
-        print(f"    {name}: {results[name]['correct']}/{results[name]['total']} ({acc:.0%})")
-
-    print(f"\n  Class session complete. Ready for independent practice!")
-    print(f"  {'📚'*20}\n")
-
-    return results
-
-
-def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_size=26, year=0, section_playdays=1,
-                current_section_patterns=None, all_year_patterns=None):
+def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_size=26):
     """
     Run a playday session - exploration without grades.
 
@@ -607,32 +479,9 @@ def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_
     - Creative challenges: teacher suggests harder variants
     - Peer challenges: students solve patterns from each other
     - No penalties: wrong answers don't hurt XP (exploration mode)
-    - Mastery showcase: students who've mastered current section get ALL year patterns
-      and others can observe their play
-
-    Teacher involvement scales with section_playdays:
-    - 1-2: Light touch, free exploration
-    - 3-4: Teacher suggests patterns to focus on
-    - 5+: Teacher actively guides, more structured challenges
     """
-    # Determine teacher involvement level
-    # Scales with how many playdays on this section (more = needs more support)
-    if section_playdays == 1:
-        teacher_mode = "free"
-        teacher_label = "Free Exploration"
-    elif section_playdays == 2:
-        teacher_mode = "examples"
-        teacher_label = "Teacher Shows Examples"
-    elif section_playdays <= 4:
-        teacher_mode = "guided"
-        teacher_label = "Teacher Guided"
-    else:
-        teacher_mode = "structured"
-        teacher_label = "Teacher Structured (focus session)"
-
     print(f"\n  {'🎮'*20}")
-    print(f"  *** PLAYDAY! (Epoch {epoch}) - {teacher_label} ***")
-    print(f"  Section playday #{section_playdays}")
+    print(f"  *** PLAYDAY! (Epoch {epoch}) ***")
     print(f"  Unlocked priors: {mastered_patterns}")
     print(f"  {'🎮'*20}")
 
@@ -649,119 +498,10 @@ def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_
 
     # === PHASE 1: CREATIVE CHALLENGES FROM TEACHER ===
     print("\n  --- Teacher's Creative Challenges ---")
-
-    # Teacher involvement affects challenge selection
-    if teacher_mode == "free":
-        # Random exploration
-        n_challenges = min(10, len(mastered_patterns) * 3)
-        focus_patterns = mastered_patterns
-    elif teacher_mode == "examples":
-        # Teacher shows worked examples (primaries) then students predict-then-confirm
-        n_challenges = min(12, len(mastered_patterns) * 3)
-        # Find patterns where students need help
-        weak_patterns = []
-        for pt in mastered_patterns:
-            if pt in pattern_to_idx:
-                pt_idx = pattern_to_idx[pt]
-                avg_level = sum(
-                    s.exam_system.confirmed_level[pt_idx].item()
-                    for s in broker.students.values()
-                ) / len(broker.students)
-                if avg_level < 10:
-                    weak_patterns.append((pt, avg_level))
-        weak_patterns.sort(key=lambda x: x[1])  # Weakest first
-        focus_patterns = [p[0] for p in weak_patterns[:4]] if weak_patterns else mastered_patterns
-
-        # PREDICT-THEN-CONFIRM cycle for each focus pattern
-        print(f"\n  --- Predict-Then-Confirm (Example-Problem Pairs) ---")
-        for pt_name in focus_patterns[:3]:
-            pattern_obj = next((p for p in ALL_PATTERNS if p.name == pt_name), None)
-            if pattern_obj is None:
-                continue
-
-            # 1. WORKED EXAMPLE - Teacher demonstrates (I Do)
-            worked_example = pattern_obj.generator(vocab_size)
-            seq_str = ' '.join(map(str, worked_example['sequence']))
-            print(f"\n    [{pt_name}] Teacher: 'Watch this pattern...'")
-            print(f"      Worked example: [{seq_str}] → {worked_example['target']}")
-
-            # 2. SIMILAR PROBLEM - Student predicts (We Do)
-            similar_problem = pattern_obj.generator(vocab_size)
-            max_len = 12
-            seq = similar_problem['sequence']
-            padded = seq + [0] * (max_len - len(seq))
-            tokens = torch.tensor(padded[:max_len], dtype=torch.long).unsqueeze(0).to(device)
-            target = similar_problem['target']
-            seq_len_val = [len(seq)]
-            sim_seq_str = ' '.join(map(str, seq))
-
-            print(f"      Now you try: [{sim_seq_str}] → ?")
-
-            # 3. Each student predicts
-            predictions = {}
-            for name, student in broker.students.items():
-                student.eval()
-                with torch.no_grad():
-                    logits, conf, _ = student(tokens, seq_len_val)
-                    pred = logits.argmax(dim=-1).item()
-                    predictions[name] = pred
-
-            # 4. CONFIRM - Reveal answer with feedback
-            print(f"      Answer: {target}")
-            for name, pred in predictions.items():
-                correct = (pred == target)
-                if correct:
-                    print(f"        {name}: ✓ (predicted {pred})")
-                    # Prediction success XP (stronger encoding from correct prediction)
-                    if pt_name in pattern_to_idx:
-                        pt_idx = pattern_to_idx[pt_name]
-                        broker.students[name].topic_tracker.award_xp(pt_idx, 0.5)
-                    results[name]['creative_correct'] += 1
-                else:
-                    print(f"        {name}: ✗ (predicted {pred}, was {target})")
-                    # Even incorrect predictions help - prediction error drives learning
-                    if pt_name in pattern_to_idx:
-                        pt_idx = pattern_to_idx[pt_name]
-                        broker.students[name].topic_tracker.award_xp(pt_idx, 0.2)
-                results[name]['creative_total'] += 1
-                results[name]['patterns_explored'].add(pt_name)
-        print()
-    elif teacher_mode == "guided":
-        # Teacher suggests focusing on weaker areas
-        n_challenges = min(15, len(mastered_patterns) * 4)
-        # Find patterns where students are struggling (not yet L10)
-        weak_patterns = []
-        for pt in mastered_patterns:
-            if pt in pattern_to_idx:
-                pt_idx = pattern_to_idx[pt]
-                avg_level = sum(
-                    s.exam_system.confirmed_level[pt_idx].item()
-                    for s in broker.students.values()
-                ) / len(broker.students)
-                if avg_level < 10:
-                    weak_patterns.append(pt)
-        focus_patterns = weak_patterns if weak_patterns else mastered_patterns
-        print(f"  Teacher suggests focusing on: {focus_patterns[:3]}")
-    else:  # structured
-        # Teacher actively guides, more challenges, focus on weakest
-        n_challenges = min(20, len(mastered_patterns) * 5)
-        # Find the weakest pattern across all students
-        pattern_scores = []
-        for pt in mastered_patterns:
-            if pt in pattern_to_idx:
-                pt_idx = pattern_to_idx[pt]
-                avg_level = sum(
-                    s.exam_system.confirmed_level[pt_idx].item()
-                    for s in broker.students.values()
-                ) / len(broker.students)
-                pattern_scores.append((pt, avg_level))
-        pattern_scores.sort(key=lambda x: x[1])  # Weakest first
-        focus_patterns = [p[0] for p in pattern_scores[:3]] if pattern_scores else mastered_patterns
-        print(f"  Teacher focusing session on: {focus_patterns}")
-        print(f"  (These need the most work)")
+    n_challenges = min(10, len(mastered_patterns) * 3)
 
     for _ in range(n_challenges):
-        challenge, description = generate_creative_challenge(focus_patterns, vocab_size)
+        challenge, description = generate_creative_challenge(mastered_patterns, vocab_size)
         if challenge is None:
             continue
 
@@ -790,242 +530,158 @@ def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_
                     pt_idx = pattern_to_idx[challenge['base_pattern']]
                     student.topic_tracker.award_xp(pt_idx, 0.5)  # Small exploration bonus
 
-    # === MASTERY SHOWCASE (for students who've mastered current section) ===
-    # Students who've mastered current section get to play with ALL year patterns
-    # Others can observe them - learning by watching
-    if current_section_patterns and all_year_patterns:
-        # Identify mastery students (L10 on all current section patterns)
-        mastery_students = []
-        learning_students = []
-        for name, student in broker.students.items():
-            all_mastered = True
-            for pt in current_section_patterns:
-                if pt in pattern_to_idx:
-                    pt_idx = pattern_to_idx[pt]
-                    level = student.exam_system.confirmed_level[pt_idx].item()
-                    if level < 10:
-                        all_mastered = False
-                        break
-            if all_mastered:
-                mastery_students.append(name)
-            else:
-                learning_students.append(name)
+    # === PHASE 2: PEER CHALLENGES ===
+    print("\n  --- Peer Challenges ---")
+    student_names = list(broker.students.keys())
 
-        if mastery_students and learning_students:
-            print(f"\n  --- Mastery Showcase ---")
-            print(f"  Graduated: {mastery_students} (exploring ALL year patterns)")
-            print(f"  Observers: {learning_students} (watching and learning)")
+    # Each student gets challenged by each other student
+    for challenger_name in student_names:
+        challenger = broker.students[challenger_name]
 
-            # Mastery students get to explore ALL patterns in the year
-            all_pattern_names = [p.name for p in all_year_patterns]
-            n_showcase = min(8, len(all_pattern_names))
+        # Challenger picks a pattern they're good at
+        challenger_strengths = []
+        for pt in mastered_patterns:
+            if pt in pattern_to_idx:
+                pt_idx = pattern_to_idx[pt]
+                level = challenger.topic_tracker.get_level(pt_idx)
+                challenger_strengths.append((pt, level))
 
-            for _ in range(n_showcase):
-                # Pick a random pattern from the full year
-                pattern_name = random.choice(all_pattern_names)
-                pattern_obj = next((p for p in ALL_PATTERNS if p.name == pattern_name), None)
-                if pattern_obj is None:
-                    continue
+        if not challenger_strengths:
+            continue
 
-                example = pattern_obj.generator(vocab_size)
-                max_len = 12
-                seq = example['sequence']
-                padded = seq + [0] * (max_len - len(seq))
-                tokens = torch.tensor(padded[:max_len], dtype=torch.long).unsqueeze(0).to(device)
-                target = example['target']
-                seq_len_val = [len(seq)]
+        # Pick their strongest pattern
+        challenger_strengths.sort(key=lambda x: x[1], reverse=True)
+        challenge_pattern = challenger_strengths[0][0]
 
-                # Mastery student attempts
-                for master_name in mastery_students:
-                    master = broker.students[master_name]
-                    master.eval()
-                    with torch.no_grad():
-                        logits, conf, _ = master(tokens, seq_len_val)
-                        pred = logits.argmax(dim=-1).item()
-                        correct = (pred == target)
+        # Generate a challenge from that pattern
+        pattern_obj = next((p for p in ALL_PATTERNS if p.name == challenge_pattern), None)
+        if pattern_obj is None:
+            continue
 
-                    # Others observe - they see the sequence, the attempt, the result
-                    # This is passive learning (observation bonus)
-                    for observer_name in learning_students:
-                        observer = broker.students[observer_name]
-                        # Observers get small XP bonus just for watching mastery play
-                        if pattern_name in pattern_to_idx:
-                            pt_idx = pattern_to_idx[pattern_name]
-                            observer.topic_tracker.award_xp(pt_idx, 0.1)  # Tiny observation bonus
+        example = pattern_obj.generator(vocab_size)
+        max_len = 12
+        seq = example['sequence']
+        padded = seq + [0] * (max_len - len(seq))
+        tokens = torch.tensor(padded[:max_len], dtype=torch.long).unsqueeze(0).to(device)
+        target = example['target']
+        seq_len = [len(seq)]
 
-                    results[master_name]['patterns_explored'].add(pattern_name)
-                    if correct:
-                        # Mastery student XP for exploring new territory
-                        if pattern_name in pattern_to_idx:
-                            pt_idx = pattern_to_idx[pattern_name]
-                            master.topic_tracker.award_xp(pt_idx, 0.3)
-
-    # === PHASE 2: PEER CHALLENGES (Year 1+ only) ===
-    # Year 0 is individual exploration - peer interaction comes later
-    if year >= 1:
-        print("\n  --- Peer Challenges ---")
-        student_names = list(broker.students.keys())
-
-        # Each student gets challenged by each other student
-        for challenger_name in student_names:
-            challenger = broker.students[challenger_name]
-
-            # Challenger picks a pattern they're good at
-            challenger_strengths = []
-            for pt in mastered_patterns:
-                if pt in pattern_to_idx:
-                    pt_idx = pattern_to_idx[pt]
-                    level = challenger.topic_tracker.get_level(pt_idx)
-                    challenger_strengths.append((pt, level))
-
-            if not challenger_strengths:
+        # Other students try to solve it
+        for solver_name, solver in broker.students.items():
+            if solver_name == challenger_name:
                 continue
 
-            # Pick their strongest pattern
-            challenger_strengths.sort(key=lambda x: x[1], reverse=True)
-            challenge_pattern = challenger_strengths[0][0]
+            solver.eval()
+            with torch.no_grad():
+                logits, _, _ = solver(tokens, seq_len)
+                pred = logits.argmax(dim=-1).item()
+                correct = (pred == target)
 
-            # Generate a challenge from that pattern
-            pattern_obj = next((p for p in ALL_PATTERNS if p.name == challenge_pattern), None)
-            if pattern_obj is None:
-                continue
+            results[solver_name]['peer_total'] += 1
 
-            example = pattern_obj.generator(vocab_size)
-            max_len = 12
-            seq = example['sequence']
-            padded = seq + [0] * (max_len - len(seq))
-            tokens = torch.tensor(padded[:max_len], dtype=torch.long).unsqueeze(0).to(device)
-            target = example['target']
-            seq_len = [len(seq)]
+            if correct:
+                results[solver_name]['peer_correct'] += 1
+                # No XP for peer challenges - just exploration
 
-            # Other students try to solve it
-            for solver_name, solver in broker.students.items():
-                if solver_name == challenger_name:
-                    continue
-
-                solver.eval()
-                with torch.no_grad():
-                    logits, _, _ = solver(tokens, seq_len)
-                    pred = logits.argmax(dim=-1).item()
-                    correct = (pred == target)
-
-                results[solver_name]['peer_total'] += 1
-
-                if correct:
-                    results[solver_name]['peer_correct'] += 1
-                    # No XP for peer challenges - just exploration
-
-    # === PHASE 3: TURN-TAKING CHALLENGES (Year 1+ only) ===
+    # === PHASE 3: TURN-TAKING CHALLENGES ===
     # Students build sequences together, feeling the rhythm of alternating/ternary
-    # BUT ONLY if they've learned these patterns - don't test unlearned skills!
-    if year >= 1:
-        print("\n  --- Turn-Taking Challenges ---")
-        student_names = list(broker.students.keys())
+    print("\n  --- Turn-Taking Challenges ---")
+    student_names = list(broker.students.keys())
 
-        # Only run if alternating/ternary patterns are mastered
-        can_do_alternating = 'alternating' in mastered_patterns
-        can_do_ternary = 'ternary_cycle' in mastered_patterns
+    # Alternating pairs (every other) - all 3 pair combinations
+    alternating_pairs = [
+        (student_names[0], student_names[1]),  # Nova-Rêve
+        (student_names[1], student_names[2]),  # Rêve-Alex
+        (student_names[2], student_names[0]),  # Alex-Nova
+    ]
 
-        if not can_do_alternating and not can_do_ternary:
-            print("    (Skipped - alternating/ternary patterns not yet learned)")
-            print("    Cooperative play continues with mastered patterns only")
-        else:
-            # Alternating pairs (every other) - all 3 pair combinations
-            if can_do_alternating:
-                alternating_pairs = [
-                    (student_names[0], student_names[1]),  # Nova-Rêve
-                    (student_names[1], student_names[2]),  # Rêve-Alex
-                    (student_names[2], student_names[0]),  # Alex-Nova
-                ]
+    print("    [Alternating pairs - 'every other']")
+    for pair in alternating_pairs:
+        # Generate an alternating sequence
+        vocab_size = 26
+        a, b = random.randint(1, vocab_size-1), random.randint(1, vocab_size-1)
+        while b == a:
+            b = random.randint(1, vocab_size-1)
 
-                print("    [Alternating pairs - 'every other']")
-                for pair in alternating_pairs:
-                    # Generate an alternating sequence
-                    vocab_size = 26
-                    a, b = random.randint(1, vocab_size-1), random.randint(1, vocab_size-1)
-                    while b == a:
-                        b = random.randint(1, vocab_size-1)
+        # Build sequence: A, B, A, B, A, B, A, B (8 tokens, predict positions 2-7)
+        sequence = [a, b, a, b, a, b, a, b]
+        pair_results = {pair[0]: [], pair[1]: []}
 
-                    # Build sequence: A, B, A, B, A, B, A, B (8 tokens, predict positions 2-7)
-                    sequence = [a, b, a, b, a, b, a, b]
-                    pair_results = {pair[0]: [], pair[1]: []}
+        # Students take turns predicting (starting from position 2)
+        for pos in range(2, 8):
+            whose_turn = pair[pos % 2]  # Alternates between the two students
+            student = broker.students[whose_turn]
 
-                    # Students take turns predicting (starting from position 2)
-                    for pos in range(2, 8):
-                        whose_turn = pair[pos % 2]  # Alternates between the two students
-                        student = broker.students[whose_turn]
+            # Show sequence up to this point
+            context = sequence[:pos]
+            target = sequence[pos]
 
-                        # Show sequence up to this point
-                        context = sequence[:pos]
-                        target = sequence[pos]
+            max_len = 12
+            padded = context + [0] * (max_len - len(context))
+            tokens = torch.tensor(padded[:max_len], dtype=torch.long).unsqueeze(0).to(device)
+            seq_len = [len(context)]
 
-                        max_len = 12
-                        padded = context + [0] * (max_len - len(context))
-                        tokens = torch.tensor(padded[:max_len], dtype=torch.long).unsqueeze(0).to(device)
-                        seq_len = [len(context)]
+            student.eval()
+            with torch.no_grad():
+                logits, _, _ = student(tokens, seq_len)
+                pred = logits.argmax(dim=-1).item()
+                correct = (pred == target)
 
-                        student.eval()
-                        with torch.no_grad():
-                            logits, _, _ = student(tokens, seq_len)
-                            pred = logits.argmax(dim=-1).item()
-                            correct = (pred == target)
+            pair_results[whose_turn].append(correct)
+            results[whose_turn]['turns_total'] += 1
+            if correct:
+                results[whose_turn]['turns_correct'] += 1
 
-                        pair_results[whose_turn].append(correct)
-                        results[whose_turn]['turns_total'] += 1
-                        if correct:
-                            results[whose_turn]['turns_correct'] += 1
+        # Report pair results
+        p0_acc = sum(pair_results[pair[0]]) / len(pair_results[pair[0]]) if pair_results[pair[0]] else 0
+        p1_acc = sum(pair_results[pair[1]]) / len(pair_results[pair[1]]) if pair_results[pair[1]] else 0
+        print(f"      {pair[0]}-{pair[1]}: {pair[0]} {p0_acc:.0%}, {pair[1]} {p1_acc:.0%}")
 
-                    # Report pair results
-                    p0_acc = sum(pair_results[pair[0]]) / len(pair_results[pair[0]]) if pair_results[pair[0]] else 0
-                    p1_acc = sum(pair_results[pair[1]]) / len(pair_results[pair[1]]) if pair_results[pair[1]] else 0
-                    print(f"      {pair[0]}-{pair[1]}: {pair[0]} {p0_acc:.0%}, {pair[1]} {p1_acc:.0%}")
+    # Ternary trio (every third) - all 3 students together
+    print("    [Ternary trio - 'every third']")
+    vocab_size = 26
+    a = random.randint(1, vocab_size-1)
+    b = random.randint(1, vocab_size-1)
+    while b == a:
+        b = random.randint(1, vocab_size-1)
+    c = random.randint(1, vocab_size-1)
+    while c == a or c == b:
+        c = random.randint(1, vocab_size-1)
 
-            # Ternary trio (every third) - all 3 students together
-            if can_do_ternary:
-                print("    [Ternary trio - 'every third']")
-                vocab_size = 26
-                a = random.randint(1, vocab_size-1)
-                b = random.randint(1, vocab_size-1)
-                while b == a:
-                    b = random.randint(1, vocab_size-1)
-                c = random.randint(1, vocab_size-1)
-                while c == a or c == b:
-                    c = random.randint(1, vocab_size-1)
+    # Build sequence: A, B, C, A, B, C, A, B, C (9 tokens, predict positions 3-8)
+    sequence = [a, b, c, a, b, c, a, b, c]
+    trio_results = {name: [] for name in student_names}
 
-                # Build sequence: A, B, C, A, B, C, A, B, C (9 tokens, predict positions 3-8)
-                sequence = [a, b, c, a, b, c, a, b, c]
-                trio_results = {name: [] for name in student_names}
+    # Students take turns in order (starting from position 3)
+    for pos in range(3, 9):
+        whose_turn = student_names[pos % 3]  # Rotates through all 3
+        student = broker.students[whose_turn]
 
-                # Students take turns in order (starting from position 3)
-                for pos in range(3, 9):
-                    whose_turn = student_names[pos % 3]  # Rotates through all 3
-                    student = broker.students[whose_turn]
+        # Show sequence up to this point
+        context = sequence[:pos]
+        target = sequence[pos]
 
-                    # Show sequence up to this point
-                    context = sequence[:pos]
-                    target = sequence[pos]
+        max_len = 12
+        padded = context + [0] * (max_len - len(context))
+        tokens = torch.tensor(padded[:max_len], dtype=torch.long).unsqueeze(0).to(device)
+        seq_len = [len(context)]
 
-                    max_len = 12
-                    padded = context + [0] * (max_len - len(context))
-                    tokens = torch.tensor(padded[:max_len], dtype=torch.long).unsqueeze(0).to(device)
-                    seq_len = [len(context)]
+        student.eval()
+        with torch.no_grad():
+            logits, _, _ = student(tokens, seq_len)
+            pred = logits.argmax(dim=-1).item()
+            correct = (pred == target)
 
-                    student.eval()
-                    with torch.no_grad():
-                        logits, _, _ = student(tokens, seq_len)
-                        pred = logits.argmax(dim=-1).item()
-                        correct = (pred == target)
+        trio_results[whose_turn].append(correct)
+        results[whose_turn]['turns_total'] += 1
+        if correct:
+            results[whose_turn]['turns_correct'] += 1
 
-                    trio_results[whose_turn].append(correct)
-                    results[whose_turn]['turns_total'] += 1
-                    if correct:
-                        results[whose_turn]['turns_correct'] += 1
-
-                # Report trio results
-                trio_report = ", ".join([f"{name} {sum(trio_results[name])/len(trio_results[name]):.0%}"
-                                        if trio_results[name] else f"{name} -"
-                                        for name in student_names])
-                print(f"      All three: {trio_report}")
+    # Report trio results
+    trio_report = ", ".join([f"{name} {sum(trio_results[name])/len(trio_results[name]):.0%}"
+                            if trio_results[name] else f"{name} -"
+                            for name in student_names])
+    print(f"      All three: {trio_report}")
 
     # === PLAYDAY SUMMARY ===
     print("\n  --- Playday Results ---")
@@ -1065,13 +721,11 @@ def main(args):
     print_curriculum()
 
     # Determine available sections for this year
-    if args.year == 0:
-        available_sections = YEAR_0_SECTIONS
-    elif args.year == 1:
-        available_sections = YEAR_0_SECTIONS + YEAR_1_SECTIONS  # Year 1 includes Year 0
+    if args.year == 1:
+        available_sections = YEAR_1_SECTIONS
     elif args.year == 2:
-        available_sections = YEAR_0_SECTIONS + YEAR_1_SECTIONS + YEAR_2_SECTIONS  # Full
-    else:
+        available_sections = YEAR_2_SECTIONS
+    else:  # year 0 = both
         available_sections = ALL_SECTIONS
 
     # For non-phased training, use all sections at once
@@ -1128,40 +782,23 @@ def main(args):
     print(f"\nData: {len(train_data)} train, {len(val_data)} val")
     print("=" * 70)
 
-    # INITIAL CLASS SESSION for first section (before any training)
-    initial_section = active_sections[0] if active_sections else '0A'
-    print(f"\n{'='*70}")
-    print("FIRST DAY OF SCHOOL!")
-    print(f"{'='*70}")
-    run_class_session(broker, initial_section, pattern_to_idx, device, year=args.year)
-
     # Training loop
     history = []
     best_acc = 0
     mastery_level = args.mastery_level  # Level required to advance phase
-    section_epochs = 0  # Epochs in current section (resets on section change)
-    section_playdays = 0  # Playdays in current section (teacher involvement scales with this)
 
     for epoch in range(1, max_epochs + 1):
-        section_epochs += 1  # Count epochs in this section
         print(f"\n{'='*70}")
         print(f"Epoch {epoch}" + (f"/{max_epochs}" if args.epochs > 0 else ""))
         if phased:
             print(f"Phase {current_phase + 1}/{len(available_sections)}: {active_sections}")
         print("=" * 70)
 
-        # PLAYDAY every 5th epoch IN SECTION (4 work, 1 play) - replaces training
-        if section_epochs % 5 == 0:
-            section_playdays += 1  # Track playdays in this section
+        # PLAYDAY every 5th epoch (4 work, 1 play) - replaces training
+        if epoch % 5 == 0:
             mastered_patterns = get_mastered_patterns(broker, pattern_to_idx, mastery_level=mastery_level)
             playday_patterns = list(set(mastered_patterns + active_pattern_names))
-            # Get current section patterns for mastery showcase
-            current_section = active_sections[-1] if active_sections else None
-            current_section_patterns = [p.name for p in get_patterns_by_section(current_section)] if current_section else []
-            run_playday(broker, playday_patterns, pattern_to_idx, device, epoch, year=args.year,
-                       section_playdays=section_playdays,
-                       current_section_patterns=current_section_patterns,
-                       all_year_patterns=all_year_patterns)
+            run_playday(broker, playday_patterns, pattern_to_idx, device, epoch)
 
             # No exams on playday - it's a real break!
             # Check section mastery though (in case they crossed threshold during play)
@@ -1176,75 +813,22 @@ def main(args):
                     print(f"  *** SECTION {current_section} MASTERED! ***")
                     print(f"  *** All students at L{mastery_level}+ on: {section_pattern_names} ***")
                     current_phase += 1
-                    section_epochs = 0  # Reset epoch counter for new section
-                    section_playdays = 0  # Reset playday counter for new section
                     active_sections = available_sections[:current_phase + 1]
                     active_patterns = get_patterns_for_sections(active_sections)
                     active_pattern_names = [p.name for p in active_patterns]
                     print(f"  *** Unlocking section {available_sections[current_phase]}! ***")
                     print(f"  *** Active patterns now: {active_pattern_names} ***")
                     print(f"  {'*'*50}")
-
-                    # CLASS SESSION for new section (I Do, We Do before You Do)
-                    new_section = available_sections[current_phase]
-                    run_class_session(broker, new_section, pattern_to_idx, device, year=args.year)
-
                     train_data, val_data = create_datasets(active_sections, args, seed_offset=epoch)
                     train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
                     val_loader = DataLoader(val_data, batch_size=args.batch_size, collate_fn=collate_fn)
             continue  # Skip training on playday
 
-        # "Does anyone have any questions?" - check for struggling students
-        # Only on follow-up epochs, Year 1+ (Year 0 is parallel play, no classroom Q&A)
-        if section_epochs > 1 and args.year >= 1:
-            # Check if any student is struggling on current section patterns
-            current_section = active_sections[-1] if active_sections else None
-            if current_section:
-                section_pattern_names = [p.name for p in get_patterns_by_section(current_section)]
-                struggling = []
-                for name, student in broker.students.items():
-                    for pt in section_pattern_names:
-                        if pt in pattern_to_idx:
-                            pt_idx = pattern_to_idx[pt]
-                            level = student.exam_system.confirmed_level[pt_idx].item()
-                            if level < 3:  # Still at early levels
-                                struggling.append((name, pt, level))
-
-                if struggling and section_epochs % 3 == 0:  # Check every 3rd epoch
-                    # Group by pattern
-                    patterns_needing_help = set(p for _, p, _ in struggling)
-                    if patterns_needing_help:
-                        print(f"\n  📋 Teacher: 'Some students have been working on these...'")
-                        print(f"  Patterns needing review: {list(patterns_needing_help)[:3]}")
-                        # Quick review - show one example per struggling pattern
-                        for pt_name in list(patterns_needing_help)[:2]:
-                            pattern_obj = next((p for p in ALL_PATTERNS if p.name == pt_name), None)
-                            if pattern_obj:
-                                example = pattern_obj.generator(26)
-                                seq_str = ' '.join(map(str, example['sequence']))
-                                print(f"    Let me show this again - {pt_name}: [{seq_str}] → {example['target']}")
-
-        # Tutoring pairs (only for active patterns, Year 1+ only)
-        # Year 0 is cooperative exploration - no hierarchy yet
-        if args.year >= 1:
-            tutoring_pairs = identify_tutoring_pairs(broker, active_pattern_names, pattern_to_idx)
-            active_tutoring = sum(len(p) for p in tutoring_pairs.values())
-            if active_tutoring > 0:
-                print(f"\n  Peer tutoring: {active_tutoring} pairs")
-                # Verbose: show who's tutoring whom on what
-                tutor_summary = {}  # tutor -> [(learner, pattern), ...]
-                for pt_idx, pairs in tutoring_pairs.items():
-                    if pairs and pt_idx < len(active_pattern_names):
-                        pattern = active_pattern_names[pt_idx]
-                        for learner, tutor in pairs.items():
-                            if tutor not in tutor_summary:
-                                tutor_summary[tutor] = []
-                            tutor_summary[tutor].append((learner, pattern))
-                for tutor, assignments in tutor_summary.items():
-                    learners = ', '.join(f"{l}({p})" for l, p in assignments)
-                    print(f"    {tutor} → {learners}")
-        else:
-            tutoring_pairs = {}  # No tutoring in Year 0
+        # Tutoring pairs (only for active patterns)
+        tutoring_pairs = identify_tutoring_pairs(broker, active_pattern_names, pattern_to_idx)
+        active_tutoring = sum(len(p) for p in tutoring_pairs.values())
+        if active_tutoring > 0:
+            print(f"\n  Peer tutoring: {active_tutoring} pairs")
 
         # Train
         train_results = train_epoch(
@@ -1266,15 +850,13 @@ def main(args):
             vr = val_results[name]
             print(f"    {name:8s}: acc={vr['accuracy']:.1%}")
 
-        # Leaderboard - only shown in Year 1+ after cooperative exploration
-        # Year 0 is about individual learning and cooperative play, not competition
-        if args.year >= 1:
-            ranked = sorted(val_results.items(), key=lambda x: x[1]['accuracy'], reverse=True)
-            print(f"\n  Leaderboard (Epoch {epoch}):")
-            for i, (name, data) in enumerate(ranked):
-                student = broker.students[name]
-                rank = ["1st", "2nd", "3rd"][i] if i < 3 else f"{i+1}th"
-                print(f"    {rank}: {name:8s} {data['accuracy']:.1%}  (XP: {student.xp:6.0f})")
+        # Leaderboard
+        ranked = sorted(val_results.items(), key=lambda x: x[1]['accuracy'], reverse=True)
+        print(f"\n  Leaderboard (Epoch {epoch}):")
+        for i, (name, data) in enumerate(ranked):
+            student = broker.students[name]
+            rank = ["1st", "2nd", "3rd"][i] if i < 3 else f"{i+1}th"
+            print(f"    {rank}: {name:8s} {data['accuracy']:.1%}  (XP: {student.xp:6.0f})")
 
         # Per-pattern detail (every 5 epochs or first 3)
         if epoch <= 3 or epoch % 5 == 0:
@@ -1328,8 +910,6 @@ def main(args):
 
                 # Advance to next phase
                 current_phase += 1
-                section_epochs = 0  # Reset epoch counter for new section
-                section_playdays = 0  # Reset playday counter for new section
                 active_sections = available_sections[:current_phase + 1]
                 active_patterns = get_patterns_for_sections(active_sections)
                 active_pattern_names = [p.name for p in active_patterns]
@@ -1337,25 +917,6 @@ def main(args):
                 print(f"  *** Unlocking section {available_sections[current_phase]}! ***")
                 print(f"  *** Active patterns now: {active_pattern_names} ***")
                 print(f"  {'*'*50}")
-
-                # CLASS SESSION for new section (I Do, We Do before You Do)
-                new_section = available_sections[current_phase]
-                run_class_session(broker, new_section, pattern_to_idx, device, year=args.year)
-
-                # CELEBRATION PLAYDAY - they earned it!
-                # Play with all mastered patterns before tackling new section
-                # This is "playday 1" of the new section - fresh start, free exploration
-                section_playdays = 1
-                mastered_for_play = get_mastered_patterns(broker, pattern_to_idx, mastery_level=mastery_level)
-                playday_patterns = list(set(mastered_for_play + active_pattern_names))
-                print(f"\n  *** CELEBRATION PLAYDAY for mastering {current_section}! ***")
-                # New section patterns for mastery showcase
-                new_section = active_sections[-1] if active_sections else None
-                new_section_patterns = [p.name for p in get_patterns_by_section(new_section)] if new_section else []
-                run_playday(broker, playday_patterns, pattern_to_idx, device, epoch, year=args.year,
-                           section_playdays=section_playdays,
-                           current_section_patterns=new_section_patterns,
-                           all_year_patterns=all_year_patterns)
 
                 # Regenerate datasets with new patterns
                 train_data, val_data = create_datasets(active_sections, args, seed_offset=epoch)
@@ -1415,7 +976,7 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--year', type=int, default=1, help='Year to train: 0=number sense only, 1=0+patterns, 2=full curriculum')
+    parser.add_argument('--year', type=int, default=1, help='Year to train (1, 2, or 0 for both)')
     parser.add_argument('--no-phase', action='store_true', dest='no_phase', help='Disable phased training (train all patterns at once)')
     parser.add_argument('--mastery_level', type=int, default=10, help='Level required to advance phase (default: 10)')
     parser.add_argument('--epochs', type=int, default=0, help='Max epochs (0 = unlimited, train until graduation)')

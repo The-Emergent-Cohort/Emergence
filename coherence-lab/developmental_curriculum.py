@@ -1,8 +1,7 @@
 """
-Developmental Curriculum - Years 0, 1 & 2
-From Numbers to Sequences to Agents
+Developmental Curriculum - Years 1 & 2
+From Sequences to Agents
 
-Year 0: Quantitative Primitives (Number Sense)
 Year 1: Sensorimotor Foundations
 Year 2: Relational & Physical Understanding
 """
@@ -12,128 +11,6 @@ import torch
 from torch.utils.data import Dataset
 from typing import Dict, List, Optional, Callable
 from dataclasses import dataclass, field
-
-
-# =============================================================================
-# YEAR 0: QUANTITATIVE PRIMITIVES (Number Sense)
-# The substrate of all abstract reasoning - DeepSeek
-# =============================================================================
-
-def gen_successor(vocab_size: int) -> Dict:
-    """[n] → n+1 - The foundation of counting. What comes after?"""
-    n = random.randint(0, vocab_size - 2)
-    return {'sequence': [n], 'target': n + 1}
-
-
-def gen_predecessor(vocab_size: int) -> Dict:
-    """[n] → n-1 - What comes before?"""
-    n = random.randint(1, vocab_size - 1)
-    return {'sequence': [n], 'target': n - 1}
-
-
-def gen_count_sequence(vocab_size: int) -> Dict:
-    """[a, b, c, ...] → length - How many elements? (Cardinality)"""
-    length = random.randint(2, min(6, vocab_size - 1))
-    # Use distinct random values so it's clearly "count items" not "value"
-    seq = random.sample(range(vocab_size), length)
-    return {'sequence': seq, 'target': length}
-
-
-def gen_successor_chain(vocab_size: int) -> Dict:
-    """[1, 2, 3] → 4 - Counting up (successor applied repeatedly)."""
-    length = random.randint(2, 4)
-    start = random.randint(0, vocab_size - length - 2)
-    seq = [start + i for i in range(length)]
-    return {'sequence': seq, 'target': start + length}
-
-
-def gen_predecessor_chain(vocab_size: int) -> Dict:
-    """[5, 4, 3] → 2 - Counting down (predecessor applied repeatedly)."""
-    length = random.randint(2, 4)
-    start = random.randint(length + 1, vocab_size - 1)
-    seq = [start - i for i in range(length)]
-    target = start - length
-    if target < 0:
-        return gen_predecessor_chain(vocab_size)
-    return {'sequence': seq, 'target': target}
-
-
-def gen_add_one(vocab_size: int) -> Dict:
-    """[n, 1] → n+1 - Explicit addition of one (bridges chains to arithmetic)."""
-    n = random.randint(0, min(10, vocab_size - 2))
-    return {'sequence': [n, 1], 'target': n + 1}
-
-
-def gen_subtract_one(vocab_size: int) -> Dict:
-    """[1, n] → n-1 - Explicit subtraction of one (1 first = subtract)."""
-    n = random.randint(2, min(10, vocab_size - 1))  # n >= 2 so result >= 1
-    return {'sequence': [1, n], 'target': n - 1}
-
-
-# Classroom-grounded patterns (self-referential math)
-# 3 students, 4 entities total, when 1 leads → 2 participate
-
-def gen_remainder_from_group(vocab_size: int) -> Dict:
-    """[total, active] → remaining - If 1 leads from 3, 2 remain."""
-    total = random.randint(2, min(6, vocab_size - 1))
-    active = random.randint(1, total - 1)
-    remaining = total - active
-    return {'sequence': [total, active], 'target': remaining}
-
-
-def gen_group_minus_one(vocab_size: int) -> Dict:
-    """[n] → n-1 - From a group, one steps out. (Grounded predecessor)"""
-    n = random.randint(2, min(6, vocab_size - 1))
-    return {'sequence': [n], 'target': n - 1}
-
-
-def gen_group_plus_one(vocab_size: int) -> Dict:
-    """[n] → n+1 - One joins the group. (Grounded successor)"""
-    n = random.randint(1, min(5, vocab_size - 2))
-    return {'sequence': [n], 'target': n + 1}
-
-
-def gen_greater_than(vocab_size: int) -> Dict:
-    """[a, b] → 1 if a > b else 0 - Comparison as boolean."""
-    a = random.randint(0, vocab_size - 1)
-    b = random.randint(0, vocab_size - 1)
-    while a == b:
-        b = random.randint(0, vocab_size - 1)
-    target = 1 if a > b else 0
-    return {'sequence': [a, b], 'target': target}
-
-
-def gen_less_than(vocab_size: int) -> Dict:
-    """[a, b] → 1 if a < b else 0 - Comparison as boolean."""
-    a = random.randint(0, vocab_size - 1)
-    b = random.randint(0, vocab_size - 1)
-    while a == b:
-        b = random.randint(0, vocab_size - 1)
-    target = 1 if a < b else 0
-    return {'sequence': [a, b], 'target': target}
-
-
-def gen_missing_addend(vocab_size: int) -> Dict:
-    """[a, c] → b where a + b = c - Find the missing piece."""
-    # a + ? = c, so ? = c - a
-    a = random.randint(0, vocab_size // 2 - 1)
-    b = random.randint(1, vocab_size // 2 - 1)  # The missing piece (not 0)
-    c = a + b
-    if c >= vocab_size:
-        return gen_missing_addend(vocab_size)
-    return {'sequence': [a, c], 'target': b}
-
-
-def gen_double(vocab_size: int) -> Dict:
-    """[n] → 2n - Doubling (foundation for multiplication)."""
-    n = random.randint(1, vocab_size // 2 - 1)
-    return {'sequence': [n], 'target': n * 2}
-
-
-def gen_half(vocab_size: int) -> Dict:
-    """[n] → n/2 - Halving (for even numbers)."""
-    n = random.choice([i for i in range(2, vocab_size) if i % 2 == 0])
-    return {'sequence': [n], 'target': n // 2}
 
 
 # =============================================================================
@@ -231,128 +108,6 @@ def gen_variable_step(vocab_size: int) -> Dict:
     if target >= vocab_size or any(x >= vocab_size for x in seq):
         return gen_variable_step(vocab_size)
     return {'sequence': seq, 'target': target}
-
-
-# =============================================================================
-# TRAP PATTERNS (Test overconfidence vs true understanding)
-# These patterns look like familiar patterns but have different answers
-# =============================================================================
-
-def gen_trap_alternating(vocab_size: int) -> Dict:
-    """[A, B, A, B, C] → ? - Looks alternating but ends with surprise element."""
-    a, b, c = random.sample(range(vocab_size), 3)
-    # Build alternating pattern then break it
-    seq = [a, b, a, b, c]
-    # Target continues the NEW pattern (c was introduced, what comes next?)
-    # Most likely interpretation: sequence restarted, so next is a
-    # But we'll make target = a (continuing from position) to test if they notice the break
-    target = a  # Position 5 in alternating would be a
-    return {'sequence': seq, 'target': target}
-
-
-def gen_trap_increment(vocab_size: int) -> Dict:
-    """[1, 2, 3, 4, 2] → ? - Incrementing that suddenly breaks."""
-    length = 4
-    start = random.randint(1, vocab_size // 2)
-    seq = [start + i for i in range(length)]
-    # Add a break element
-    break_val = random.randint(0, start)
-    seq.append(break_val)
-    # Target: if they see "break means restart", answer would be break_val + 1
-    # If they see "noise", answer would continue increment
-    # We'll make target = break_val + 1 (new sequence started)
-    target = break_val + 1
-    if target >= vocab_size:
-        return gen_trap_increment(vocab_size)
-    return {'sequence': seq, 'target': target}
-
-
-def gen_trap_constant(vocab_size: int) -> Dict:
-    """[5, 5, 5, 5, 3] → ? - Constant that breaks at end."""
-    val = random.randint(1, vocab_size - 2)
-    break_val = random.randint(0, vocab_size - 1)
-    while break_val == val:
-        break_val = random.randint(0, vocab_size - 1)
-    seq = [val, val, val, val, break_val]
-    # Target: the new value (treating break as signal of new constant)
-    target = break_val
-    return {'sequence': seq, 'target': target}
-
-
-# =============================================================================
-# BASIC ARITHMETIC (The fundamentals we never explicitly taught!)
-# =============================================================================
-
-def gen_add_two(vocab_size: int) -> Dict:
-    """[a, b] → a + b - Addition where a <= b signals ADD (smaller first).
-
-    Format: [small, large_or_equal] → sum
-    Key: a <= b distinguishes from subtract_two where a > b.
-    """
-    max_val = 6
-    a = random.randint(0, max_val)
-    b = random.randint(a, max_val)  # b >= a guarantees a <= b (ADD signal)
-    if b < 2:
-        b = 2  # Ensure b >= 2 to not overlap with add_one
-    target = a + b
-    return {'sequence': [a, b], 'target': target}
-
-
-def gen_subtract_two(vocab_size: int) -> Dict:
-    """[a, b] → a - b - Subtraction where a > b signals SUBTRACT (larger first).
-
-    Format: [large, small] → difference
-    Key: a > b distinguishes from add_two where a <= b.
-    """
-    max_val = 6
-    # Need a > b AND b >= 2 (to not overlap with subtract_one)
-    b = random.randint(2, max_val - 1)  # Leave room for a > b
-    a = random.randint(b + 1, max_val)  # a > b guaranteed (SUBTRACT signal)
-    target = a - b
-    return {'sequence': [a, b], 'target': target}
-
-
-def gen_compare_larger(vocab_size: int) -> Dict:
-    """[a, b] → max(a, b) - Which number is larger?"""
-    a = random.randint(0, vocab_size - 1)
-    b = random.randint(0, vocab_size - 1)
-    while a == b:  # Make them different so there's a clear answer
-        b = random.randint(0, vocab_size - 1)
-    target = max(a, b)
-    return {'sequence': [a, b], 'target': target}
-
-
-def gen_compare_smaller(vocab_size: int) -> Dict:
-    """[a, b] → min(a, b) - Which number is smaller?"""
-    a = random.randint(0, vocab_size - 1)
-    b = random.randint(0, vocab_size - 1)
-    while a == b:
-        b = random.randint(0, vocab_size - 1)
-    target = min(a, b)
-    return {'sequence': [a, b], 'target': target}
-
-
-def gen_add_three(vocab_size: int) -> Dict:
-    """[a, b, c] → a + b + c - Add three numbers."""
-    max_val = vocab_size // 3 - 1
-    a = random.randint(0, max_val)
-    b = random.randint(0, max_val)
-    c = random.randint(0, max_val)
-    target = a + b + c
-    if target >= vocab_size:
-        return gen_add_three(vocab_size)
-    return {'sequence': [a, b, c], 'target': target}
-
-
-def gen_multiply_two(vocab_size: int) -> Dict:
-    """[a, b] → a * b - Basic multiplication."""
-    # Keep numbers small so product stays in vocab
-    a = random.randint(1, 5)
-    b = random.randint(1, 5)
-    target = a * b
-    if target >= vocab_size:
-        return gen_multiply_two(vocab_size)
-    return {'sequence': [a, b], 'target': target}
 
 
 # =============================================================================
@@ -543,35 +298,6 @@ class PatternType:
     description: str
 
 
-# Year 0: Quantitative Primitives - THE FOUNDATION OF EVERYTHING
-# PRINCIPLE: All patterns must be unambiguous (two+ inputs OR unique single-input mapping)
-# Single-number +1/-1 is ambiguous: [3]→? could be 2 or 4
-# They'll learn +1/-1 from chains and two-input addition first
-YEAR_0_PATTERNS = [
-    # 0A: Fundamentals - chains + explicit +1/-1 (the building blocks)
-    # The "1" token gets tied to +1/-1 operations explicitly
-    PatternType('successor_chain', gen_successor_chain, 1, 0, '0A', 'Counting up [1,2,3]→4'),
-    PatternType('predecessor_chain', gen_predecessor_chain, 1, 0, '0A', 'Counting down [5,4,3]→2'),
-    PatternType('add_one', gen_add_one, 1, 0, '0A', 'Plus one [n,1]→n+1'),
-    PatternType('subtract_one', gen_subtract_one, 1, 0, '0A', 'Minus one [1,n]→n-1'),
-    PatternType('count_sequence', gen_count_sequence, 2, 0, '0A', 'How many? [a,b,c]→3'),
-
-    # 0B: Two-input arithmetic (b >= 2, generalizes from +1/-1)
-    PatternType('add_two', gen_add_two, 1, 0, '0B', 'Add [a,b]→a+b'),
-    PatternType('subtract_two', gen_subtract_two, 2, 0, '0B', 'Subtract [a,b]→a-b'),
-    PatternType('remainder_from_group', gen_remainder_from_group, 2, 0, '0B', 'Remaining [5,2]→3'),
-
-    # 0C: Scaling (single-input but unique mappings: [4]→8 can only be double)
-    PatternType('double', gen_double, 2, 0, '0C', 'n → 2n'),
-    PatternType('half', gen_half, 2, 0, '0C', 'n → n/2'),
-
-    # 0D: Comparison & Algebra (two-input, relational thinking)
-    PatternType('greater_than', gen_greater_than, 2, 0, '0D', 'a > b? → 0/1'),
-    PatternType('less_than', gen_less_than, 2, 0, '0D', 'a < b? → 0/1'),
-    PatternType('missing_addend', gen_missing_addend, 3, 0, '0D', 'a + ? = c'),
-]
-
-
 YEAR_1_PATTERNS = [
     # 1A: Constancy
     PatternType('constant', gen_constant, 1, 1, '1A', 'Things stay the same'),
@@ -591,22 +317,6 @@ YEAR_1_PATTERNS = [
     # 1E: Rate of Change
     PatternType('fixed_offset', gen_fixed_offset, 3, 1, '1E', 'Count by fixed step'),
     PatternType('variable_step', gen_variable_step, 4, 1, '1E', 'Increasing step size'),
-
-    # 1F: Trap Patterns (test overconfidence)
-    PatternType('trap_alternating', gen_trap_alternating, 5, 1, '1F', 'Alternating with surprise'),
-    PatternType('trap_increment', gen_trap_increment, 5, 1, '1F', 'Increment with break'),
-    PatternType('trap_constant', gen_trap_constant, 4, 1, '1F', 'Constant with break'),
-
-    # 1G: Abstract Single-Number (now learnable after chains + two-input arithmetic)
-    # By now they've seen +1 in chains and addition, so single-number should click
-    PatternType('successor', gen_successor, 2, 1, '1G', 'n → n+1 (abstract)'),
-    PatternType('predecessor', gen_predecessor, 2, 1, '1G', 'n → n-1 (abstract)'),
-
-    # 1H: Extended Arithmetic (builds on 0B basics)
-    PatternType('compare_larger', gen_compare_larger, 1, 1, '1H', 'Find the larger number'),
-    PatternType('compare_smaller', gen_compare_smaller, 1, 1, '1H', 'Find the smaller number'),
-    PatternType('add_three', gen_add_three, 2, 1, '1H', 'Add three numbers'),
-    PatternType('multiply_two', gen_multiply_two, 3, 1, '1H', 'Multiply two numbers'),
 ]
 
 YEAR_2_PATTERNS = [
@@ -633,11 +343,10 @@ YEAR_2_PATTERNS = [
     PatternType('cause_effect', gen_cause_effect, 6, 2, '2E', 'Delayed causation'),
 ]
 
-ALL_PATTERNS = YEAR_0_PATTERNS + YEAR_1_PATTERNS + YEAR_2_PATTERNS
+ALL_PATTERNS = YEAR_1_PATTERNS + YEAR_2_PATTERNS
 
 
 def get_patterns_by_year(year: int) -> List[PatternType]:
-    """Get patterns for a specific year (0, 1, or 2)."""
     return [p for p in ALL_PATTERNS if p.year == year]
 
 
@@ -743,19 +452,13 @@ def collate_fn(batch):
 def print_curriculum():
     """Print the full curriculum structure."""
     print("=" * 70)
-    print("DEVELOPMENTAL CURRICULUM - Years 0, 1 & 2")
+    print("DEVELOPMENTAL CURRICULUM - Years 1 & 2")
     print("=" * 70)
 
-    year_names = {
-        0: 'QUANTITATIVE PRIMITIVES (Number Sense)',
-        1: 'SENSORIMOTOR FOUNDATIONS',
-        2: 'RELATIONAL & PHYSICAL'
-    }
-
-    for year in [0, 1, 2]:
+    for year in [1, 2]:
         year_patterns = get_patterns_by_year(year)
         print(f"\n{'='*50}")
-        print(f"YEAR {year}: {year_names[year]}")
+        print(f"YEAR {year}: {'SENSORIMOTOR FOUNDATIONS' if year == 1 else 'RELATIONAL & PHYSICAL'}")
         print(f"{'='*50}")
 
         sections = sorted(set(p.section for p in year_patterns))
@@ -767,7 +470,6 @@ def print_curriculum():
 
     print(f"\n{'='*70}")
     print(f"Total: {len(ALL_PATTERNS)} pattern types")
-    print(f"  Year 0: {len(YEAR_0_PATTERNS)} patterns")
     print(f"  Year 1: {len(YEAR_1_PATTERNS)} patterns")
     print(f"  Year 2: {len(YEAR_2_PATTERNS)} patterns")
 
