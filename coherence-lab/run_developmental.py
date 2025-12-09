@@ -470,19 +470,23 @@ def generate_creative_challenge(mastered_patterns, vocab_size=26):
     return challenge, f"Creative {challenge_type} challenge using {pattern.name}"
 
 
-def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_size=26):
+def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_size=26, struggling_patterns=None):
     """
     Run a playday session - exploration without grades.
 
     Features:
     - Unlocked priors: access to all mastered patterns
     - Creative challenges: teacher suggests harder variants
+    - Targeted challenges: focus on struggling patterns with scaffolded approaches
     - Peer challenges: students solve patterns from each other
+    - Turn-taking: feel the rhythm through participation
     - No penalties: wrong answers don't hurt XP (exploration mode)
     """
     print(f"\n  {'🎮'*20}")
     print(f"  *** PLAYDAY! (Epoch {epoch}) ***")
     print(f"  Unlocked priors: {mastered_patterns}")
+    if struggling_patterns:
+        print(f"  Struggle focus: {struggling_patterns}")
     print(f"  {'🎮'*20}")
 
     if not mastered_patterns:
@@ -491,9 +495,12 @@ def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_
 
     results = {name: {
         'creative_correct': 0, 'creative_total': 0,
+        'targeted_correct': 0, 'targeted_total': 0,
         'peer_correct': 0, 'peer_total': 0,
         'turns_correct': 0, 'turns_total': 0,
-        'patterns_explored': set()
+        'patterns_explored': set(),
+        'breakthroughs': [],  # Track "aha" moments
+        'play_style': {'explorer': 0, 'helper': 0, 'collaborator': 0}
     } for name in broker.students.keys()}
 
     # === PHASE 1: CREATIVE CHALLENGES FROM TEACHER ===
@@ -530,8 +537,93 @@ def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_
                     pt_idx = pattern_to_idx[challenge['base_pattern']]
                     student.topic_tracker.award_xp(pt_idx, 0.5)  # Small exploration bonus
 
-    # === PHASE 2: PEER CHALLENGES ===
+    # === PHASE 2: TARGETED STRUGGLE CHALLENGES ===
+    # Focus on patterns they're struggling with, using scaffolded approaches
+    if struggling_patterns:
+        print("\n  --- Targeted Struggle Challenges ---")
+
+        for struggle_pattern in struggling_patterns:
+            # Scaffolded challenges based on pattern type
+            if struggle_pattern in ['alternating', 'simple_alternating', 'position_parity']:
+                # Alternating-focused: partner rhythm building
+                print(f"    [{struggle_pattern}] Partner rhythm challenge:")
+                student_names = list(broker.students.keys())
+                a = random.randint(1, vocab_size - 1)
+                b = 0 if struggle_pattern == 'simple_alternating' else random.randint(1, vocab_size - 1)
+                while b == a and struggle_pattern != 'simple_alternating':
+                    b = random.randint(1, vocab_size - 1)
+
+                # "I start, you continue" - one student sees [A], predicts B, next sees [A,B], predicts A
+                sequence = [a, b, a, b, a, b]
+                for i, name in enumerate(student_names):
+                    # Each student gets a different starting point
+                    start_pos = (i % 3) + 1
+                    context = sequence[:start_pos]
+                    target = sequence[start_pos]
+
+                    max_len = 12
+                    padded = context + [0] * (max_len - len(context))
+                    tokens = torch.tensor(padded[:max_len], dtype=torch.long).unsqueeze(0).to(device)
+                    seq_len = [len(context)]
+
+                    student = broker.students[name]
+                    student.eval()
+                    with torch.no_grad():
+                        logits, _, _ = student(tokens, seq_len)
+                        pred = logits.argmax(dim=-1).item()
+                        correct = (pred == target)
+
+                    results[name]['targeted_total'] += 1
+                    if correct:
+                        results[name]['targeted_correct'] += 1
+                        # Track breakthrough if they get a struggling pattern right
+                        results[name]['breakthroughs'].append(f"{struggle_pattern}@pos{start_pos}")
+                        print(f"      {name}: ✓ got it at position {start_pos}!")
+                    else:
+                        print(f"      {name}: still working on position {start_pos}")
+
+            elif struggle_pattern in ['ternary_cycle', 'ternary_fixed', 'fill_A_positions', 'fill_B_positions']:
+                # Ternary-focused: "where in the cycle are you?" game
+                print(f"    [{struggle_pattern}] Cycle position challenge:")
+                student_names = list(broker.students.keys())
+                a = random.randint(1, vocab_size - 1)
+                b = 0 if 'fixed' in struggle_pattern or 'fill' in struggle_pattern else random.randint(1, vocab_size - 1)
+                c = 0 if 'fixed' in struggle_pattern or 'fill' in struggle_pattern else random.randint(1, vocab_size - 1)
+                while b == a and 'fixed' not in struggle_pattern:
+                    b = random.randint(1, vocab_size - 1)
+                while (c == a or c == b) and 'fixed' not in struggle_pattern:
+                    c = random.randint(1, vocab_size - 1)
+
+                sequence = [a, b, c, a, b, c, a, b, c]
+                for i, name in enumerate(student_names):
+                    # Each student predicts at their cycle position
+                    start_pos = 3 + (i % 3)
+                    context = sequence[:start_pos]
+                    target = sequence[start_pos]
+
+                    max_len = 12
+                    padded = context + [0] * (max_len - len(context))
+                    tokens = torch.tensor(padded[:max_len], dtype=torch.long).unsqueeze(0).to(device)
+                    seq_len = [len(context)]
+
+                    student = broker.students[name]
+                    student.eval()
+                    with torch.no_grad():
+                        logits, _, _ = student(tokens, seq_len)
+                        pred = logits.argmax(dim=-1).item()
+                        correct = (pred == target)
+
+                    results[name]['targeted_total'] += 1
+                    if correct:
+                        results[name]['targeted_correct'] += 1
+                        results[name]['breakthroughs'].append(f"{struggle_pattern}@cycle_pos{start_pos%3}")
+                        print(f"      {name}: ✓ knows position {start_pos%3} in cycle!")
+                    else:
+                        print(f"      {name}: still learning cycle position {start_pos%3}")
+
+    # === PHASE 3: PEER CHALLENGES ===
     print("\n  --- Peer Challenges ---")
+    # Track helper behavior for play style
     student_names = list(broker.students.keys())
 
     # Each student gets challenged by each other student
@@ -583,8 +675,9 @@ def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_
                 results[solver_name]['peer_correct'] += 1
                 # No XP for peer challenges - just exploration
 
-    # === PHASE 3: TURN-TAKING CHALLENGES ===
+    # === PHASE 4: TURN-TAKING CHALLENGES ===
     # Students build sequences together, feeling the rhythm of alternating/ternary
+    # This phase tracks "collaborator" play style
     print("\n  --- Turn-Taking Challenges ---")
     student_names = list(broker.students.keys())
 
@@ -685,13 +778,54 @@ def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_
 
     # === PLAYDAY SUMMARY ===
     print("\n  --- Playday Results ---")
+    all_breakthroughs = []
     for name in broker.students:
         r = results[name]
         creative_acc = r['creative_correct'] / r['creative_total'] if r['creative_total'] > 0 else 0
+        targeted_acc = r['targeted_correct'] / r['targeted_total'] if r['targeted_total'] > 0 else 0
         peer_acc = r['peer_correct'] / r['peer_total'] if r['peer_total'] > 0 else 0
         turns_acc = r['turns_correct'] / r['turns_total'] if r['turns_total'] > 0 else 0
         explored = len(r['patterns_explored'])
-        print(f"    {name:8s}: Creative {creative_acc:.0%}, Peer {peer_acc:.0%}, Turns {turns_acc:.0%}, Explored {explored} patterns")
+
+        # Build result line
+        result_parts = [f"Creative {creative_acc:.0%}"]
+        if r['targeted_total'] > 0:
+            result_parts.append(f"Targeted {targeted_acc:.0%}")
+        result_parts.extend([f"Peer {peer_acc:.0%}", f"Turns {turns_acc:.0%}"])
+        print(f"    {name:8s}: {', '.join(result_parts)}, Explored {explored} patterns")
+
+        # Collect breakthroughs
+        if r['breakthroughs']:
+            all_breakthroughs.extend([(name, b) for b in r['breakthroughs']])
+
+    # Highlight breakthroughs
+    if all_breakthroughs:
+        print("\n  --- Breakthroughs! ---")
+        for name, breakthrough in all_breakthroughs:
+            print(f"    ⭐ {name} got {breakthrough}")
+
+    # Post-playday insights
+    print("\n  --- Playday Insights ---")
+    # Find who did best on turns (collaborator style)
+    turns_scores = {name: r['turns_correct'] / r['turns_total'] if r['turns_total'] > 0 else 0
+                   for name, r in results.items()}
+    best_collaborator = max(turns_scores, key=turns_scores.get)
+    if turns_scores[best_collaborator] > 0:
+        print(f"    Best rhythm partner: {best_collaborator} ({turns_scores[best_collaborator]:.0%} on turn-taking)")
+
+    # Find who explored most (explorer style)
+    explored_counts = {name: len(r['patterns_explored']) for name, r in results.items()}
+    most_explorer = max(explored_counts, key=explored_counts.get)
+    if explored_counts[most_explorer] > 0:
+        print(f"    Most exploratory: {most_explorer} ({explored_counts[most_explorer]} patterns explored)")
+
+    # Find best on targeted challenges (breakthrough potential)
+    if any(r['targeted_total'] > 0 for r in results.values()):
+        targeted_scores = {name: r['targeted_correct'] / r['targeted_total'] if r['targeted_total'] > 0 else 0
+                         for name, r in results.items()}
+        best_targeted = max(targeted_scores, key=targeted_scores.get)
+        if targeted_scores[best_targeted] > 0:
+            print(f"    Best on struggle patterns: {best_targeted} ({targeted_scores[best_targeted]:.0%})")
 
     print(f"  {'🎮'*20}\n")
 
@@ -798,7 +932,9 @@ def main(args):
         if epoch % 5 == 0:
             mastered_patterns = get_mastered_patterns(broker, pattern_to_idx, mastery_level=mastery_level)
             playday_patterns = list(set(mastered_patterns + active_pattern_names))
-            run_playday(broker, playday_patterns, pattern_to_idx, device, epoch)
+            # Identify struggling patterns (active but not mastered)
+            struggling = [p for p in active_pattern_names if p not in mastered_patterns]
+            run_playday(broker, playday_patterns, pattern_to_idx, device, epoch, struggling_patterns=struggling)
 
             # No exams on playday - it's a real break!
             # Check section mastery though (in case they crossed threshold during play)
