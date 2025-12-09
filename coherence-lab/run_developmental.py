@@ -378,12 +378,17 @@ def main(args):
     data_dir = Path(args.data_dir)
     data_dir.mkdir(exist_ok=True)
 
+    # Phased training is ON by default
+    phased = not args.no_phase
+    max_epochs = args.epochs if args.epochs > 0 else 10000  # 0 = unlimited
+
     print("=" * 70)
     print("DEVELOPMENTAL CURRICULUM TRAINING")
     print(f"Session: {session_id}")
     print(f"Device: {device}")
     print(f"Year(s): {args.year}")
-    print(f"Phased: {args.phase}")
+    print(f"Phased: {phased}")
+    print(f"Max epochs: {'unlimited' if args.epochs == 0 else args.epochs}")
     print("=" * 70)
 
     # Print curriculum
@@ -398,7 +403,7 @@ def main(args):
         available_sections = ALL_SECTIONS
 
     # For non-phased training, use all sections at once
-    if not args.phase:
+    if not phased:
         active_sections = available_sections
         current_phase = len(available_sections) - 1
     else:
@@ -456,10 +461,10 @@ def main(args):
     best_acc = 0
     mastery_level = args.mastery_level  # Level required to advance phase
 
-    for epoch in range(1, args.epochs + 1):
+    for epoch in range(1, max_epochs + 1):
         print(f"\n{'='*70}")
-        print(f"Epoch {epoch}/{args.epochs}")
-        if args.phase:
+        print(f"Epoch {epoch}" + (f"/{max_epochs}" if args.epochs > 0 else ""))
+        if phased:
             print(f"Phase {current_phase + 1}/{len(available_sections)}: {active_sections}")
         print("=" * 70)
 
@@ -533,7 +538,7 @@ def main(args):
             }, data_dir / f'developmental_{session_id}_best.pt')
 
         # PHASED TRAINING: Check if ready to advance
-        if args.phase and current_phase < len(available_sections) - 1:
+        if phased and current_phase < len(available_sections) - 1:
             # Check mastery on current section (the latest added one)
             current_section = active_sections[-1]
             section_pattern_names = [p.name for p in get_patterns_by_section(current_section)]
@@ -602,7 +607,7 @@ def main(args):
     print(f"Session: {session_id}")
     print(f"Epochs: {epoch}")
     print(f"Best accuracy: {best_acc:.1%}")
-    if args.phase:
+    if phased:
         print(f"Final phase: {current_phase + 1}/{len(available_sections)}")
         print(f"Active sections: {active_sections}")
 
@@ -616,9 +621,9 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--year', type=int, default=1, help='Year to train (1, 2, or 0 for both)')
-    parser.add_argument('--phase', action='store_true', help='Phased training: master each section before next')
+    parser.add_argument('--no-phase', action='store_true', dest='no_phase', help='Disable phased training (train all patterns at once)')
     parser.add_argument('--mastery_level', type=int, default=10, help='Level required to advance phase (default: 10)')
-    parser.add_argument('--epochs', type=int, default=900, help='Default: topics × 100 (Year 1=900, Both=2100)')
+    parser.add_argument('--epochs', type=int, default=0, help='Max epochs (0 = unlimited, train until graduation)')
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--lr', type=float, default=1e-3)
     parser.add_argument('--train_size', type=int, default=20000)
