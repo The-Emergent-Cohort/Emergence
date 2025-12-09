@@ -826,16 +826,18 @@ def main(args):
     history = []
     best_acc = 0
     mastery_level = args.mastery_level  # Level required to advance phase
+    section_epochs = 0  # Epochs in current section (resets on section change)
 
     for epoch in range(1, max_epochs + 1):
+        section_epochs += 1  # Count epochs in this section
         print(f"\n{'='*70}")
         print(f"Epoch {epoch}" + (f"/{max_epochs}" if args.epochs > 0 else ""))
         if phased:
             print(f"Phase {current_phase + 1}/{len(available_sections)}: {active_sections}")
         print("=" * 70)
 
-        # PLAYDAY every 5th epoch (4 work, 1 play) - replaces training
-        if epoch % 5 == 0:
+        # PLAYDAY every 5th epoch IN SECTION (4 work, 1 play) - replaces training
+        if section_epochs % 5 == 0:
             mastered_patterns = get_mastered_patterns(broker, pattern_to_idx, mastery_level=mastery_level)
             playday_patterns = list(set(mastered_patterns + active_pattern_names))
             run_playday(broker, playday_patterns, pattern_to_idx, device, epoch, year=args.year)
@@ -853,6 +855,7 @@ def main(args):
                     print(f"  *** SECTION {current_section} MASTERED! ***")
                     print(f"  *** All students at L{mastery_level}+ on: {section_pattern_names} ***")
                     current_phase += 1
+                    section_epochs = 0  # Reset playday counter for new section
                     active_sections = available_sections[:current_phase + 1]
                     active_patterns = get_patterns_for_sections(active_sections)
                     active_pattern_names = [p.name for p in active_patterns]
@@ -968,6 +971,7 @@ def main(args):
 
                 # Advance to next phase
                 current_phase += 1
+                section_epochs = 0  # Reset playday counter for new section
                 active_sections = available_sections[:current_phase + 1]
                 active_patterns = get_patterns_for_sections(active_sections)
                 active_pattern_names = [p.name for p in active_patterns]

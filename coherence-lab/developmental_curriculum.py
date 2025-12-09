@@ -284,21 +284,30 @@ def gen_trap_constant(vocab_size: int) -> Dict:
 # =============================================================================
 
 def gen_add_two(vocab_size: int) -> Dict:
-    """[a, b] → a + b - Basic addition with b >= 2 (b=1 is add_one)."""
-    # Small numbers for Year 0, but b >= 2 to not overlap with add_one
+    """[a, b] → a + b - Addition where a <= b signals ADD (smaller first).
+
+    Format: [small, large_or_equal] → sum
+    Key: a <= b distinguishes from subtract_two where a > b.
+    """
     max_val = 6
     a = random.randint(0, max_val)
-    b = random.randint(2, max_val)  # Never 1 - that's add_one's domain
+    b = random.randint(a, max_val)  # b >= a guarantees a <= b (ADD signal)
+    if b < 2:
+        b = 2  # Ensure b >= 2 to not overlap with add_one
     target = a + b
     return {'sequence': [a, b], 'target': target}
 
 
 def gen_subtract_two(vocab_size: int) -> Dict:
-    """[a, b] → a - b - Basic subtraction with b >= 2 (b=1 is subtract_one)."""
-    # Small numbers for Year 0, but b >= 2 to not overlap with subtract_one
+    """[a, b] → a - b - Subtraction where a > b signals SUBTRACT (larger first).
+
+    Format: [large, small] → difference
+    Key: a > b distinguishes from add_two where a <= b.
+    """
     max_val = 6
-    a = random.randint(2, max_val)  # Must be >= 2 since b >= 2
-    b = random.randint(2, min(a, max_val))  # b >= 2, b <= a
+    # Need a > b AND b >= 2 (to not overlap with subtract_one)
+    b = random.randint(2, max_val - 1)  # Leave room for a > b
+    a = random.randint(b + 1, max_val)  # a > b guaranteed (SUBTRACT signal)
     target = a - b
     return {'sequence': [a, b], 'target': target}
 
