@@ -1198,13 +1198,14 @@ class RelationalSystem(nn.Module):
 # =============================================================================
 
 class PatternDataset(Dataset):
-    def __init__(self, n_examples=50000, vocab_size=26, seed=None):
+    def __init__(self, n_examples=50000, vocab_size=26, seed=None, pattern_types=None):
         if seed:
             random.seed(seed)
         self.vocab_size = vocab_size
+        self.pattern_types = pattern_types or ['alternating', 'repeating', 'incrementing', 'fixed_offset']
         self.examples = []
         for _ in range(n_examples):
-            pattern_type = random.choice(['alternating', 'repeating', 'incrementing', 'fixed_offset'])
+            pattern_type = random.choice(self.pattern_types)
             self.examples.append(self._generate(pattern_type))
 
     def _generate(self, pt):

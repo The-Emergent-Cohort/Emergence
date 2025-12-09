@@ -71,51 +71,44 @@ def run_student_exams(
         for pt_idx, pt in enumerate(pattern_types):
             # Keep taking exams while eligible (can level up multiple times per epoch)
             while student.exam_system.check_eligible(pt_idx):
-                # Generate exam dataset for this pattern
+                # Generate exam dataset for this specific pattern only
                 target_level = student.exam_system.confirmed_level[pt_idx].item() + 1
                 exam_size = student.exam_system.get_exam_size(target_level)
 
-                # Create mini-dataset for exam (unique seed per level attempt)
-                exam_data = PatternDataset(n_examples=exam_size, seed=epoch * 1000 + pt_idx * 100 + target_level)
+                # Create pattern-specific dataset for exam (unique seed per level attempt)
+                exam_data = PatternDataset(
+                    n_examples=exam_size,
+                    seed=epoch * 1000 + pt_idx * 100 + target_level,
+                    pattern_types=[pt]  # Only generate this pattern type
+                )
 
-                # Filter to just this pattern (exam_data has all patterns mixed)
-                # For now, run on all patterns but track this one specifically
                 correct_count = 0
                 total_count = 0
 
                 student.eval()
                 with torch.no_grad():
                     for ex in exam_data:
-                        if ex['pattern_type'] == pt:
-                            tokens = ex['sequence'].unsqueeze(0).to(device)
-                            target = ex['target']
-                            seq_len = [ex['seq_len']]
+                        tokens = ex['sequence'].unsqueeze(0).to(device)
+                        target = ex['target']
+                        seq_len = [ex['seq_len']]
 
-                            logits, _, _ = student(tokens, seq_len)
-                            pred = logits.argmax(dim=-1).item()
+                        logits, _, _ = student(tokens, seq_len)
+                        pred = logits.argmax(dim=-1).item()
 
-                            total_count += 1
-                            if pred == target:
-                                correct_count += 1
+                        total_count += 1
+                        if pred == target:
+                            correct_count += 1
 
-                            if total_count >= exam_size:
-                                break
+                # Take the exam (always have exam_size examples now)
+                result = student.exam_system.take_exam(pt_idx, correct_count, total_count)
+                result['pattern'] = pt
+                result['student'] = name
+                student_results.append(result)
 
-                # If we didn't get enough samples, generate more targeted
-                if total_count < exam_size // 2:
-                    # Fallback: use what we have
-                    pass
-
-                if total_count > 0:
-                    result = student.exam_system.take_exam(pt_idx, correct_count, total_count)
-                    result['pattern'] = pt
-                    result['student'] = name
-                    student_results.append(result)
-
-                    if result['passed']:
-                        print(f"  ** {student.name} passed L{result['new_level']} exam for {pt}! ({result['score']:.0%})")
-                    else:
-                        print(f"  -- {student.name} failed L{result['new_level']+1} exam for {pt} ({result['score']:.0%} < {result['threshold']:.0%})")
+                if result['passed']:
+                    print(f"  ** {student.name} passed L{result['new_level']} exam for {pt}! ({result['score']:.0%})")
+                else:
+                    print(f"  -- {student.name} failed L{result['new_level']+1} exam for {pt} ({result['score']:.0%} < {result['threshold']:.0%})")
 
         student.train()
         results[name] = student_results
