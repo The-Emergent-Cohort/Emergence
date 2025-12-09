@@ -273,19 +273,20 @@ def gen_trap_constant(vocab_size: int) -> Dict:
 
 def gen_add_two(vocab_size: int) -> Dict:
     """[a, b] → a + b - Basic addition: 1 + 1 = 2."""
-    # Keep numbers small so sum stays in vocab
-    max_val = vocab_size // 2 - 1
+    # Small numbers for Year 0 - match remainder_from_group range
+    # They'll learn larger numbers in Year 1 extended arithmetic
+    max_val = 6
     a = random.randint(0, max_val)
     b = random.randint(0, max_val)
     target = a + b
-    if target >= vocab_size:
-        return gen_add_two(vocab_size)
     return {'sequence': [a, b], 'target': target}
 
 
 def gen_subtract_two(vocab_size: int) -> Dict:
     """[a, b] → a - b - Basic subtraction (a >= b for positive result)."""
-    a = random.randint(1, vocab_size - 1)
+    # Small numbers for Year 0 - match remainder_from_group range
+    max_val = 6
+    a = random.randint(1, max_val)
     b = random.randint(0, a)  # b <= a ensures non-negative result
     target = a - b
     return {'sequence': [a, b], 'target': target}
