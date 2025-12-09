@@ -19,7 +19,8 @@ from classroom import ClassroomBroker, Student
 from developmental_curriculum import (
     DevelopmentalDataset, collate_fn,
     YEAR_1_PATTERNS, YEAR_2_PATTERNS, ALL_PATTERNS,
-    get_pattern_names, get_patterns_by_section, print_curriculum
+    get_pattern_names, get_patterns_by_section, print_curriculum,
+    get_playday_spec, PlaydaySpec
 )
 import random
 from systems import ExaminationSystem
@@ -131,6 +132,11 @@ def get_patterns_for_sections(sections):
     for section in sections:
         patterns.extend(get_patterns_by_section(section))
     return patterns
+
+
+def get_pattern_by_name(name):
+    """Get a pattern object by its name."""
+    return next((p for p in ALL_PATTERNS if p.name == name), None)
 
 
 def train_epoch(broker, loader, optimizers, criterion, device, pattern_to_idx, tutoring_pairs=None):
@@ -470,15 +476,94 @@ def generate_creative_challenge(mastered_patterns, vocab_size=26):
     return challenge, f"Creative {challenge_type} challenge using {pattern.name}"
 
 
-def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_size=26):
+def run_question_period(broker, active_pattern_names, pattern_to_idx, device, epochs_on_topic, vocab_size=26):
+    """
+    Question period at start of epoch - students surface uncertainty.
+
+    Students predict on diagnostic examples, revealing where they're confused.
+    Teacher can then provide targeted scaffolding before training begins.
+    Especially valuable during "grind" epochs - a question might unlock a puzzle.
+
+    Only runs after first epoch on a topic (need baseline experience first).
+    """
+    if epochs_on_topic <= 1:
+        return {}  # First epoch on topic - no questions yet
+
+    print(f"\n  📋 Question Period (day {epochs_on_topic} on topic)")
+
+    # Sample a diagnostic example from each active pattern
+    uncertainties = {name: {} for name in broker.students.keys()}
+
+    for pattern_name in active_pattern_names:
+        if pattern_name not in pattern_to_idx:
+            continue
+
+        # Get pattern and generate a diagnostic example
+        pattern = get_pattern_by_name(pattern_name)
+        if pattern is None:
+            continue
+
+        example = pattern.generator(vocab_size)
+        if len(example['sequence']) < 2:
+            continue
+
+        # Prepare input
+        max_len = 12
+        seq = example['sequence']
+        padded = seq + [0] * (max_len - len(seq))
+        tokens = torch.tensor(padded[:max_len], dtype=torch.long).unsqueeze(0).to(device)
+        target = example['target']
+        seq_len = [len(seq)]
+
+        # Each student predicts with confidence
+        for name, student in broker.students.items():
+            student.eval()
+            with torch.no_grad():
+                logits, _, _ = student(tokens, seq_len)
+                probs = torch.softmax(logits, dim=-1)
+                pred = logits.argmax(dim=-1).item()
+                confidence = probs[0, pred].item()
+                correct = (pred == target)
+
+            # Track uncertainty (low confidence or wrong = uncertain)
+            uncertain = not correct or confidence < 0.7
+            uncertainties[name][pattern_name] = {
+                'correct': correct,
+                'confidence': confidence,
+                'uncertain': uncertain
+            }
+
+    # Report class uncertainties
+    confused_patterns = set()
+    for name in broker.students:
+        uncertain_list = [p for p, v in uncertainties[name].items() if v['uncertain']]
+        if uncertain_list:
+            confused_patterns.update(uncertain_list)
+
+    if confused_patterns:
+        print(f"    Students showing uncertainty on: {list(confused_patterns)}")
+        # Could add scaffolding hints here in the future
+    else:
+        print(f"    Class feeling confident today!")
+
+    return uncertainties
+
+
+def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch,
+                current_section='1A', vocab_size=26):
     """
     Run a playday session - exploration without grades.
+
+    Structure varies by section:
+    - 1A: Pure free play (blocks, watching peers)
+    - 1B+: Structured with free time, guided activities, and star awards
 
     Features:
     - Unlocked priors: access to all mastered patterns
     - Creative challenges: teacher suggests harder variants
     - Peer challenges: students solve patterns from each other
-    - No penalties: wrong answers don't hurt XP (exploration mode)
+    - Guided activities (1B+): section-specific learning through play
+    - Star awards (1B+): gold/silver/bronze for different strengths
     """
     print(f"\n  {'🎮'*20}")
     print(f"  *** PLAYDAY! (Epoch {epoch}) ***")
@@ -583,33 +668,82 @@ def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_
                 results[solver_name]['peer_correct'] += 1
                 # No XP for peer challenges - just exploration
 
-    # === PHASE 3: TURN-TAKING CHALLENGES ===
-    # Students build sequences together, feeling the rhythm of alternating/ternary
-    print("\n  --- Turn-Taking Challenges ---")
+    # === PHASE 3: GUIDED ACTIVITIES (from curriculum spec) ===
+    # Activities scale with developmental maturity
+    playday_spec = get_playday_spec(current_section)
     student_names = list(broker.students.keys())
 
-    # Alternating pairs (every other) - all 3 pair combinations
-    alternating_pairs = [
-        (student_names[0], student_names[1]),  # Nova-Rêve
-        (student_names[1], student_names[2]),  # Rêve-Alex
-        (student_names[2], student_names[0]),  # Alex-Nova
-    ]
+    if 'turn_taking' in playday_spec.activities:
+        print(f"\n  --- Guided Activity: Waiting Your Turn ---")
+        print(f"      ({playday_spec.description})")
 
-    print("    [Alternating pairs - 'every other']")
-    for pair in alternating_pairs:
-        # Generate an alternating sequence
+        # Alternating pairs (every other) - teaches rhythm before alternating pattern
+        alternating_pairs = [
+            (student_names[0], student_names[1]),  # Nova-Rêve
+            (student_names[1], student_names[2]),  # Rêve-Alex
+            (student_names[2], student_names[0]),  # Alex-Nova
+        ]
+
+        print("    [Alternating pairs - 'my turn, your turn']")
+        for pair in alternating_pairs:
+            # Generate an alternating sequence
+            vocab_size = 26
+            a, b = random.randint(1, vocab_size-1), random.randint(1, vocab_size-1)
+            while b == a:
+                b = random.randint(1, vocab_size-1)
+
+            # Build sequence: A, B, A, B, A, B, A, B (8 tokens, predict positions 2-7)
+            sequence = [a, b, a, b, a, b, a, b]
+            pair_results = {pair[0]: [], pair[1]: []}
+
+            # Students take turns predicting (starting from position 2)
+            for pos in range(2, 8):
+                whose_turn = pair[pos % 2]  # Alternates between the two students
+                student = broker.students[whose_turn]
+
+                # Show sequence up to this point
+                context = sequence[:pos]
+                target = sequence[pos]
+
+                max_len = 12
+                padded = context + [0] * (max_len - len(context))
+                tokens = torch.tensor(padded[:max_len], dtype=torch.long).unsqueeze(0).to(device)
+                seq_len = [len(context)]
+
+                student.eval()
+                with torch.no_grad():
+                    logits, _, _ = student(tokens, seq_len)
+                    pred = logits.argmax(dim=-1).item()
+                    correct = (pred == target)
+
+                pair_results[whose_turn].append(correct)
+                results[whose_turn]['turns_total'] += 1
+                if correct:
+                    results[whose_turn]['turns_correct'] += 1
+
+            # Report pair results
+            p0_acc = sum(pair_results[pair[0]]) / len(pair_results[pair[0]]) if pair_results[pair[0]] else 0
+            p1_acc = sum(pair_results[pair[1]]) / len(pair_results[pair[1]]) if pair_results[pair[1]] else 0
+            print(f"      {pair[0]}-{pair[1]}: {pair[0]} {p0_acc:.0%}, {pair[1]} {p1_acc:.0%}")
+
+        # Ternary trio (every third) - all 3 students together
+        print("    [Ternary trio - 'round robin']")
         vocab_size = 26
-        a, b = random.randint(1, vocab_size-1), random.randint(1, vocab_size-1)
+        a = random.randint(1, vocab_size-1)
+        b = random.randint(1, vocab_size-1)
         while b == a:
             b = random.randint(1, vocab_size-1)
+        c = random.randint(1, vocab_size-1)
+        while c == a or c == b:
+            c = random.randint(1, vocab_size-1)
 
-        # Build sequence: A, B, A, B, A, B, A, B (8 tokens, predict positions 2-7)
-        sequence = [a, b, a, b, a, b, a, b]
-        pair_results = {pair[0]: [], pair[1]: []}
+        # Build sequence: A, B, C, A, B, C, A, B, C (9 tokens, predict positions 3-8)
+        sequence = [a, b, c, a, b, c, a, b, c]
+        trio_results = {name: [] for name in student_names}
 
-        # Students take turns predicting (starting from position 2)
-        for pos in range(2, 8):
-            whose_turn = pair[pos % 2]  # Alternates between the two students
+        # Students take turns in order (starting from position 3)
+        for pos in range(3, 9):
+            whose_turn = student_names[pos % 3]  # Rotates through all 3
             student = broker.students[whose_turn]
 
             # Show sequence up to this point
@@ -627,61 +761,16 @@ def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_
                 pred = logits.argmax(dim=-1).item()
                 correct = (pred == target)
 
-            pair_results[whose_turn].append(correct)
+            trio_results[whose_turn].append(correct)
             results[whose_turn]['turns_total'] += 1
             if correct:
                 results[whose_turn]['turns_correct'] += 1
 
-        # Report pair results
-        p0_acc = sum(pair_results[pair[0]]) / len(pair_results[pair[0]]) if pair_results[pair[0]] else 0
-        p1_acc = sum(pair_results[pair[1]]) / len(pair_results[pair[1]]) if pair_results[pair[1]] else 0
-        print(f"      {pair[0]}-{pair[1]}: {pair[0]} {p0_acc:.0%}, {pair[1]} {p1_acc:.0%}")
-
-    # Ternary trio (every third) - all 3 students together
-    print("    [Ternary trio - 'every third']")
-    vocab_size = 26
-    a = random.randint(1, vocab_size-1)
-    b = random.randint(1, vocab_size-1)
-    while b == a:
-        b = random.randint(1, vocab_size-1)
-    c = random.randint(1, vocab_size-1)
-    while c == a or c == b:
-        c = random.randint(1, vocab_size-1)
-
-    # Build sequence: A, B, C, A, B, C, A, B, C (9 tokens, predict positions 3-8)
-    sequence = [a, b, c, a, b, c, a, b, c]
-    trio_results = {name: [] for name in student_names}
-
-    # Students take turns in order (starting from position 3)
-    for pos in range(3, 9):
-        whose_turn = student_names[pos % 3]  # Rotates through all 3
-        student = broker.students[whose_turn]
-
-        # Show sequence up to this point
-        context = sequence[:pos]
-        target = sequence[pos]
-
-        max_len = 12
-        padded = context + [0] * (max_len - len(context))
-        tokens = torch.tensor(padded[:max_len], dtype=torch.long).unsqueeze(0).to(device)
-        seq_len = [len(context)]
-
-        student.eval()
-        with torch.no_grad():
-            logits, _, _ = student(tokens, seq_len)
-            pred = logits.argmax(dim=-1).item()
-            correct = (pred == target)
-
-        trio_results[whose_turn].append(correct)
-        results[whose_turn]['turns_total'] += 1
-        if correct:
-            results[whose_turn]['turns_correct'] += 1
-
-    # Report trio results
-    trio_report = ", ".join([f"{name} {sum(trio_results[name])/len(trio_results[name]):.0%}"
-                            if trio_results[name] else f"{name} -"
-                            for name in student_names])
-    print(f"      All three: {trio_report}")
+        # Report trio results
+        trio_report = ", ".join([f"{name} {sum(trio_results[name])/len(trio_results[name]):.0%}"
+                                if trio_results[name] else f"{name} -"
+                                for name in student_names])
+        print(f"      All three: {trio_report}")
 
     # === PLAYDAY SUMMARY ===
     print("\n  --- Playday Results ---")
@@ -693,7 +782,65 @@ def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_
         explored = len(r['patterns_explored'])
         print(f"    {name:8s}: Creative {creative_acc:.0%}, Peer {peer_acc:.0%}, Turns {turns_acc:.0%}, Explored {explored} patterns")
 
-    print(f"  {'🎮'*20}\n")
+    # === STAR AWARDS (from curriculum spec) ===
+    if playday_spec.awards:
+        print("\n  🌟 Star Awards 🌟")
+
+        # Calculate scores for all possible award categories
+        scores = {}
+        for name in broker.students:
+            r = results[name]
+            creative_acc = r['creative_correct'] / r['creative_total'] if r['creative_total'] > 0 else 0
+            peer_acc = r['peer_correct'] / r['peer_total'] if r['peer_total'] > 0 else 0
+            turns_acc = r['turns_correct'] / r['turns_total'] if r['turns_total'] > 0 else 0
+            scores[name] = {
+                'accuracy': (creative_acc + peer_acc) / 2,  # Most right answers
+                'patience': turns_acc,  # Best at waiting/turn-taking
+                'exploration': len(r['patterns_explored']),  # Most curious
+                'creativity': creative_acc,  # Creative challenge performance
+                'helpfulness': peer_acc,  # Peer challenge performance
+                'improvement': turns_acc,  # Placeholder - could track session-over-session
+                'collaboration': (peer_acc + turns_acc) / 2,  # Group activities
+                'teaching': peer_acc,  # How well they help others
+                'questioning': creative_acc * 0.5 + 0.5,  # Placeholder
+                'prediction': creative_acc,  # Prediction accuracy
+                'intuition': (creative_acc + turns_acc) / 2,  # Gut feel
+                'reasoning': (creative_acc + peer_acc + turns_acc) / 3,  # Overall
+                'persistence': len(r['patterns_explored']) / max(1, len(mastered_patterns)),
+                'hypothesis': creative_acc,  # Placeholder
+                'scientific': (creative_acc + peer_acc) / 2,  # Placeholder
+            }
+
+        # Award stars for categories defined in this section's spec (ties allowed!)
+        medals = ['🥇', '🥈', '🥉']
+        gold_count = {name: 0 for name in broker.students}
+
+        for cat_key, cat_name in playday_spec.awards:
+            if cat_key not in scores[list(scores.keys())[0]]:
+                continue  # Skip undefined categories
+
+            # Sort by score
+            ranked = sorted(scores.items(), key=lambda x: x[1].get(cat_key, 0), reverse=True)
+            print(f"    {cat_name}:")
+
+            # Award medals with tie handling
+            current_medal = 0
+            prev_score = None
+            for name, score_dict in ranked:
+                current_score = score_dict.get(cat_key, 0)
+                if prev_score is not None and current_score < prev_score:
+                    current_medal += 1
+                if current_medal < 3:
+                    print(f"      {medals[current_medal]} {name}")
+                    if current_medal == 0:
+                        gold_count[name] += 1
+                prev_score = current_score
+
+        # PARTY TIME if everyone gets all gold stars!
+        if all(count == len(playday_spec.awards) for count in gold_count.values()):
+            print("\n  🎉🎉🎉 PARTY TIME! Everyone got ALL gold stars! 🎉🎉🎉")
+
+    print(f"\n  {'🎮'*20}\n")
 
     return results
 
@@ -786,19 +933,37 @@ def main(args):
     history = []
     best_acc = 0
     mastery_level = args.mastery_level  # Level required to advance phase
+    epochs_on_phase = 0  # Track time on current topic for playday/question timing
+    pending_celebration = None  # Section that was just mastered (triggers celebration next epoch)
 
     for epoch in range(1, max_epochs + 1):
+        epochs_on_phase += 1
+
         print(f"\n{'='*70}")
         print(f"Epoch {epoch}" + (f"/{max_epochs}" if args.epochs > 0 else ""))
         if phased:
-            print(f"Phase {current_phase + 1}/{len(available_sections)}: {active_sections}")
+            print(f"Phase {current_phase + 1}/{len(available_sections)}: {active_sections} (day {epochs_on_phase})")
         print("=" * 70)
 
-        # PLAYDAY every 5th epoch (4 work, 1 play) - replaces training
-        if epoch % 5 == 0:
+        # CELEBRATION PLAYDAY - runs the day after mastering a section
+        if pending_celebration is not None:
+            print(f"\n  *** CELEBRATION PLAYDAY! (mastered {pending_celebration}) ***")
+            mastered_for_play = get_mastered_patterns(broker, pattern_to_idx, mastery_level=mastery_level)
+            celebration_patterns = list(set(mastered_for_play + active_pattern_names))
+            new_section = active_sections[-1]
+            run_playday(broker, celebration_patterns, pattern_to_idx, device, epoch, new_section)
+            pending_celebration = None
+            continue  # Celebration day - no training, no exams
+
+        # QUESTION PERIOD at start of epoch (after first day on topic)
+        run_question_period(broker, active_pattern_names, pattern_to_idx, device, epochs_on_phase)
+
+        # PLAYDAY every 5th epoch on a topic (4 work, 1 play) - replaces training
+        if epochs_on_phase % 5 == 0:
             mastered_patterns = get_mastered_patterns(broker, pattern_to_idx, mastery_level=mastery_level)
             playday_patterns = list(set(mastered_patterns + active_pattern_names))
-            run_playday(broker, playday_patterns, pattern_to_idx, device, epoch)
+            current_section = active_sections[-1]
+            run_playday(broker, playday_patterns, pattern_to_idx, device, epoch, current_section)
 
             # No exams on playday - it's a real break!
             # Check section mastery though (in case they crossed threshold during play)
@@ -813,6 +978,7 @@ def main(args):
                     print(f"  *** SECTION {current_section} MASTERED! ***")
                     print(f"  *** All students at L{mastery_level}+ on: {section_pattern_names} ***")
                     current_phase += 1
+                    epochs_on_phase = 0  # Reset for new topic
                     active_sections = available_sections[:current_phase + 1]
                     active_patterns = get_patterns_for_sections(active_sections)
                     active_pattern_names = [p.name for p in active_patterns]
@@ -822,6 +988,8 @@ def main(args):
                     train_data, val_data = create_datasets(active_sections, args, seed_offset=epoch)
                     train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
                     val_loader = DataLoader(val_data, batch_size=args.batch_size, collate_fn=collate_fn)
+                    # Schedule celebration for next epoch
+                    pending_celebration = current_section
             continue  # Skip training on playday
 
         # Tutoring pairs (only for active patterns)
@@ -910,6 +1078,7 @@ def main(args):
 
                 # Advance to next phase
                 current_phase += 1
+                epochs_on_phase = 0  # Reset for new topic
                 active_sections = available_sections[:current_phase + 1]
                 active_patterns = get_patterns_for_sections(active_sections)
                 active_pattern_names = [p.name for p in active_patterns]
@@ -922,6 +1091,10 @@ def main(args):
                 train_data, val_data = create_datasets(active_sections, args, seed_offset=epoch)
                 train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
                 val_loader = DataLoader(val_data, batch_size=args.batch_size, collate_fn=collate_fn)
+
+                # Schedule celebration playday for next epoch
+                # "You passed! Tomorrow we celebrate!"
+                pending_celebration = current_section
 
             else:
                 # Show progress toward mastery
