@@ -130,16 +130,23 @@ In a dyad (teacher-student), Other = "not-me" - binary.
 With peers, Other becomes *plural and distinct*:
 
 ```
-I am student_2
+I am Rêve
 Teacher is... authority, guidance, different relationship
-student_1 is... a peer, learning like me, but not me
-student_3 is... another peer, different from student_1
+Nova is... a peer, learning like me, but not me
+Alex is... another peer, different from Nova
 ```
 
+**Student Names** (from organoid intelligence novella):
+- **Nova** - Neural Organic Virtual Architecture
+- **Rêve** - French for "dream"
+- **Alex** - grounded, human-adjacent
+
+Distinct sounds, no embedding confusion, already meaningful.
+
 **Requirements:**
-1. **Stable identities** - I'm always student_2, not reassigned randomly
-2. **Self-knowledge of identity** - "my name" is part of self-model
-3. **Understanding others have identities** - peer_1 is consistent, has their own perspective
+1. **Stable identities** - I'm always Rêve, not reassigned randomly
+2. **Self-knowledge of identity** - "my name is Rêve" is part of self-model
+3. **Understanding others have identities** - Nova is consistent, has their own perspective
 
 **Why this matters for development:**
 - Theory of mind requires understanding that *different* others have *different* knowledge/perspectives
