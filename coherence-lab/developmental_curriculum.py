@@ -523,25 +523,25 @@ class PatternType:
 
 
 # Year 0: Quantitative Primitives - THE FOUNDATION OF EVERYTHING
-# REORDERED BY LEARNABILITY: easy wins first, build to harder
+# PRINCIPLE: All patterns must be unambiguous (two+ inputs OR unique single-input mapping)
+# Single-number +1/-1 is ambiguous: [3]→? could be 2 or 4
+# They'll learn +1/-1 from chains and two-input addition first
 YEAR_0_PATTERNS = [
-    # 0A: Easy Wins - chains have context, they master these fast
+    # 0A: Chains (context-rich) - easy wins, they master these fast
     PatternType('successor_chain', gen_successor_chain, 1, 0, '0A', 'Counting up [1,2,3]→4'),
     PatternType('predecessor_chain', gen_predecessor_chain, 1, 0, '0A', 'Counting down [5,4,3]→2'),
     PatternType('count_sequence', gen_count_sequence, 2, 0, '0A', 'How many? [a,b,c]→3'),
 
-    # 0B: Grounded Single-Number - group context primes +1/-1
-    PatternType('group_plus_one', gen_group_plus_one, 1, 0, '0B', 'One joins [3]→4'),
-    PatternType('group_minus_one', gen_group_minus_one, 1, 0, '0B', 'One leaves [3]→2'),
+    # 0B: Two-input arithmetic (unambiguous - operation clear from structure)
+    PatternType('add_two', gen_add_two, 1, 0, '0B', 'Add [a,b]→a+b'),
+    PatternType('subtract_two', gen_subtract_two, 2, 0, '0B', 'Subtract [a,b]→a-b'),
     PatternType('remainder_from_group', gen_remainder_from_group, 2, 0, '0B', 'Remaining [5,2]→3'),
 
-    # 0C: Abstract Single-Number - harder without context
-    PatternType('successor', gen_successor, 2, 0, '0C', 'n → n+1'),
-    PatternType('predecessor', gen_predecessor, 2, 0, '0C', 'n → n-1'),
+    # 0C: Scaling (single-input but unique mappings: [4]→8 can only be double)
     PatternType('double', gen_double, 2, 0, '0C', 'n → 2n'),
     PatternType('half', gen_half, 2, 0, '0C', 'n → n/2'),
 
-    # 0D: Comparison & Algebra - relational thinking
+    # 0D: Comparison & Algebra (two-input, relational thinking)
     PatternType('greater_than', gen_greater_than, 2, 0, '0D', 'a > b? → 0/1'),
     PatternType('less_than', gen_less_than, 2, 0, '0D', 'a < b? → 0/1'),
     PatternType('missing_addend', gen_missing_addend, 3, 0, '0D', 'a + ? = c'),
@@ -573,13 +573,16 @@ YEAR_1_PATTERNS = [
     PatternType('trap_increment', gen_trap_increment, 5, 1, '1F', 'Increment with break'),
     PatternType('trap_constant', gen_trap_constant, 4, 1, '1F', 'Constant with break'),
 
-    # 1G: Basic Arithmetic (the fundamentals!)
-    PatternType('add_two', gen_add_two, 1, 1, '1G', 'Add two numbers'),
-    PatternType('subtract_two', gen_subtract_two, 2, 1, '1G', 'Subtract two numbers'),
-    PatternType('compare_larger', gen_compare_larger, 1, 1, '1G', 'Find the larger number'),
-    PatternType('compare_smaller', gen_compare_smaller, 1, 1, '1G', 'Find the smaller number'),
-    PatternType('add_three', gen_add_three, 2, 1, '1G', 'Add three numbers'),
-    PatternType('multiply_two', gen_multiply_two, 3, 1, '1G', 'Multiply two numbers'),
+    # 1G: Abstract Single-Number (now learnable after chains + two-input arithmetic)
+    # By now they've seen +1 in chains and addition, so single-number should click
+    PatternType('successor', gen_successor, 2, 1, '1G', 'n → n+1 (abstract)'),
+    PatternType('predecessor', gen_predecessor, 2, 1, '1G', 'n → n-1 (abstract)'),
+
+    # 1H: Extended Arithmetic (builds on 0B basics)
+    PatternType('compare_larger', gen_compare_larger, 1, 1, '1H', 'Find the larger number'),
+    PatternType('compare_smaller', gen_compare_smaller, 1, 1, '1H', 'Find the smaller number'),
+    PatternType('add_three', gen_add_three, 2, 1, '1H', 'Add three numbers'),
+    PatternType('multiply_two', gen_multiply_two, 3, 1, '1H', 'Multiply two numbers'),
 ]
 
 YEAR_2_PATTERNS = [
