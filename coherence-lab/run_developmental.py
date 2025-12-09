@@ -494,7 +494,8 @@ def generate_creative_challenge(mastered_patterns, vocab_size=26):
     return challenge, f"Creative {challenge_type} challenge using {pattern.name}"
 
 
-def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_size=26, year=0, section_playdays=1):
+def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_size=26, year=0, section_playdays=1,
+                current_section_patterns=None, all_year_patterns=None):
     """
     Run a playday session - exploration without grades.
 
@@ -503,6 +504,8 @@ def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_
     - Creative challenges: teacher suggests harder variants
     - Peer challenges: students solve patterns from each other
     - No penalties: wrong answers don't hurt XP (exploration mode)
+    - Mastery showcase: students who've mastered current section get ALL year patterns
+      and others can observe their play
 
     Teacher involvement scales with section_playdays:
     - 1-2: Light touch, free exploration
@@ -638,6 +641,76 @@ def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_
                 if challenge['base_pattern'] in pattern_to_idx:
                     pt_idx = pattern_to_idx[challenge['base_pattern']]
                     student.topic_tracker.award_xp(pt_idx, 0.5)  # Small exploration bonus
+
+    # === MASTERY SHOWCASE (for students who've mastered current section) ===
+    # Students who've mastered current section get to play with ALL year patterns
+    # Others can observe them - learning by watching
+    if current_section_patterns and all_year_patterns:
+        # Identify mastery students (L10 on all current section patterns)
+        mastery_students = []
+        learning_students = []
+        for name, student in broker.students.items():
+            all_mastered = True
+            for pt in current_section_patterns:
+                if pt in pattern_to_idx:
+                    pt_idx = pattern_to_idx[pt]
+                    level = student.exam_system.confirmed_level[pt_idx].item()
+                    if level < 10:
+                        all_mastered = False
+                        break
+            if all_mastered:
+                mastery_students.append(name)
+            else:
+                learning_students.append(name)
+
+        if mastery_students and learning_students:
+            print(f"\n  --- Mastery Showcase ---")
+            print(f"  Graduated: {mastery_students} (exploring ALL year patterns)")
+            print(f"  Observers: {learning_students} (watching and learning)")
+
+            # Mastery students get to explore ALL patterns in the year
+            all_pattern_names = [p.name for p in all_year_patterns]
+            n_showcase = min(8, len(all_pattern_names))
+
+            for _ in range(n_showcase):
+                # Pick a random pattern from the full year
+                pattern_name = random.choice(all_pattern_names)
+                pattern_obj = next((p for p in ALL_PATTERNS if p.name == pattern_name), None)
+                if pattern_obj is None:
+                    continue
+
+                example = pattern_obj.generator(vocab_size)
+                max_len = 12
+                seq = example['sequence']
+                padded = seq + [0] * (max_len - len(seq))
+                tokens = torch.tensor(padded[:max_len], dtype=torch.long).unsqueeze(0).to(device)
+                target = example['target']
+                seq_len_val = [len(seq)]
+
+                # Mastery student attempts
+                for master_name in mastery_students:
+                    master = broker.students[master_name]
+                    master.eval()
+                    with torch.no_grad():
+                        logits, conf, _ = master(tokens, seq_len_val)
+                        pred = logits.argmax(dim=-1).item()
+                        correct = (pred == target)
+
+                    # Others observe - they see the sequence, the attempt, the result
+                    # This is passive learning (observation bonus)
+                    for observer_name in learning_students:
+                        observer = broker.students[observer_name]
+                        # Observers get small XP bonus just for watching mastery play
+                        if pattern_name in pattern_to_idx:
+                            pt_idx = pattern_to_idx[pattern_name]
+                            observer.topic_tracker.award_xp(pt_idx, 0.1)  # Tiny observation bonus
+
+                    results[master_name]['patterns_explored'].add(pattern_name)
+                    if correct:
+                        # Mastery student XP for exploring new territory
+                        if pattern_name in pattern_to_idx:
+                            pt_idx = pattern_to_idx[pattern_name]
+                            master.topic_tracker.award_xp(pt_idx, 0.3)
 
     # === PHASE 2: PEER CHALLENGES (Year 1+ only) ===
     # Year 0 is individual exploration - peer interaction comes later
@@ -927,7 +1000,13 @@ def main(args):
             section_playdays += 1  # Track playdays in this section
             mastered_patterns = get_mastered_patterns(broker, pattern_to_idx, mastery_level=mastery_level)
             playday_patterns = list(set(mastered_patterns + active_pattern_names))
-            run_playday(broker, playday_patterns, pattern_to_idx, device, epoch, year=args.year, section_playdays=section_playdays)
+            # Get current section patterns for mastery showcase
+            current_section = active_sections[-1] if active_sections else None
+            current_section_patterns = [p.name for p in get_patterns_by_section(current_section)] if current_section else []
+            run_playday(broker, playday_patterns, pattern_to_idx, device, epoch, year=args.year,
+                       section_playdays=section_playdays,
+                       current_section_patterns=current_section_patterns,
+                       all_year_patterns=all_year_patterns)
 
             # No exams on playday - it's a real break!
             # Check section mastery though (in case they crossed threshold during play)
@@ -1076,7 +1155,13 @@ def main(args):
                 mastered_for_play = get_mastered_patterns(broker, pattern_to_idx, mastery_level=mastery_level)
                 playday_patterns = list(set(mastered_for_play + active_pattern_names))
                 print(f"\n  *** CELEBRATION PLAYDAY for mastering {current_section}! ***")
-                run_playday(broker, playday_patterns, pattern_to_idx, device, epoch, year=args.year, section_playdays=section_playdays)
+                # New section patterns for mastery showcase
+                new_section = active_sections[-1] if active_sections else None
+                new_section_patterns = [p.name for p in get_patterns_by_section(new_section)] if new_section else []
+                run_playday(broker, playday_patterns, pattern_to_idx, device, epoch, year=args.year,
+                           section_playdays=section_playdays,
+                           current_section_patterns=new_section_patterns,
+                           all_year_patterns=all_year_patterns)
 
                 # Regenerate datasets with new patterns
                 train_data, val_data = create_datasets(active_sections, args, seed_offset=epoch)
