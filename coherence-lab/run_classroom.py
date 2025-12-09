@@ -316,9 +316,11 @@ def train_epoch_parallel(
                     results[name]['tutoring_received'] += 1
                     results[tutor_name]['tutoring_given'] += 1
 
-                    # Tutor earns XP for helping (teaching reinforces learning)
-                    tutor.topic_tracker.award_xp(pt_idx, TUTOR_XP_BONUS)
-                    results[tutor_name]['xp_from_tutoring'] += TUTOR_XP_BONUS
+                    # Non-graduate tutors earn XP for helping (teaching reinforces learning)
+                    # Graduates already at L10 - their reward is helping class move on
+                    if not tutor.exam_system.topic_graduated[pt_idx]:
+                        tutor.topic_tracker.award_xp(pt_idx, TUTOR_XP_BONUS)
+                        results[tutor_name]['xp_from_tutoring'] += TUTOR_XP_BONUS
 
             # Combined loss
             loss = main_loss + 0.1 * conf_loss
