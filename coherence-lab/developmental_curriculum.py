@@ -42,6 +42,60 @@ def gen_echo(vocab_size: int) -> Dict:
     return {'sequence': seq, 'target': target}
 
 
+# =============================================================================
+# 1B': POSITION SCAFFOLDING (Bridge to cycles)
+# These patterns teach position awareness before full alternating/ternary
+# =============================================================================
+
+def gen_simple_alternating(vocab_size: int) -> Dict:
+    """[A, 0, A, 0, ?] → A or 0 - Alternating with zero (easiest position tracking)."""
+    a = random.randint(1, vocab_size - 1)  # Non-zero value
+    length = random.randint(4, 8)
+    seq = [a if i % 2 == 0 else 0 for i in range(length)]
+    target = a if length % 2 == 0 else 0
+    return {'sequence': seq, 'target': target}
+
+
+def gen_ternary_fixed(vocab_size: int) -> Dict:
+    """[A, 0, 0, A, 0, ?] → A, 0, or 0 - Ternary with zeros (position mod 3)."""
+    a = random.randint(1, vocab_size - 1)  # Non-zero value
+    length = random.randint(5, 9)
+    seq = [a if i % 3 == 0 else 0 for i in range(length)]
+    target = a if length % 3 == 0 else 0
+    return {'sequence': seq, 'target': target}
+
+
+def gen_position_parity(vocab_size: int) -> Dict:
+    """[1, 2, 1, 2, ?] → 1 or 2 - Even/odd positions get different values."""
+    # Two fixed values based on position parity
+    even_val = random.randint(1, vocab_size // 2)
+    odd_val = random.randint(vocab_size // 2, vocab_size - 1)
+    length = random.randint(4, 8)
+    seq = [even_val if i % 2 == 0 else odd_val for i in range(length)]
+    target = even_val if length % 2 == 0 else odd_val
+    return {'sequence': seq, 'target': target}
+
+
+def gen_fill_A_positions(vocab_size: int) -> Dict:
+    """[A, _, _, A, _, _] pattern - Learn where A appears (every 3rd, starting at 0)."""
+    a = random.randint(1, vocab_size - 1)
+    filler = 0  # Use 0 as filler
+    length = random.randint(5, 9)
+    seq = [a if i % 3 == 0 else filler for i in range(length)]
+    target = a if length % 3 == 0 else filler
+    return {'sequence': seq, 'target': target}
+
+
+def gen_fill_B_positions(vocab_size: int) -> Dict:
+    """[_, B, _, _, B, _] pattern - Learn where B appears (every 3rd, starting at 1)."""
+    b = random.randint(1, vocab_size - 1)
+    filler = 0
+    length = random.randint(5, 9)
+    seq = [b if i % 3 == 1 else filler for i in range(length)]
+    target = b if length % 3 == 1 else filler
+    return {'sequence': seq, 'target': target}
+
+
 def gen_alternating(vocab_size: int) -> Dict:
     """[A, B, A, B, ?] → A - Two-element cycle."""
     a, b = random.sample(range(vocab_size), 2)
@@ -306,7 +360,15 @@ YEAR_1_PATTERNS = [
     PatternType('repeating', gen_repeating, 1, 1, '1B', 'Remember what was seen'),
     PatternType('echo', gen_echo, 2, 1, '1B', 'Pattern with gaps'),
 
-    # 1C: Alternation & Position
+    # 1B': Position Scaffolding (bridge to cycles)
+    # These teach position awareness with simpler cognitive load
+    PatternType('simple_alternating', gen_simple_alternating, 2, 1, "1B'", 'Alternating with zero'),
+    PatternType('position_parity', gen_position_parity, 2, 1, "1B'", 'Even/odd positions'),
+    PatternType('ternary_fixed', gen_ternary_fixed, 2, 1, "1B'", 'Ternary with zeros'),
+    PatternType('fill_A_positions', gen_fill_A_positions, 2, 1, "1B'", 'Recognize A positions'),
+    PatternType('fill_B_positions', gen_fill_B_positions, 2, 1, "1B'", 'Recognize B positions'),
+
+    # 1C: Alternation & Position (full complexity)
     PatternType('alternating', gen_alternating, 3, 1, '1C', 'Two-element cycle'),
     PatternType('ternary_cycle', gen_ternary_cycle, 4, 1, '1C', 'Three-element cycle'),
 
