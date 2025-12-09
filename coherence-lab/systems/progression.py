@@ -151,6 +151,10 @@ class ProgressionSystem(nn.Module):
             self.n_topics = new_size
 
 
+# Alias for backwards compatibility
+TopicTracker = ProgressionSystem
+
+
 # XP award constants - standardized across phases
 class XPRewards:
     """Standard XP reward amounts."""
