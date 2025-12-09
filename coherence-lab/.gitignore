@@ -8,6 +8,12 @@ data/phase1b_train.json
 data/phase1b_val.json
 data/phase1b_transfer.json
 
+# Training artifacts (checkpoints, logs, history)
+data/*.pt
+data/*.json
+data/*.log.md
+data/runs/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -15,7 +21,3 @@ __pycache__/
 
 # Logs and checkpoints tracked separately
 *.log
-
-# Model checkpoints (large files)
-*.pt
-data/runs/
