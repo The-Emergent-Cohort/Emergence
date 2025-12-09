@@ -523,27 +523,28 @@ class PatternType:
 
 
 # Year 0: Quantitative Primitives - THE FOUNDATION OF EVERYTHING
+# REORDERED BY LEARNABILITY: easy wins first, build to harder
 YEAR_0_PATTERNS = [
-    # 0A: Successor & Predecessor (What comes next/before?)
-    PatternType('successor', gen_successor, 1, 0, '0A', 'n → n+1'),
-    PatternType('predecessor', gen_predecessor, 1, 0, '0A', 'n → n-1'),
-    PatternType('successor_chain', gen_successor_chain, 2, 0, '0A', 'Counting up'),
-    PatternType('predecessor_chain', gen_predecessor_chain, 2, 0, '0A', 'Counting down'),
+    # 0A: Easy Wins - chains have context, they master these fast
+    PatternType('successor_chain', gen_successor_chain, 1, 0, '0A', 'Counting up [1,2,3]→4'),
+    PatternType('predecessor_chain', gen_predecessor_chain, 1, 0, '0A', 'Counting down [5,4,3]→2'),
+    PatternType('count_sequence', gen_count_sequence, 2, 0, '0A', 'How many? [a,b,c]→3'),
 
-    # 0B: Quantity & Comparison
-    PatternType('count_sequence', gen_count_sequence, 2, 0, '0B', 'How many elements?'),
-    PatternType('greater_than', gen_greater_than, 1, 0, '0B', 'a > b?'),
-    PatternType('less_than', gen_less_than, 1, 0, '0B', 'a < b?'),
+    # 0B: Grounded Single-Number - group context primes +1/-1
+    PatternType('group_plus_one', gen_group_plus_one, 1, 0, '0B', 'One joins [3]→4'),
+    PatternType('group_minus_one', gen_group_minus_one, 1, 0, '0B', 'One leaves [3]→2'),
+    PatternType('remainder_from_group', gen_remainder_from_group, 2, 0, '0B', 'Remaining [5,2]→3'),
 
-    # 0C: Basic Operations
+    # 0C: Abstract Single-Number - harder without context
+    PatternType('successor', gen_successor, 2, 0, '0C', 'n → n+1'),
+    PatternType('predecessor', gen_predecessor, 2, 0, '0C', 'n → n-1'),
     PatternType('double', gen_double, 2, 0, '0C', 'n → 2n'),
     PatternType('half', gen_half, 2, 0, '0C', 'n → n/2'),
-    PatternType('missing_addend', gen_missing_addend, 3, 0, '0C', 'a + ? = c'),
 
-    # 0D: Grounded Group Math (classroom context: 3 students, 4 entities)
-    PatternType('remainder_from_group', gen_remainder_from_group, 2, 0, '0D', 'Group - active = remaining'),
-    PatternType('group_minus_one', gen_group_minus_one, 1, 0, '0D', 'One leaves the group'),
-    PatternType('group_plus_one', gen_group_plus_one, 1, 0, '0D', 'One joins the group'),
+    # 0D: Comparison & Algebra - relational thinking
+    PatternType('greater_than', gen_greater_than, 2, 0, '0D', 'a > b? → 0/1'),
+    PatternType('less_than', gen_less_than, 2, 0, '0D', 'a < b? → 0/1'),
+    PatternType('missing_addend', gen_missing_addend, 3, 0, '0D', 'a + ? = c'),
 ]
 
 
