@@ -684,14 +684,8 @@ def main(args):
             playday_patterns = list(set(mastered_patterns + active_pattern_names))
             run_playday(broker, playday_patterns, pattern_to_idx, device, epoch)
 
-            # Still run exams on playday (they earned it!)
-            exam_results = run_exams(broker, active_pattern_names, pattern_to_idx, device, epoch)
-            total_exams = sum(len(r) for r in exam_results.values())
-            if total_exams > 0:
-                print(f"\n  Exams this epoch: {total_exams}")
-
-            # Check section mastery and graduation (same as regular epoch)
-            # Skip to end of loop - no training on playday
+            # No exams on playday - it's a real break!
+            # Check section mastery though (in case they crossed threshold during play)
             if phased and current_phase < len(available_sections) - 1:
                 current_section = active_sections[-1]
                 section_pattern_names = [p.name for p in get_patterns_by_section(current_section)]
