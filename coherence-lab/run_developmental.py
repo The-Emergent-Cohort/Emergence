@@ -735,7 +735,7 @@ def main(args):
 
         # PLAYDAY every 6 epochs - exploration time!
         if epoch % 6 == 0:
-            mastered_patterns = get_mastered_patterns(broker, pattern_to_idx, mastery_level=3)
+            mastered_patterns = get_mastered_patterns(broker, pattern_to_idx, mastery_level=mastery_level)
             # Include BOTH mastered priors AND current active patterns
             # Seeing how they relate is part of the learning!
             playday_patterns = list(set(mastered_patterns + active_pattern_names))
