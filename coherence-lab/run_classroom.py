@@ -236,7 +236,8 @@ def train_epoch_parallel(
         'show_count': 0, 'approval_count': 0,
         'xp_from_shows': 0.0,
         'tutoring_received': 0,  # Times received help
-        'tutoring_given': 0      # Times gave help
+        'tutoring_given': 0,     # Times gave help
+        'xp_from_tutoring': 0.0  # XP earned from tutoring others
     } for name in broker.students.keys()}
 
     # Approval-seeking parameters
@@ -244,6 +245,7 @@ def train_epoch_parallel(
     APPROVAL_XP_BONUS = 3.0    # XP bonus for validated work
     TUTORING_WEIGHT = 0.3      # Weight for knowledge distillation loss
     DISTILL_TEMP = 2.0         # Temperature for soft labels
+    TUTOR_XP_BONUS = 0.5       # XP tutors earn for helping (teaching reinforces learning)
 
     for batch in train_loader:
         tokens = batch['tokens'].to(device)
@@ -313,6 +315,10 @@ def train_epoch_parallel(
                     # Track tutoring
                     results[name]['tutoring_received'] += 1
                     results[tutor_name]['tutoring_given'] += 1
+
+                    # Tutor earns XP for helping (teaching reinforces learning)
+                    tutor.topic_tracker.award_xp(pt_idx, TUTOR_XP_BONUS)
+                    results[tutor_name]['xp_from_tutoring'] += TUTOR_XP_BONUS
 
             # Combined loss
             loss = main_loss + 0.1 * conf_loss
