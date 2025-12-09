@@ -133,6 +133,11 @@ def get_patterns_for_sections(sections):
     return patterns
 
 
+def get_pattern_by_name(name):
+    """Get a pattern object by its name."""
+    return next((p for p in ALL_PATTERNS if p.name == name), None)
+
+
 def train_epoch(broker, loader, optimizers, criterion, device, pattern_to_idx, tutoring_pairs=None):
     """Train all students for one epoch."""
     broker.train()
@@ -470,6 +475,79 @@ def generate_creative_challenge(mastered_patterns, vocab_size=26):
     return challenge, f"Creative {challenge_type} challenge using {pattern.name}"
 
 
+def run_question_period(broker, active_pattern_names, pattern_to_idx, device, epochs_on_topic):
+    """
+    Question period at start of epoch - students surface uncertainty.
+
+    Students predict on diagnostic examples, revealing where they're confused.
+    Teacher can then provide targeted scaffolding before training begins.
+    Especially valuable during "grind" epochs - a question might unlock a puzzle.
+
+    Only runs after first epoch on a topic (need baseline experience first).
+    """
+    if epochs_on_topic <= 1:
+        return {}  # First epoch on topic - no questions yet
+
+    print(f"\n  📋 Question Period (day {epochs_on_topic} on topic)")
+
+    # Sample a diagnostic example from each active pattern
+    uncertainties = {name: {} for name in broker.students.keys()}
+
+    for pattern_name in active_pattern_names:
+        if pattern_name not in pattern_to_idx:
+            continue
+
+        # Get pattern and generate a diagnostic example
+        pattern = get_pattern_by_name(pattern_name)
+        if pattern is None:
+            continue
+
+        example = pattern.generate()
+        if len(example['sequence']) < 2:
+            continue
+
+        # Prepare input
+        max_len = 12
+        seq = example['sequence']
+        padded = seq + [0] * (max_len - len(seq))
+        tokens = torch.tensor(padded[:max_len], dtype=torch.long).unsqueeze(0).to(device)
+        target = example['target']
+        seq_len = [len(seq)]
+
+        # Each student predicts with confidence
+        for name, student in broker.students.items():
+            student.eval()
+            with torch.no_grad():
+                logits, _, _ = student(tokens, seq_len)
+                probs = torch.softmax(logits, dim=-1)
+                pred = logits.argmax(dim=-1).item()
+                confidence = probs[0, pred].item()
+                correct = (pred == target)
+
+            # Track uncertainty (low confidence or wrong = uncertain)
+            uncertain = not correct or confidence < 0.7
+            uncertainties[name][pattern_name] = {
+                'correct': correct,
+                'confidence': confidence,
+                'uncertain': uncertain
+            }
+
+    # Report class uncertainties
+    confused_patterns = set()
+    for name in broker.students:
+        uncertain_list = [p for p, v in uncertainties[name].items() if v['uncertain']]
+        if uncertain_list:
+            confused_patterns.update(uncertain_list)
+
+    if confused_patterns:
+        print(f"    Students showing uncertainty on: {list(confused_patterns)}")
+        # Could add scaffolding hints here in the future
+    else:
+        print(f"    Class feeling confident today!")
+
+    return uncertainties
+
+
 def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_size=26):
     """
     Run a playday session - exploration without grades.
@@ -789,16 +867,22 @@ def main(args):
     history = []
     best_acc = 0
     mastery_level = args.mastery_level  # Level required to advance phase
+    epochs_on_phase = 0  # Track time on current topic for playday/question timing
 
     for epoch in range(1, max_epochs + 1):
+        epochs_on_phase += 1
+
         print(f"\n{'='*70}")
         print(f"Epoch {epoch}" + (f"/{max_epochs}" if args.epochs > 0 else ""))
         if phased:
-            print(f"Phase {current_phase + 1}/{len(available_sections)}: {active_sections}")
+            print(f"Phase {current_phase + 1}/{len(available_sections)}: {active_sections} (day {epochs_on_phase})")
         print("=" * 70)
 
-        # PLAYDAY every 5th epoch (4 work, 1 play) - replaces training
-        if epoch % 5 == 0:
+        # QUESTION PERIOD at start of epoch (after first day on topic)
+        run_question_period(broker, active_pattern_names, pattern_to_idx, device, epochs_on_phase)
+
+        # PLAYDAY every 5th epoch on a topic (4 work, 1 play) - replaces training
+        if epochs_on_phase % 5 == 0:
             mastered_patterns = get_mastered_patterns(broker, pattern_to_idx, mastery_level=mastery_level)
             playday_patterns = list(set(mastered_patterns + active_pattern_names))
             run_playday(broker, playday_patterns, pattern_to_idx, device, epoch)
@@ -816,6 +900,7 @@ def main(args):
                     print(f"  *** SECTION {current_section} MASTERED! ***")
                     print(f"  *** All students at L{mastery_level}+ on: {section_pattern_names} ***")
                     current_phase += 1
+                    epochs_on_phase = 0  # Reset for new topic
                     active_sections = available_sections[:current_phase + 1]
                     active_patterns = get_patterns_for_sections(active_sections)
                     active_pattern_names = [p.name for p in active_patterns]
@@ -913,6 +998,7 @@ def main(args):
 
                 # Advance to next phase
                 current_phase += 1
+                epochs_on_phase = 0  # Reset for new topic
                 active_sections = available_sections[:current_phase + 1]
                 active_patterns = get_patterns_for_sections(active_sections)
                 active_pattern_names = [p.name for p in active_patterns]
