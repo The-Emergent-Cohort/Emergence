@@ -455,10 +455,19 @@ def main(args):
                 'per_student': {name: val_results[name]['accuracy'] for name in broker.students},
             }, data_dir / f'classroom_{session_id}_best.pt')
 
-        # Early stopping check
-        if class_acc >= 0.90:
+        # Early stopping check - ALL students must have ALL patterns at L10 confirmed
+        all_graduated = True
+        for student in broker.students.values():
+            n_patterns = len(pattern_types)
+            student_grads = student.exam_system.topic_graduated[:n_patterns].sum().item()
+            if student_grads < n_patterns:
+                all_graduated = False
+                break
+
+        if all_graduated:
             print(f"\n{'*'*60}")
-            print(f"*** CLASS GRADUATED! Average accuracy: {class_acc:.1%} ***")
+            print(f"*** CLASS GRADUATED! All students mastered all patterns! ***")
+            print(f"*** Final accuracy: {class_acc:.1%} ***")
             print(f"{'*'*60}")
             break
 
