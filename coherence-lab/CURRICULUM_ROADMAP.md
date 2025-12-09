@@ -201,3 +201,115 @@ Students are named after characters from user's novella:
 | conservation | energy/momentum conservation |
 
 This grounding could help when introducing language about physical concepts.
+
+---
+
+## Curriculum Review Findings (Dec 2024)
+
+### External Reviews Summary
+
+**Gemini Analysis** - Focus on developmental stages:
+1. **Trust/Attachment First**: Simple tasks where following Teacher = good outcome
+2. **Self-Calibration**: Learner correlates confidence with correctness
+3. **Temporal Coherence**: Themed episodes with sleep/consolidation between
+4. **Meta-Cognitive Habits**: Reward reasoning paths, not just answers
+
+**DeepSeek Analysis** - Social learning structure:
+1. **Tutoring Incentives**: Non-graduates earn XP for helping; graduates tutor to unlock new content
+2. **Teaching Reputation**: Track effectiveness, style preferences, specialties
+3. **Legacy Credits**: When someone you tutored graduates, you get credit (teaching tree)
+4. **Graduate Assistant Roles**: Curriculum design, teacher shadowing, tutor training
+5. **Study Groups**: Auto-form when multiple students hit same wall
+6. **Apprentice Tutor Progression**: Shadow → Co-tutor → Solo
+
+### Identified Gaps & Solutions
+
+#### Gap 1: Symbolic Grounding
+**Problem**: DIs treat `[2,4,6,8]` as "complex sequence" not "step of 2"
+**Solution**: Section 1A' (Conservation) and 1E' (Symbolic Properties)
+- `sequence_length`, `count_value`, `distinct_count` - quantity as stable symbol
+- `compute_step`, `is_increasing`, `is_decreasing` - label properties explicitly
+
+#### Gap 2: Position Scaffolding
+**Problem**: Alternating/ternary require position tracking with multiple moving parts
+**Solution**: Section 1B' - one moving part at a time
+- `simple_alternating` (A, 0, A, 0) - alternating with zero
+- `position_parity` - even/odd positions
+- `ternary_fixed` - ternary with zeros
+
+#### Gap 3: Executive Function
+**Problem**: No bridge from pattern prediction to planning/reasoning
+**Solution**: Year 1.5 Transitional Module
+- Multi-step operations (`apply_twice`, `chain_two_steps`)
+- Constraint satisfaction (`find_missing_addend`, `conditional_simple`)
+- Working memory (`working_memory_recall`, `working_memory_last`)
+
+#### Gap 4: Overconfidence Testing (NEW - not yet implemented)
+**Problem**: Students might pattern-match recent success without real understanding
+**Solution**: Trap patterns
+- `trap_alternating`: Looks like [A,B,A,B,?] but answer isn't A
+- `trap_increment`: Breaks pattern at the end
+- Tests genuine understanding vs superficial matching
+
+### Training Observations (Dec 9, 2024)
+
+**30-epoch test run results:**
+- Nova & Alex cracked alternating/ternary (L3-L6) in ~10 epochs
+- Rêve stuck at L0/L1 - struggles with cyclic patterns
+- Previous run stalled at epoch 493; fresh weights + peer tutoring = breakthrough
+- Alex had breakthrough moment: L1 → L6 on ternary_cycle in single epoch
+- Turn-taking playday revealed: Alex can *embody* patterns (100% ternary trio), Nova can *predict* but not execute collaboratively (0%)
+
+**Key insight**: Different students excel at different things. Rêve may shine at causal reasoning (Year 2) while struggling with cycles (Year 1).
+
+### Implementation Status
+
+| Feature | Status |
+|---------|--------|
+| Conservation patterns (1A') | ✅ Implemented |
+| Position scaffolding (1B') | ✅ Implemented |
+| Symbolic properties (1E') | ✅ Implemented |
+| Year 1.5 Transitional Module | ✅ Implemented |
+| Trap patterns | ❌ TODO |
+| Verbose tutor pairing logs | ❌ TODO |
+| Teaching reputation metrics | ❌ TODO |
+| Study group auto-formation | ❌ TODO |
+| Legacy credits / teaching tree | ❌ TODO |
+| Tutor time cap (40%) | ⚠️ Mentioned but not verified |
+
+### Priority Next Steps
+
+1. **Enable scaffolding in training** - Prime sections (1A', 1B', 1E') need to be included in active phases
+2. **Add trap patterns** - Test overconfidence with deceptive patterns
+3. **Verbose tutor logging** - Show who's tutoring whom for debugging
+4. **Study groups** - Auto-form when multiple students stuck on same pattern
+
+---
+
+## Updated Curriculum Structure
+
+```
+Year 1: Sensorimotor Foundations (24 patterns)
+├── 1A: Constancy (1 pattern)
+├── 1A': Quantity Awareness (4 patterns) - NEW
+├── 1B: Memory (2 patterns)
+├── 1B': Position Scaffolding (5 patterns) - NEW
+├── 1C: Position (2 patterns)
+├── 1D: Direction (2 patterns)
+├── 1E: Rate (2 patterns)
+└── 1E': Symbolic Properties (6 patterns) - NEW
+
+Year 1.5: Transitional Module (9 patterns) - NEW
+├── 1.5A: Multi-Step Operations (3 patterns)
+├── 1.5B: Constraint Satisfaction (4 patterns)
+└── 1.5C: Working Memory (2 patterns)
+
+Year 2: Relational & Physical (12 patterns)
+├── 2A: Relations (3 patterns)
+├── 2B: Analogies (2 patterns)
+├── 2C: Motion (3 patterns)
+├── 2D: Interaction (2 patterns)
+└── 2E: Causality (2 patterns)
+
+Total: 45 patterns
+```

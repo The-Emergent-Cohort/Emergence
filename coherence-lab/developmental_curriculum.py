@@ -111,6 +111,52 @@ def gen_variable_step(vocab_size: int) -> Dict:
 
 
 # =============================================================================
+# TRAP PATTERNS (Test overconfidence vs true understanding)
+# These patterns look like familiar patterns but have different answers
+# =============================================================================
+
+def gen_trap_alternating(vocab_size: int) -> Dict:
+    """[A, B, A, B, C] → ? - Looks alternating but ends with surprise element."""
+    a, b, c = random.sample(range(vocab_size), 3)
+    # Build alternating pattern then break it
+    seq = [a, b, a, b, c]
+    # Target continues the NEW pattern (c was introduced, what comes next?)
+    # Most likely interpretation: sequence restarted, so next is a
+    # But we'll make target = a (continuing from position) to test if they notice the break
+    target = a  # Position 5 in alternating would be a
+    return {'sequence': seq, 'target': target}
+
+
+def gen_trap_increment(vocab_size: int) -> Dict:
+    """[1, 2, 3, 4, 2] → ? - Incrementing that suddenly breaks."""
+    length = 4
+    start = random.randint(1, vocab_size // 2)
+    seq = [start + i for i in range(length)]
+    # Add a break element
+    break_val = random.randint(0, start)
+    seq.append(break_val)
+    # Target: if they see "break means restart", answer would be break_val + 1
+    # If they see "noise", answer would continue increment
+    # We'll make target = break_val + 1 (new sequence started)
+    target = break_val + 1
+    if target >= vocab_size:
+        return gen_trap_increment(vocab_size)
+    return {'sequence': seq, 'target': target}
+
+
+def gen_trap_constant(vocab_size: int) -> Dict:
+    """[5, 5, 5, 5, 3] → ? - Constant that breaks at end."""
+    val = random.randint(1, vocab_size - 2)
+    break_val = random.randint(0, vocab_size - 1)
+    while break_val == val:
+        break_val = random.randint(0, vocab_size - 1)
+    seq = [val, val, val, val, break_val]
+    # Target: the new value (treating break as signal of new constant)
+    target = break_val
+    return {'sequence': seq, 'target': target}
+
+
+# =============================================================================
 # YEAR 2: RELATIONAL & PHYSICAL
 # =============================================================================
 
@@ -317,6 +363,11 @@ YEAR_1_PATTERNS = [
     # 1E: Rate of Change
     PatternType('fixed_offset', gen_fixed_offset, 3, 1, '1E', 'Count by fixed step'),
     PatternType('variable_step', gen_variable_step, 4, 1, '1E', 'Increasing step size'),
+
+    # 1F: Trap Patterns (test overconfidence)
+    PatternType('trap_alternating', gen_trap_alternating, 5, 1, '1F', 'Alternating with surprise'),
+    PatternType('trap_increment', gen_trap_increment, 5, 1, '1F', 'Increment with break'),
+    PatternType('trap_constant', gen_trap_constant, 4, 1, '1F', 'Constant with break'),
 ]
 
 YEAR_2_PATTERNS = [

@@ -26,7 +26,8 @@ from systems import ExaminationSystem
 from systems.progression import TopicTracker
 
 # Section order for phased training
-YEAR_1_SECTIONS = ['1A', '1B', '1C', '1D', '1E']
+# Note: 1F (Trap Patterns) tests overconfidence - add after students master 1A-1E
+YEAR_1_SECTIONS = ['1A', '1B', '1C', '1D', '1E', '1F']
 YEAR_2_SECTIONS = ['2A', '2B', '2C', '2D', '2E']
 ALL_SECTIONS = YEAR_1_SECTIONS + YEAR_2_SECTIONS
 
@@ -829,6 +830,18 @@ def main(args):
         active_tutoring = sum(len(p) for p in tutoring_pairs.values())
         if active_tutoring > 0:
             print(f"\n  Peer tutoring: {active_tutoring} pairs")
+            # Verbose: show who's tutoring whom on what
+            tutor_summary = {}  # tutor -> [(learner, pattern), ...]
+            for pt_idx, pairs in tutoring_pairs.items():
+                if pairs and pt_idx < len(active_pattern_names):
+                    pattern = active_pattern_names[pt_idx]
+                    for learner, tutor in pairs.items():
+                        if tutor not in tutor_summary:
+                            tutor_summary[tutor] = []
+                        tutor_summary[tutor].append((learner, pattern))
+            for tutor, assignments in tutor_summary.items():
+                learners = ', '.join(f"{l}({p})" for l, p in assignments)
+                print(f"    {tutor} → {learners}")
 
         # Train
         train_results = train_epoch(
