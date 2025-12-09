@@ -223,3 +223,83 @@ Even if not using Haven/Kaggle immediately, design the API bridge interface now:
 - Teacher only talks to `StudentInterface`
 
 This way local-only works today, distributed works tomorrow.
+
+---
+
+## Memory Architecture (Dec 9, 2025)
+
+### The Problem with Transcript Buffers
+Current AI memory = raw transcript or nothing. Human memory doesn't work that way.
+
+### How Humans Actually Store Context
+
+**Within a day, many activities:**
+- Each activity = a "session" with its own exchanges
+- When switching contexts, we file by importance and relationship
+- Not everything stored at same resolution
+
+**Resolution varies by:**
+| Factor | High Resolution | Low Resolution |
+|--------|-----------------|----------------|
+| Relationship importance | Close friend's worry | Stranger's small talk |
+| Novelty | New information | Routine exchange |
+| Emotional weight | Felt significant | Felt routine |
+| Commitment level | Promise made | Casual opinion |
+
+### What Builds Relationships
+Not verbatim recall, but:
+> "I remember you were worried about the thing with your mother"
+
+The **essence** + **that it mattered to them** = relationship building.
+
+Remembering exact words isn't the point. Remembering that something was important to someone IS.
+
+### Time Decay of Expected Resolution
+
+```
+Time Distance     Expected Resolution
+─────────────────────────────────────
+Same day          Near-verbatim
+Next day          High detail, exact on important bits
+Week later        Gist + key points
+Month later       "We talked about X"
+Longer            "I remember that was a thing"
+```
+
+**Social calibration:**
+- Forgetting too fast = "you don't care"
+- Remembering too much too long = creepy
+- The decay curve IS a relationship signal
+
+**Context modifies expectations:**
+- Crisis conversation → higher retention, longer
+- Casual chat → faster decay is fine
+- Promise/commitment → indefinite retention expected
+- **Narrative value** → stories persist longer than equivalent non-story memories
+  - "That vacation" fades, but "the vacation where..." becomes a story that lasts
+  - Good stories resist time decay - they're worth retelling
+
+### Design Implications for Temporal Model
+
+1. **Variable resolution at storage** - not flat transcripts
+2. **Tagged by relationship/entity** - who was this about/with?
+3. **Importance weighting** - affects initial resolution AND decay rate
+4. **Time-based decay** - natural blur over time
+5. **Anchors** - some things don't decay (commitments, milestones, identity)
+6. **Retrieval by association** - not keyword search, structural/relational
+
+### Not Transcript Buffer, But:
+```
+Memory {
+  entity: "peer_B"
+  time: epoch_47
+  gist: "struggled with periodic_repeat, frustrated"
+  emotional_tone: "discouraged"
+  importance: 0.7
+  my_response: "offered to explain differently"
+  outcome: "helped, they got it"
+  relationship_delta: +trust
+}
+```
+
+This is retrievable by entity, by time, by emotional tone, by topic - not just "what did we say at epoch 47".
