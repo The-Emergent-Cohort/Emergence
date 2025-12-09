@@ -934,6 +934,7 @@ def main(args):
     best_acc = 0
     mastery_level = args.mastery_level  # Level required to advance phase
     epochs_on_phase = 0  # Track time on current topic for playday/question timing
+    pending_celebration = None  # Section that was just mastered (triggers celebration next epoch)
 
     for epoch in range(1, max_epochs + 1):
         epochs_on_phase += 1
@@ -943,6 +944,16 @@ def main(args):
         if phased:
             print(f"Phase {current_phase + 1}/{len(available_sections)}: {active_sections} (day {epochs_on_phase})")
         print("=" * 70)
+
+        # CELEBRATION PLAYDAY - runs the day after mastering a section
+        if pending_celebration is not None:
+            print(f"\n  *** CELEBRATION PLAYDAY! (mastered {pending_celebration}) ***")
+            mastered_for_play = get_mastered_patterns(broker, pattern_to_idx, mastery_level=mastery_level)
+            celebration_patterns = list(set(mastered_for_play + active_pattern_names))
+            new_section = active_sections[-1]
+            run_playday(broker, celebration_patterns, pattern_to_idx, device, epoch, new_section)
+            pending_celebration = None
+            continue  # Celebration day - no training, no exams
 
         # QUESTION PERIOD at start of epoch (after first day on topic)
         run_question_period(broker, active_pattern_names, pattern_to_idx, device, epochs_on_phase)
@@ -977,6 +988,8 @@ def main(args):
                     train_data, val_data = create_datasets(active_sections, args, seed_offset=epoch)
                     train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
                     val_loader = DataLoader(val_data, batch_size=args.batch_size, collate_fn=collate_fn)
+                    # Schedule celebration for next epoch
+                    pending_celebration = current_section
             continue  # Skip training on playday
 
         # Tutoring pairs (only for active patterns)
@@ -1079,13 +1092,9 @@ def main(args):
                 train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
                 val_loader = DataLoader(val_data, batch_size=args.batch_size, collate_fn=collate_fn)
 
-                # CELEBRATION PLAYDAY - play with mastered + peek at new patterns
-                # Curiosity before explanation
-                print(f"\n  *** CELEBRATION PLAYDAY! ***")
-                mastered_for_play = get_mastered_patterns(broker, pattern_to_idx, mastery_level=mastery_level)
-                celebration_patterns = list(set(mastered_for_play + active_pattern_names))
-                new_section = available_sections[current_phase]
-                run_playday(broker, celebration_patterns, pattern_to_idx, device, epoch, new_section)
+                # Schedule celebration playday for next epoch
+                # "You passed! Tomorrow we celebrate!"
+                pending_celebration = current_section
 
             else:
                 # Show progress toward mastery
