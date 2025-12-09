@@ -502,7 +502,7 @@ def run_question_period(broker, active_pattern_names, pattern_to_idx, device, ep
         if pattern is None:
             continue
 
-        example = pattern.generate()
+        example = pattern.generator()
         if len(example['sequence']) < 2:
             continue
 
@@ -663,9 +663,9 @@ def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_
 
     # === PHASE 3: TURN-TAKING CHALLENGES ===
     # Students build sequences together, feeling the rhythm of alternating/ternary
-    # Only run if alternating or ternary_cycle patterns are unlocked
-    has_positional = 'alternating' in mastered_patterns or 'ternary_cycle' in mastered_patterns
-    if has_positional:
+    # Only run starting from 1D (counting, skip_count) - let them master 1C first
+    has_arithmetic = 'counting' in mastered_patterns or 'skip_count' in mastered_patterns
+    if has_arithmetic:
         print("\n  --- Turn-Taking Challenges ---")
         student_names = list(broker.students.keys())
 
