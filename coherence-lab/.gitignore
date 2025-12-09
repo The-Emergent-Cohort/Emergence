@@ -8,14 +8,6 @@ data/phase1b_train.json
 data/phase1b_val.json
 data/phase1b_transfer.json
 
-# Checkpoints and model files (too large for git)
-*.pt
-data/*.json
-data/runs/
-
-# Training logs (can get large)
-data/*.log.md
-
 # Python
 __pycache__/
 *.py[cod]
