@@ -131,42 +131,64 @@ def identify_tutoring_pairs(
     broker,
     pattern_types: list,
     pattern_to_idx: dict,
-    struggle_threshold: int = 3  # Confirmed level below which = struggling
+    level_gap_to_tutor: int = 3  # Offer tutoring if 3+ levels ahead
 ) -> dict:
     """
     Identify tutor-student pairs for peer teaching.
 
-    A student is "struggling" on a pattern if their confirmed level < threshold.
-    A student can "tutor" if they've graduated (L10) that pattern.
+    Tutoring rules:
+    - Graduates (L10) always offer tutoring on their topic
+    - Anyone 3+ levels ahead offers tutoring
+    - Any non-graduate can ask for help from higher-level peers
+    - Prioritize graduates > highest level gap
 
     Returns:
-        Dict[pattern_idx, Dict[struggling_student_name, tutor_student_name]]
+        Dict[pattern_idx, Dict[learner_name, tutor_name]]
     """
     tutoring = {}
 
     for pt_idx, pt in enumerate(pattern_types):
         tutoring[pt_idx] = {}
 
-        # Find graduates (potential tutors) for this pattern
-        tutors = []
-        struggling = []
+        # Get each student's confirmed level for this pattern
+        student_levels = {}
+        graduates = []
 
         for name, student in broker.students.items():
             confirmed = student.exam_system.confirmed_level[pt_idx].item()
             graduated = student.exam_system.topic_graduated[pt_idx].item()
-
+            student_levels[name] = confirmed
             if graduated:
-                tutors.append(name)
-            elif confirmed < struggle_threshold:
-                struggling.append((name, confirmed))
+                graduates.append(name)
 
-        # Match struggling students with tutors
-        # Prefer tutors who aren't themselves struggling elsewhere
-        if tutors and struggling:
-            for student_name, level in struggling:
-                # Pick first available tutor (could be smarter)
-                tutor_name = tutors[0]
-                tutoring[pt_idx][student_name] = tutor_name
+        # For each non-graduate, find a tutor
+        for learner_name, learner_level in student_levels.items():
+            if learner_name in graduates:
+                continue  # Graduates don't need tutoring on this topic
+
+            # Find best tutor: prefer graduates, then highest level gap
+            best_tutor = None
+            best_gap = 0
+
+            for tutor_name, tutor_level in student_levels.items():
+                if tutor_name == learner_name:
+                    continue
+
+                gap = tutor_level - learner_level
+
+                # Graduates always available, or 3+ level gap
+                is_graduate = tutor_name in graduates
+                can_tutor = is_graduate or gap >= level_gap_to_tutor
+
+                if can_tutor:
+                    # Prefer graduates, then largest gap
+                    tutor_priority = (1 if is_graduate else 0, gap)
+                    if best_tutor is None or tutor_priority > (1 if best_tutor in graduates else 0, best_gap):
+                        best_tutor = tutor_name
+                        best_gap = gap
+
+            if best_tutor:
+                tutoring[pt_idx][learner_name] = best_tutor
 
     return tutoring
 
