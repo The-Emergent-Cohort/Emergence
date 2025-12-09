@@ -37,42 +37,6 @@ class ProgressionSystem(nn.Module):
         self.register_buffer('topic_xp', torch.zeros(n_topics))
         self.register_buffer('topic_xp_high', torch.zeros(n_topics))  # High water mark
 
-        # Per-topic accuracy tracking
-        self.register_buffer('topic_correct', torch.zeros(n_topics))
-        self.register_buffer('topic_total', torch.zeros(n_topics))
-        self.register_buffer('topic_conf_sum', torch.zeros(n_topics))  # For calibration
-
-    def update(self, topic_indices, correct, confidence=None):
-        """
-        Update accuracy stats for topics.
-
-        Args:
-            topic_indices: Tensor of topic indices
-            correct: Tensor of bools (was prediction correct)
-            confidence: Optional tensor of confidence scores
-        """
-        with torch.no_grad():
-            for i, idx in enumerate(topic_indices):
-                idx = idx.item() if hasattr(idx, 'item') else idx
-                if idx < self.n_topics:
-                    self.topic_total[idx] += 1
-                    if correct[i]:
-                        self.topic_correct[idx] += 1
-                    if confidence is not None and i < len(confidence):
-                        self.topic_conf_sum[idx] += confidence[i]
-
-    def get_accuracy(self, topic_idx):
-        """Get accuracy for a topic."""
-        total = self.topic_total[topic_idx].item()
-        if total == 0:
-            return 0.0
-        return self.topic_correct[topic_idx].item() / total
-
-    @property
-    def progression(self):
-        """Self-reference for compatibility with TopicTracker interface."""
-        return self
-
     @staticmethod
     def xp_threshold(level):
         """
@@ -174,33 +138,17 @@ class ProgressionSystem(nn.Module):
 
             new_xp = torch.zeros(new_size, device=device)
             new_xp_high = torch.zeros(new_size, device=device)
-            new_correct = torch.zeros(new_size, device=device)
-            new_total = torch.zeros(new_size, device=device)
-            new_conf = torch.zeros(new_size, device=device)
 
             new_xp[:self.n_topics] = self.topic_xp
             new_xp_high[:self.n_topics] = self.topic_xp_high
-            new_correct[:self.n_topics] = self.topic_correct
-            new_total[:self.n_topics] = self.topic_total
-            new_conf[:self.n_topics] = self.topic_conf_sum
 
             del self.topic_xp
             del self.topic_xp_high
-            del self.topic_correct
-            del self.topic_total
-            del self.topic_conf_sum
 
             self.register_buffer('topic_xp', new_xp)
             self.register_buffer('topic_xp_high', new_xp_high)
-            self.register_buffer('topic_correct', new_correct)
-            self.register_buffer('topic_total', new_total)
-            self.register_buffer('topic_conf_sum', new_conf)
 
             self.n_topics = new_size
-
-
-# Alias for backwards compatibility
-TopicTracker = ProgressionSystem
 
 
 # XP award constants - standardized across phases
