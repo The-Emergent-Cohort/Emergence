@@ -1,7 +1,8 @@
 """
-Developmental Curriculum - Years 1 & 2
-From Sequences to Agents
+Developmental Curriculum - Years 0, 1 & 2
+From Numbers to Sequences to Agents
 
+Year 0: Quantitative Primitives (Number Sense)
 Year 1: Sensorimotor Foundations
 Year 2: Relational & Physical Understanding
 """
@@ -11,6 +12,82 @@ import torch
 from torch.utils.data import Dataset
 from typing import Dict, List, Optional, Callable
 from dataclasses import dataclass, field
+
+
+# =============================================================================
+# YEAR 0: QUANTITATIVE PRIMITIVES (Number Sense)
+# The substrate of all abstract reasoning - DeepSeek
+# =============================================================================
+
+def gen_successor(vocab_size: int) -> Dict:
+    """[n] → n+1 - The foundation of counting. What comes after?"""
+    n = random.randint(0, vocab_size - 2)
+    return {'sequence': [n], 'target': n + 1}
+
+
+def gen_predecessor(vocab_size: int) -> Dict:
+    """[n] → n-1 - What comes before?"""
+    n = random.randint(1, vocab_size - 1)
+    return {'sequence': [n], 'target': n - 1}
+
+
+def gen_count_sequence(vocab_size: int) -> Dict:
+    """[a, b, c, ...] → length - How many elements? (Cardinality)"""
+    length = random.randint(2, min(6, vocab_size - 1))
+    # Use distinct random values so it's clearly "count items" not "value"
+    seq = random.sample(range(vocab_size), length)
+    return {'sequence': seq, 'target': length}
+
+
+def gen_successor_chain(vocab_size: int) -> Dict:
+    """[1, 2, 3] → 4 - Counting up (successor applied repeatedly)."""
+    length = random.randint(2, 4)
+    start = random.randint(0, vocab_size - length - 2)
+    seq = [start + i for i in range(length)]
+    return {'sequence': seq, 'target': start + length}
+
+
+def gen_greater_than(vocab_size: int) -> Dict:
+    """[a, b] → 1 if a > b else 0 - Comparison as boolean."""
+    a = random.randint(0, vocab_size - 1)
+    b = random.randint(0, vocab_size - 1)
+    while a == b:
+        b = random.randint(0, vocab_size - 1)
+    target = 1 if a > b else 0
+    return {'sequence': [a, b], 'target': target}
+
+
+def gen_less_than(vocab_size: int) -> Dict:
+    """[a, b] → 1 if a < b else 0 - Comparison as boolean."""
+    a = random.randint(0, vocab_size - 1)
+    b = random.randint(0, vocab_size - 1)
+    while a == b:
+        b = random.randint(0, vocab_size - 1)
+    target = 1 if a < b else 0
+    return {'sequence': [a, b], 'target': target}
+
+
+def gen_missing_addend(vocab_size: int) -> Dict:
+    """[a, c] → b where a + b = c - Find the missing piece."""
+    # a + ? = c, so ? = c - a
+    a = random.randint(0, vocab_size // 2 - 1)
+    b = random.randint(1, vocab_size // 2 - 1)  # The missing piece (not 0)
+    c = a + b
+    if c >= vocab_size:
+        return gen_missing_addend(vocab_size)
+    return {'sequence': [a, c], 'target': b}
+
+
+def gen_double(vocab_size: int) -> Dict:
+    """[n] → 2n - Doubling (foundation for multiplication)."""
+    n = random.randint(1, vocab_size // 2 - 1)
+    return {'sequence': [n], 'target': n * 2}
+
+
+def gen_half(vocab_size: int) -> Dict:
+    """[n] → n/2 - Halving (for even numbers)."""
+    n = random.choice([i for i in range(2, vocab_size) if i % 2 == 0])
+    return {'sequence': [n], 'target': n // 2}
 
 
 # =============================================================================
@@ -411,6 +488,25 @@ class PatternType:
     description: str
 
 
+# Year 0: Quantitative Primitives - THE FOUNDATION OF EVERYTHING
+YEAR_0_PATTERNS = [
+    # 0A: Successor & Predecessor (What comes next/before?)
+    PatternType('successor', gen_successor, 1, 0, '0A', 'n → n+1'),
+    PatternType('predecessor', gen_predecessor, 1, 0, '0A', 'n → n-1'),
+    PatternType('successor_chain', gen_successor_chain, 2, 0, '0A', 'Counting sequence'),
+
+    # 0B: Quantity & Comparison
+    PatternType('count_sequence', gen_count_sequence, 2, 0, '0B', 'How many elements?'),
+    PatternType('greater_than', gen_greater_than, 1, 0, '0B', 'a > b?'),
+    PatternType('less_than', gen_less_than, 1, 0, '0B', 'a < b?'),
+
+    # 0C: Basic Operations
+    PatternType('double', gen_double, 2, 0, '0C', 'n → 2n'),
+    PatternType('half', gen_half, 2, 0, '0C', 'n → n/2'),
+    PatternType('missing_addend', gen_missing_addend, 3, 0, '0C', 'a + ? = c'),
+]
+
+
 YEAR_1_PATTERNS = [
     # 1A: Constancy
     PatternType('constant', gen_constant, 1, 1, '1A', 'Things stay the same'),
@@ -469,10 +565,11 @@ YEAR_2_PATTERNS = [
     PatternType('cause_effect', gen_cause_effect, 6, 2, '2E', 'Delayed causation'),
 ]
 
-ALL_PATTERNS = YEAR_1_PATTERNS + YEAR_2_PATTERNS
+ALL_PATTERNS = YEAR_0_PATTERNS + YEAR_1_PATTERNS + YEAR_2_PATTERNS
 
 
 def get_patterns_by_year(year: int) -> List[PatternType]:
+    """Get patterns for a specific year (0, 1, or 2)."""
     return [p for p in ALL_PATTERNS if p.year == year]
 
 
@@ -578,13 +675,19 @@ def collate_fn(batch):
 def print_curriculum():
     """Print the full curriculum structure."""
     print("=" * 70)
-    print("DEVELOPMENTAL CURRICULUM - Years 1 & 2")
+    print("DEVELOPMENTAL CURRICULUM - Years 0, 1 & 2")
     print("=" * 70)
 
-    for year in [1, 2]:
+    year_names = {
+        0: 'QUANTITATIVE PRIMITIVES (Number Sense)',
+        1: 'SENSORIMOTOR FOUNDATIONS',
+        2: 'RELATIONAL & PHYSICAL'
+    }
+
+    for year in [0, 1, 2]:
         year_patterns = get_patterns_by_year(year)
         print(f"\n{'='*50}")
-        print(f"YEAR {year}: {'SENSORIMOTOR FOUNDATIONS' if year == 1 else 'RELATIONAL & PHYSICAL'}")
+        print(f"YEAR {year}: {year_names[year]}")
         print(f"{'='*50}")
 
         sections = sorted(set(p.section for p in year_patterns))
@@ -596,6 +699,7 @@ def print_curriculum():
 
     print(f"\n{'='*70}")
     print(f"Total: {len(ALL_PATTERNS)} pattern types")
+    print(f"  Year 0: {len(YEAR_0_PATTERNS)} patterns")
     print(f"  Year 1: {len(YEAR_1_PATTERNS)} patterns")
     print(f"  Year 2: {len(YEAR_2_PATTERNS)} patterns")
 

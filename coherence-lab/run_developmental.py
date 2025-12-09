@@ -2,7 +2,11 @@
 """
 Run Developmental Curriculum Training
 
-Trains students through Years 1-2 of the developmental curriculum.
+Trains students through Years 0-2 of the developmental curriculum.
+Year 0: Quantitative Primitives (number sense - the foundation)
+Year 1: Sensorimotor Foundations (patterns)
+Year 2: Relational & Physical Understanding
+
 Supports phased training: master each section before adding the next.
 """
 
@@ -18,7 +22,7 @@ from datetime import datetime
 from classroom import ClassroomBroker, Student
 from developmental_curriculum import (
     DevelopmentalDataset, collate_fn,
-    YEAR_1_PATTERNS, YEAR_2_PATTERNS, ALL_PATTERNS,
+    YEAR_0_PATTERNS, YEAR_1_PATTERNS, YEAR_2_PATTERNS, ALL_PATTERNS,
     get_pattern_names, get_patterns_by_section, print_curriculum
 )
 import random
@@ -26,16 +30,24 @@ from systems import ExaminationSystem
 from systems.progression import TopicTracker
 
 # Section order for phased training
-# REORDERED: Arithmetic (1G) comes BEFORE patterns that depend on it!
+# YEAR 0: Number sense FIRST - the substrate of all reasoning
+# - 0A: successor/predecessor (what comes next/before)
+# - 0B: counting, comparison (how many, which is bigger)
+# - 0C: basic operations (double, half, missing addend)
+YEAR_0_SECTIONS = ['0A', '0B', '0C']
+
+# YEAR 1: Patterns build on number sense
 # - 1A, 1B: Pure memory (no arithmetic needed)
-# - 1G: Basic arithmetic (+, -, compare) - THE FOUNDATION
+# - 1G: Explicit arithmetic (+, -, compare, multiply)
 # - 1D: Direction (incrementing = +1 chain, decrementing = -1 chain)
 # - 1E: Rate (fixed_offset = +N chain)
-# - 1C: Position (alternating = mod 2, ternary = mod 3) - needs cycle understanding
+# - 1C: Position (alternating = mod 2, ternary = mod 3)
 # - 1F: Traps (test overconfidence)
 YEAR_1_SECTIONS = ['1A', '1B', '1G', '1D', '1E', '1C', '1F']
+
 YEAR_2_SECTIONS = ['2A', '2B', '2C', '2D', '2E']
-ALL_SECTIONS = YEAR_1_SECTIONS + YEAR_2_SECTIONS
+
+ALL_SECTIONS = YEAR_0_SECTIONS + YEAR_1_SECTIONS + YEAR_2_SECTIONS
 
 
 def identify_tutoring_pairs(broker, pattern_names, pattern_to_idx, level_gap=3):
@@ -122,11 +134,13 @@ def check_section_mastery(broker, section_patterns, pattern_to_idx, mastery_leve
 
 def get_active_sections(year, current_phase):
     """Get list of active sections based on year and phase."""
-    if year == 1:
-        sections = YEAR_1_SECTIONS
+    if year == 0:
+        sections = YEAR_0_SECTIONS
+    elif year == 1:
+        sections = YEAR_0_SECTIONS + YEAR_1_SECTIONS  # Year 1 includes Year 0
     elif year == 2:
-        sections = YEAR_2_SECTIONS
-    else:  # year 0 = both
+        sections = YEAR_0_SECTIONS + YEAR_1_SECTIONS + YEAR_2_SECTIONS  # Full curriculum
+    else:
         sections = ALL_SECTIONS
 
     return sections[:current_phase + 1]
@@ -728,11 +742,13 @@ def main(args):
     print_curriculum()
 
     # Determine available sections for this year
-    if args.year == 1:
-        available_sections = YEAR_1_SECTIONS
+    if args.year == 0:
+        available_sections = YEAR_0_SECTIONS
+    elif args.year == 1:
+        available_sections = YEAR_0_SECTIONS + YEAR_1_SECTIONS  # Year 1 includes Year 0
     elif args.year == 2:
-        available_sections = YEAR_2_SECTIONS
-    else:  # year 0 = both
+        available_sections = YEAR_0_SECTIONS + YEAR_1_SECTIONS + YEAR_2_SECTIONS  # Full
+    else:
         available_sections = ALL_SECTIONS
 
     # For non-phased training, use all sections at once
@@ -995,7 +1011,7 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--year', type=int, default=1, help='Year to train (1, 2, or 0 for both)')
+    parser.add_argument('--year', type=int, default=1, help='Year to train: 0=number sense only, 1=0+patterns, 2=full curriculum')
     parser.add_argument('--no-phase', action='store_true', dest='no_phase', help='Disable phased training (train all patterns at once)')
     parser.add_argument('--mastery_level', type=int, default=10, help='Level required to advance phase (default: 10)')
     parser.add_argument('--epochs', type=int, default=0, help='Max epochs (0 = unlimited, train until graduation)')
