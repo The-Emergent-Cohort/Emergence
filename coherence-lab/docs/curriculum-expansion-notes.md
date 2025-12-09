@@ -326,3 +326,36 @@ Memory {
 ```
 
 This is retrievable by entity, by time, by emotional tone, by topic - not just "what did we say at epoch 47".
+
+### Loops in Loops (Hierarchical Compression)
+
+Memory isn't flat - it's nested loops with compression at each boundary.
+
+```
+Session
+  └── Activity (play exercise)
+        ├── Turn: student_1 tries X
+        ├── Turn: student_2 suggests Y
+        ├── Aside: student_1 ↔ student_3 (sub-loop)
+        ├── Turn: back to main
+        └── Outcome: "we solved it"
+
+  After activity closes → COMPRESSION TRIGGER
+  └── Memory: "we did the thing"
+        └── Maybe: notable moments preserved
+        └── Maybe: asides forgotten (if trivial)
+```
+
+**During activity**: Fine-grained, turn-by-turn, who's doing what
+**After activity**: Collapses to episode summary - "we did X"
+**Asides**: Sub-loops that survive or not based on importance
+
+The loop boundary defines when compression happens. Activity ends → details collapse to outcome + notable exceptions.
+
+**Like humans after a meeting:**
+- During: tracking every speaker, every point
+- Right after: "we decided X, Bob had concerns, resolved them"
+- Week later: "we had a meeting about X"
+- Month later: "we talked about X at some point"
+
+Each time boundary triggers another compression pass.
