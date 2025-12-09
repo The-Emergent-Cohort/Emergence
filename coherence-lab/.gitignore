@@ -15,5 +15,3 @@ __pycache__/
 
 # Logs and checkpoints tracked separately
 *.log
-data/*.pt
-data/*.log
