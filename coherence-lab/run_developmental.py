@@ -1165,19 +1165,19 @@ def main(args):
                             if level < 3:  # Still at early levels
                                 struggling.append((name, pt, level))
 
-                if struggling and section_epochs % 3 == 0:  # Ask every 3rd epoch
-                    print(f"\n  📋 Teacher: 'Does anyone have any questions?'")
+                if struggling and section_epochs % 3 == 0:  # Check every 3rd epoch
                     # Group by pattern
                     patterns_needing_help = set(p for _, p, _ in struggling)
                     if patterns_needing_help:
-                        print(f"  Students need help with: {list(patterns_needing_help)[:3]}")
+                        print(f"\n  📋 Teacher: 'Some students have been working on these...'")
+                        print(f"  Patterns needing review: {list(patterns_needing_help)[:3]}")
                         # Quick review - show one example per struggling pattern
                         for pt_name in list(patterns_needing_help)[:2]:
                             pattern_obj = next((p for p in ALL_PATTERNS if p.name == pt_name), None)
                             if pattern_obj:
                                 example = pattern_obj.generator(26)
                                 seq_str = ' '.join(map(str, example['sequence']))
-                                print(f"    Quick review - {pt_name}: [{seq_str}] → {example['target']}")
+                                print(f"    Let me show this again - {pt_name}: [{seq_str}] → {example['target']}")
 
         # Tutoring pairs (only for active patterns, Year 1+ only)
         # Year 0 is cooperative exploration - no hierarchy yet
