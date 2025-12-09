@@ -93,10 +93,6 @@ class CurriculumSequencer:
         self.all_sections_complete = False
         self.history = []
 
-        # Play day tracking
-        self.days_on_current_section = 0
-        self.play_day_interval = 5  # Play day every N days stuck on same section
-
     def get_all_topics(self) -> List[str]:
         """Get all topics from curriculum in order."""
         all_topics = []
@@ -146,12 +142,7 @@ class CurriculumSequencer:
 
         for topic_name in get_section_topics(section):
             idx = self.topic_to_idx[topic_name]
-
-            # Use confirmed_level (exam-verified), not XP-based level
-            if hasattr(self.tracker, 'confirmed_level'):
-                current_level = self.tracker.confirmed_level[idx].item()
-            else:
-                current_level = self.tracker.get_level(idx)
+            current_level = self.tracker.get_level(idx)
 
             # Must reach minimum level to take section exam
             if current_level < self.section_exam_level:
@@ -235,29 +226,12 @@ class CurriculumSequencer:
         return not any_failed, results
 
     def check_section_ready(self) -> bool:
-        """Check if all topics in current section are ready for section exam.
-
-        Uses confirmed_level (exam-verified) not get_level() (XP-based).
-        You must PASS level-up exams to unlock section exams.
-        """
+        """Check if all topics in current section are ready for section exam."""
         current_section = self.sections[self.current_section_idx]
-
-        # Ensure exam state is initialized
-        if hasattr(self.tracker, '_init_exam_state'):
-            self.tracker._init_exam_state()
-
-        for t in get_section_topics(current_section):
-            idx = self.topic_to_idx[t]
-            # Use confirmed_level (exam-verified), not XP-based level
-            if hasattr(self.tracker, 'confirmed_level'):
-                level = self.tracker.confirmed_level[idx].item()
-            else:
-                level = self.tracker.get_level(idx)
-
-            if level < self.section_exam_level:
-                return False
-
-        return True
+        return all(
+            self.tracker.get_level(self.topic_to_idx[t]) >= self.section_exam_level
+            for t in get_section_topics(current_section)
+        )
 
     def advance_section(self) -> bool:
         """
@@ -265,7 +239,6 @@ class CurriculumSequencer:
         Returns True if there are more sections, False if all complete.
         """
         self.section_passed[self.current_section_idx] = True
-        self.days_on_current_section = 0  # Reset play day counter
 
         if self.current_section_idx < len(self.sections) - 1:
             self.current_section_idx += 1
@@ -273,16 +246,6 @@ class CurriculumSequencer:
         else:
             self.all_sections_complete = True
             return False
-
-    def is_play_day(self) -> bool:
-        """
-        Check if current day should be a play day.
-        Play days are non-scoring creative exploration epochs.
-        Fires after N days stuck on same section, then every N days.
-        """
-        if self.days_on_current_section < self.play_day_interval:
-            return False
-        return self.days_on_current_section % self.play_day_interval == 0
 
     def get_current_section(self) -> Dict:
         """Get current section info."""
@@ -322,11 +285,9 @@ class CurriculumSequencer:
             callbacks: Optional dict of callback functions:
                 - 'on_epoch_start': fn(epoch, section_info)
                 - 'on_epoch_end': fn(epoch, metrics)
-                - 'on_play_day': fn(model, topics, epoch) -> metrics (creative exploration, no scoring)
                 - 'on_section_exam': fn(section, results, passed)
                 - 'on_section_complete': fn(section_idx, next_section)
                 - 'on_final_exam': fn(results, passed)
-                - 'on_stuck_topic': fn(stuck_info, topic_to_idx, tracker)
             save_checkpoint_fn: Optional fn(model, epoch, metrics) for saving
 
         Returns:
@@ -355,35 +316,8 @@ class CurriculumSequencer:
                     'section_idx': self.current_section_idx,
                     'section_name': current_section['name'],
                     'active_topics': active_topics,
-                    'maintenance_topics': maintenance_topics,
-                    'is_play_day': self.is_play_day(),
-                    'days_on_section': self.days_on_current_section
+                    'maintenance_topics': maintenance_topics
                 })
-
-            # === PLAY DAY (non-scoring creative exploration) ===
-            if self.is_play_day() and 'on_play_day' in callbacks:
-                print(f"\n🎨 PLAY DAY! (Day {self.days_on_current_section} on {current_section['name']})")
-                print("   Creative exploration - no scoring, just play!")
-
-                all_learned = active_topics + maintenance_topics
-                play_metrics = callbacks['on_play_day'](model, all_learned, epoch)
-
-                # Record play day in history
-                epoch_record = {
-                    'epoch': epoch,
-                    'section': self.current_section_idx,
-                    'section_name': current_section['name'],
-                    'is_play_day': True,
-                    'play_metrics': play_metrics,
-                    'progress': self.get_progress_summary()
-                }
-                self.history.append(epoch_record)
-
-                if 'on_epoch_end' in callbacks:
-                    callbacks['on_epoch_end'](epoch, epoch_record)
-
-                self.days_on_current_section += 1
-                continue  # Skip normal training/exams
 
             # === TRAINING ===
             train_metrics = train_fn(model, active_topics, maintenance_topics, epoch)
@@ -407,9 +341,7 @@ class CurriculumSequencer:
                 while self.tracker.check_exam_eligible(idx) and exam_attempt < max_attempts:
                     # Use confirmed_level for exam progression, not XP-level
                     confirmed = self.tracker.confirmed_level[idx].item() if hasattr(self.tracker, 'confirmed_level') else self.tracker.get_level(idx)
-                    # Get consecutive failures for plateau-breaking (smaller exam after 5+ failures)
-                    failures = self.tracker.consecutive_failures[idx].item() if hasattr(self.tracker, 'consecutive_failures') else 0
-                    exam_size = self.tracker.get_exam_size(confirmed + 1, consecutive_failures=failures)
+                    exam_size = self.tracker.get_exam_size(confirmed + 1)
 
                     correct, total = exam_fn(
                         model, topic_name, exam_size,
@@ -533,9 +465,6 @@ class CurriculumSequencer:
             # Callback: epoch end
             if 'on_epoch_end' in callbacks:
                 callbacks['on_epoch_end'](epoch, epoch_record)
-
-            # Track days on current section (for play day calculation)
-            self.days_on_current_section += 1
 
             # Save checkpoint
             if save_checkpoint_fn:
