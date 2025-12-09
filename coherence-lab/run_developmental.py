@@ -923,6 +923,13 @@ def main(args):
                 train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
                 val_loader = DataLoader(val_data, batch_size=args.batch_size, collate_fn=collate_fn)
 
+                # CELEBRATION PLAYDAY - play with mastered + peek at new patterns
+                # Curiosity before explanation
+                print(f"\n  *** CELEBRATION PLAYDAY! ***")
+                mastered_for_play = get_mastered_patterns(broker, pattern_to_idx, mastery_level=mastery_level)
+                celebration_patterns = list(set(mastered_for_play + active_pattern_names))
+                run_playday(broker, celebration_patterns, pattern_to_idx, device, epoch)
+
             else:
                 # Show progress toward mastery
                 print(f"\n  Section {current_section} progress (need L{mastery_level}):")
