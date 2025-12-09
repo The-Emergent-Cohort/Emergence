@@ -26,9 +26,11 @@ from systems import ExaminationSystem
 from systems.progression import TopicTracker
 
 # Section order for phased training
-YEAR_1_SECTIONS = ['1A', '1B', '1C', '1D', '1E']
+# Note: Prime sections (1A', 1B', 1E') scaffold into main sections
+YEAR_1_SECTIONS = ["1A", "1A'", "1B", "1B'", "1C", "1D", "1E", "1E'"]
+YEAR_1_5_SECTIONS = ['1.5A', '1.5B', '1.5C']  # Transitional Module
 YEAR_2_SECTIONS = ['2A', '2B', '2C', '2D', '2E']
-ALL_SECTIONS = YEAR_1_SECTIONS + YEAR_2_SECTIONS
+ALL_SECTIONS = YEAR_1_SECTIONS + YEAR_1_5_SECTIONS + YEAR_2_SECTIONS
 
 
 def identify_tutoring_pairs(broker, pattern_names, pattern_to_idx, level_gap=3):
@@ -117,9 +119,11 @@ def get_active_sections(year, current_phase):
     """Get list of active sections based on year and phase."""
     if year == 1:
         sections = YEAR_1_SECTIONS
+    elif year == 1.5:
+        sections = YEAR_1_5_SECTIONS
     elif year == 2:
         sections = YEAR_2_SECTIONS
-    else:  # year 0 = both
+    else:  # year 0 = all
         sections = ALL_SECTIONS
 
     return sections[:current_phase + 1]
@@ -857,9 +861,11 @@ def main(args):
     # Determine available sections for this year
     if args.year == 1:
         available_sections = YEAR_1_SECTIONS
+    elif args.year == 1.5:
+        available_sections = YEAR_1_5_SECTIONS
     elif args.year == 2:
         available_sections = YEAR_2_SECTIONS
-    else:  # year 0 = both
+    else:  # year 0 = all
         available_sections = ALL_SECTIONS
 
     # For non-phased training, use all sections at once
@@ -1112,7 +1118,7 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--year', type=int, default=1, help='Year to train (1, 2, or 0 for both)')
+    parser.add_argument('--year', type=float, default=1, help='Year to train (1, 1.5, 2, or 0 for all)')
     parser.add_argument('--no-phase', action='store_true', dest='no_phase', help='Disable phased training (train all patterns at once)')
     parser.add_argument('--mastery_level', type=int, default=10, help='Level required to advance phase (default: 10)')
     parser.add_argument('--epochs', type=int, default=0, help='Max epochs (0 = unlimited, train until graduation)')

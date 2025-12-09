@@ -24,6 +24,187 @@ def gen_constant(vocab_size: int) -> Dict:
     return {'sequence': [a] * length, 'target': a}
 
 
+# =============================================================================
+# 1A': QUANTITY AWARENESS (Conservation & Cardinality)
+# These patterns teach that quantity is a stable property of sequences
+# Critical foundation for symbolic math - quantity exists independent of order
+# =============================================================================
+
+def gen_sequence_length(vocab_size: int) -> Dict:
+    """[A, B, C, D] → 4 - Count elements (cardinality)."""
+    length = random.randint(2, min(8, vocab_size - 1))
+    # Generate distinct or repeated elements (doesn't matter - count is count)
+    seq = [random.randint(0, vocab_size - 1) for _ in range(length)]
+    return {'sequence': seq, 'target': length}
+
+
+def gen_count_value(vocab_size: int) -> Dict:
+    """[5, 3, 5, 5, 2] → 3 - How many times does first element appear?"""
+    length = random.randint(4, 8)
+    target_val = random.randint(1, vocab_size - 1)
+    count = random.randint(2, min(length - 1, vocab_size - 1))
+
+    # Build sequence with exactly 'count' occurrences of target_val
+    seq = [target_val] * count
+    # Fill rest with other values
+    for _ in range(length - count):
+        other = random.randint(0, vocab_size - 1)
+        while other == target_val:
+            other = random.randint(0, vocab_size - 1)
+        seq.append(other)
+
+    random.shuffle(seq)
+    # Put target_val first so "count of first element" is the task
+    if seq[0] != target_val:
+        idx = seq.index(target_val)
+        seq[0], seq[idx] = seq[idx], seq[0]
+
+    return {'sequence': seq, 'target': count}
+
+
+def gen_distinct_count(vocab_size: int) -> Dict:
+    """[A, A, B, A, C] → 3 - How many distinct values?"""
+    n_distinct = random.randint(2, min(5, vocab_size - 1))
+    length = random.randint(n_distinct + 1, n_distinct + 4)
+
+    # Pick n_distinct unique values
+    values = random.sample(range(vocab_size), n_distinct)
+
+    # Build sequence ensuring all values appear at least once
+    seq = values.copy()
+    for _ in range(length - n_distinct):
+        seq.append(random.choice(values))
+
+    random.shuffle(seq)
+    return {'sequence': seq, 'target': n_distinct}
+
+
+def gen_conservation_shuffle(vocab_size: int) -> Dict:
+    """[C, A, B] → 3 - Length is invariant to order (conservation of quantity)."""
+    # Same as sequence_length but explicitly framed as conservation
+    # The key insight: no matter how elements are arranged, count stays same
+    length = random.randint(3, min(7, vocab_size - 1))
+    values = [random.randint(0, vocab_size - 1) for _ in range(length)]
+    random.shuffle(values)  # Explicit shuffle to emphasize order doesn't matter
+    return {'sequence': values, 'target': length}
+
+
+# =============================================================================
+# 1E': SYMBOLIC PROPERTY RECOGNITION (Bridge to math operations)
+# These patterns teach recognizing and labeling sequence properties
+# Critical for understanding math: [2,4,6,8] is "step 2" not just "complex sequence"
+# =============================================================================
+
+def gen_compute_step(vocab_size: int) -> Dict:
+    """[2, 5, 8, 11] → 3 - Identify the additive step between elements."""
+    length = random.randint(3, 5)
+    # Ensure step doesn't make sequence exceed vocab
+    max_step = max(1, (vocab_size - 1) // length)
+    step = random.randint(1, min(5, max_step))
+    max_start = max(0, vocab_size - step * length - 1)
+    start = random.randint(0, max_start)
+    seq = [start + i * step for i in range(length)]
+    return {'sequence': seq, 'target': step}
+
+
+def gen_compute_first_diff(vocab_size: int) -> Dict:
+    """[3, 7, 11, 15] → 4 - What's seq[1] - seq[0]? (explicit difference)."""
+    length = random.randint(3, 5)
+    # Ensure step doesn't make sequence exceed vocab
+    max_step = max(1, (vocab_size - 1) // length)
+    step = random.randint(1, min(8, max_step))
+    max_start = max(0, vocab_size - step * length - 1)
+    start = random.randint(0, max_start)
+    seq = [start + i * step for i in range(length)]
+    # Target is the first difference (seq[1] - seq[0])
+    return {'sequence': seq, 'target': step}
+
+
+def gen_compute_ratio(vocab_size: int) -> Dict:
+    """[2, 4, 8, 16] → 2 - Identify the multiplicative ratio."""
+    ratio = random.randint(2, 3)  # Keep ratios small to stay in vocab
+    length = random.randint(3, 4)
+    start = random.randint(1, 3)
+    seq = [start]
+    for _ in range(length - 1):
+        next_val = seq[-1] * ratio
+        if next_val >= vocab_size:
+            # Sequence would exceed vocab, regenerate
+            return gen_compute_ratio(vocab_size)
+        seq.append(next_val)
+    return {'sequence': seq, 'target': ratio}
+
+
+def gen_is_constant(vocab_size: int) -> Dict:
+    """[5, 5, 5, 5] → 1 (yes) or [5, 6, 5, 5] → 0 (no) - Is sequence constant?"""
+    length = random.randint(4, 6)
+    is_constant = random.choice([True, False])
+
+    if is_constant:
+        val = random.randint(0, vocab_size - 1)
+        seq = [val] * length
+        target = 1
+    else:
+        val = random.randint(0, vocab_size - 1)
+        seq = [val] * length
+        # Change one element
+        change_idx = random.randint(0, length - 1)
+        seq[change_idx] = (val + random.randint(1, 5)) % vocab_size
+        target = 0
+
+    return {'sequence': seq, 'target': target}
+
+
+def gen_is_increasing(vocab_size: int) -> Dict:
+    """[1, 2, 3, 4] → 1 (yes) or [1, 3, 2, 4] → 0 (no) - Is sequence strictly increasing?"""
+    length = random.randint(4, 6)
+    is_increasing = random.choice([True, False])
+
+    if is_increasing:
+        # Generate strictly increasing sequence
+        start = random.randint(0, vocab_size - length - 1)
+        step = random.randint(1, 3)
+        seq = [start + i * step for i in range(length)]
+        if seq[-1] >= vocab_size:
+            return gen_is_increasing(vocab_size)
+        target = 1
+    else:
+        # Generate non-monotonic sequence
+        start = random.randint(0, vocab_size - length - 1)
+        seq = [start + i for i in range(length)]
+        # Swap two elements to break monotonicity
+        i, j = random.sample(range(length), 2)
+        seq[i], seq[j] = seq[j], seq[i]
+        target = 0
+
+    return {'sequence': seq, 'target': target}
+
+
+def gen_is_decreasing(vocab_size: int) -> Dict:
+    """[9, 7, 5, 3] → 1 (yes) or [9, 5, 7, 3] → 0 (no) - Is sequence strictly decreasing?"""
+    length = random.randint(4, 6)
+    is_decreasing = random.choice([True, False])
+
+    if is_decreasing:
+        # Generate strictly decreasing sequence
+        start = random.randint(length, vocab_size - 1)
+        step = random.randint(1, 2)
+        seq = [start - i * step for i in range(length)]
+        if seq[-1] < 0:
+            return gen_is_decreasing(vocab_size)
+        target = 1
+    else:
+        # Generate non-monotonic sequence
+        start = random.randint(length, vocab_size - 1)
+        seq = [start - i for i in range(length)]
+        # Swap two elements to break monotonicity
+        i, j = random.sample(range(length), 2)
+        seq[i], seq[j] = seq[j], seq[i]
+        target = 0
+
+    return {'sequence': seq, 'target': target}
+
+
 def gen_repeating(vocab_size: int) -> Dict:
     """[3, 3, 3, 3, ?] → 3 - Remember what was seen."""
     return gen_constant(vocab_size)  # Same as constant for now
@@ -161,6 +342,103 @@ def gen_variable_step(vocab_size: int) -> Dict:
     target = seq[-1] + step
     if target >= vocab_size or any(x >= vocab_size for x in seq):
         return gen_variable_step(vocab_size)
+    return {'sequence': seq, 'target': target}
+
+
+# =============================================================================
+# YEAR 1.5: TRANSITIONAL MODULE (Executive Function)
+# These patterns bridge from sequence prediction to planning/reasoning
+# Key skills: multi-step operations, constraint satisfaction, working memory
+# =============================================================================
+
+def gen_apply_twice(vocab_size: int) -> Dict:
+    """[5, +2] → 9 - Apply operation twice: 5+2=7, 7+2=9."""
+    step = random.randint(1, 3)
+    start = random.randint(0, vocab_size - 2 * step - 1)
+    # Sequence shows start and the step
+    seq = [start, step]
+    # Target is start + step + step
+    target = start + 2 * step
+    if target >= vocab_size:
+        return gen_apply_twice(vocab_size)
+    return {'sequence': seq, 'target': target}
+
+
+def gen_reverse_operation(vocab_size: int) -> Dict:
+    """[10, -3] → 7 - Understand inverse: what undoes +3?"""
+    step = random.randint(1, 5)
+    start = random.randint(step, vocab_size - 1)
+    seq = [start, step]  # step represents amount to subtract
+    target = start - step
+    if target < 0:
+        return gen_reverse_operation(vocab_size)
+    return {'sequence': seq, 'target': target}
+
+
+def gen_find_missing_addend(vocab_size: int) -> Dict:
+    """[3, ?, 8] → 5 - What goes in the gap? (3 + ? = 8)"""
+    a = random.randint(1, vocab_size // 2)
+    c = random.randint(a + 1, min(vocab_size - 1, a + vocab_size // 2))
+    # Sequence: [a, MASK, c] -> target is c - a
+    seq = [a, c]  # The model learns: output c - a
+    target = c - a
+    return {'sequence': seq, 'target': target}
+
+
+def gen_chain_two_steps(vocab_size: int) -> Dict:
+    """[2, +3, +4] → 9 - Apply two operations: 2+3=5, 5+4=9."""
+    start = random.randint(0, 5)
+    step1 = random.randint(1, 3)
+    step2 = random.randint(1, 3)
+    seq = [start, step1, step2]
+    target = start + step1 + step2
+    if target >= vocab_size:
+        return gen_chain_two_steps(vocab_size)
+    return {'sequence': seq, 'target': target}
+
+
+def gen_conditional_simple(vocab_size: int) -> Dict:
+    """[val, threshold] → 1 if val > threshold else 0."""
+    threshold = random.randint(vocab_size // 4, vocab_size * 3 // 4)
+    val = random.randint(0, vocab_size - 1)
+    seq = [val, threshold]
+    target = 1 if val > threshold else 0
+    return {'sequence': seq, 'target': target}
+
+
+def gen_min_of_two(vocab_size: int) -> Dict:
+    """[a, b] → min(a, b) - Find smaller value."""
+    a = random.randint(0, vocab_size - 1)
+    b = random.randint(0, vocab_size - 1)
+    seq = [a, b]
+    target = min(a, b)
+    return {'sequence': seq, 'target': target}
+
+
+def gen_max_of_two(vocab_size: int) -> Dict:
+    """[a, b] → max(a, b) - Find larger value."""
+    a = random.randint(0, vocab_size - 1)
+    b = random.randint(0, vocab_size - 1)
+    seq = [a, b]
+    target = max(a, b)
+    return {'sequence': seq, 'target': target}
+
+
+def gen_working_memory_recall(vocab_size: int) -> Dict:
+    """[A, B, C, D, 0] → A - Recall first element after distractors."""
+    length = random.randint(3, 5)
+    values = [random.randint(1, vocab_size - 1) for _ in range(length)]
+    seq = values + [0]  # 0 signals "recall first"
+    target = values[0]
+    return {'sequence': seq, 'target': target}
+
+
+def gen_working_memory_last(vocab_size: int) -> Dict:
+    """[A, B, C, D, 1] → D - Recall last non-signal element."""
+    length = random.randint(3, 5)
+    values = [random.randint(1, vocab_size - 1) for _ in range(length)]
+    seq = values + [1]  # 1 signals "recall last"
+    target = values[-1]
     return {'sequence': seq, 'target': target}
 
 
@@ -356,6 +634,13 @@ YEAR_1_PATTERNS = [
     # 1A: Constancy
     PatternType('constant', gen_constant, 1, 1, '1A', 'Things stay the same'),
 
+    # 1A': Quantity Awareness (Conservation & Cardinality)
+    # Critical foundation: quantity is a stable property, independent of arrangement
+    PatternType('sequence_length', gen_sequence_length, 2, 1, "1A'", 'Count elements'),
+    PatternType('count_value', gen_count_value, 2, 1, "1A'", 'Count occurrences of value'),
+    PatternType('distinct_count', gen_distinct_count, 2, 1, "1A'", 'Count distinct values'),
+    PatternType('conservation_shuffle', gen_conservation_shuffle, 2, 1, "1A'", 'Count invariant to order'),
+
     # 1B: Repetition & Memory
     PatternType('repeating', gen_repeating, 1, 1, '1B', 'Remember what was seen'),
     PatternType('echo', gen_echo, 2, 1, '1B', 'Pattern with gaps'),
@@ -379,6 +664,32 @@ YEAR_1_PATTERNS = [
     # 1E: Rate of Change
     PatternType('fixed_offset', gen_fixed_offset, 3, 1, '1E', 'Count by fixed step'),
     PatternType('variable_step', gen_variable_step, 4, 1, '1E', 'Increasing step size'),
+
+    # 1E': Symbolic Property Recognition (Bridge to math operations)
+    PatternType('compute_step', gen_compute_step, 3, 1, "1E'", 'Identify additive step'),
+    PatternType('compute_first_diff', gen_compute_first_diff, 3, 1, "1E'", 'Compute first difference'),
+    PatternType('compute_ratio', gen_compute_ratio, 4, 1, "1E'", 'Identify multiplicative ratio'),
+    PatternType('is_constant', gen_is_constant, 2, 1, "1E'", 'Classify as constant'),
+    PatternType('is_increasing', gen_is_increasing, 2, 1, "1E'", 'Classify as increasing'),
+    PatternType('is_decreasing', gen_is_decreasing, 2, 1, "1E'", 'Classify as decreasing'),
+]
+
+# Year 1.5: Transitional Module (bridges Year 1 sequence prediction to Year 2 reasoning)
+YEAR_1_5_PATTERNS = [
+    # 1.5A: Multi-Step Operations
+    PatternType('apply_twice', gen_apply_twice, 3, 1.5, '1.5A', 'Apply operation twice'),
+    PatternType('reverse_operation', gen_reverse_operation, 3, 1.5, '1.5A', 'Inverse operation'),
+    PatternType('chain_two_steps', gen_chain_two_steps, 4, 1.5, '1.5A', 'Chain two operations'),
+
+    # 1.5B: Constraint Satisfaction
+    PatternType('find_missing_addend', gen_find_missing_addend, 4, 1.5, '1.5B', 'Find missing value'),
+    PatternType('conditional_simple', gen_conditional_simple, 3, 1.5, '1.5B', 'Simple if-then'),
+    PatternType('min_of_two', gen_min_of_two, 2, 1.5, '1.5B', 'Find minimum'),
+    PatternType('max_of_two', gen_max_of_two, 2, 1.5, '1.5B', 'Find maximum'),
+
+    # 1.5C: Working Memory
+    PatternType('working_memory_recall', gen_working_memory_recall, 3, 1.5, '1.5C', 'Recall first'),
+    PatternType('working_memory_last', gen_working_memory_last, 3, 1.5, '1.5C', 'Recall last'),
 ]
 
 YEAR_2_PATTERNS = [
@@ -405,10 +716,10 @@ YEAR_2_PATTERNS = [
     PatternType('cause_effect', gen_cause_effect, 6, 2, '2E', 'Delayed causation'),
 ]
 
-ALL_PATTERNS = YEAR_1_PATTERNS + YEAR_2_PATTERNS
+ALL_PATTERNS = YEAR_1_PATTERNS + YEAR_1_5_PATTERNS + YEAR_2_PATTERNS
 
 
-def get_patterns_by_year(year: int) -> List[PatternType]:
+def get_patterns_by_year(year: float) -> List[PatternType]:
     return [p for p in ALL_PATTERNS if p.year == year]
 
 
@@ -514,13 +825,19 @@ def collate_fn(batch):
 def print_curriculum():
     """Print the full curriculum structure."""
     print("=" * 70)
-    print("DEVELOPMENTAL CURRICULUM - Years 1 & 2")
+    print("DEVELOPMENTAL CURRICULUM - Years 1, 1.5 & 2")
     print("=" * 70)
 
-    for year in [1, 2]:
+    year_info = {
+        1: 'SENSORIMOTOR FOUNDATIONS',
+        1.5: 'TRANSITIONAL MODULE (Executive Function)',
+        2: 'RELATIONAL & PHYSICAL'
+    }
+
+    for year in [1, 1.5, 2]:
         year_patterns = get_patterns_by_year(year)
         print(f"\n{'='*50}")
-        print(f"YEAR {year}: {'SENSORIMOTOR FOUNDATIONS' if year == 1 else 'RELATIONAL & PHYSICAL'}")
+        print(f"YEAR {year}: {year_info[year]}")
         print(f"{'='*50}")
 
         sections = sorted(set(p.section for p in year_patterns))
@@ -533,6 +850,7 @@ def print_curriculum():
     print(f"\n{'='*70}")
     print(f"Total: {len(ALL_PATTERNS)} pattern types")
     print(f"  Year 1: {len(YEAR_1_PATTERNS)} patterns")
+    print(f"  Year 1.5: {len(YEAR_1_5_PATTERNS)} patterns")
     print(f"  Year 2: {len(YEAR_2_PATTERNS)} patterns")
 
 

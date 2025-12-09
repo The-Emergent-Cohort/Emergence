@@ -201,3 +201,93 @@ Students are named after characters from user's novella:
 | conservation | energy/momentum conservation |
 
 This grounding could help when introducing language about physical concepts.
+
+---
+
+## Curriculum Review Findings (Dec 2024)
+
+### Identified Gaps
+
+**1. Position Scaffolding Gap (1B → 1C)**
+- Jump from identity/memory (1B) to position tracking (1C) is too abrupt
+- Students can't "see the hop" - position is movement-based without spatial relation
+- **Solution**: Added section 1B' with scaffolded position patterns:
+  - `simple_alternating`: [A, 0, A, 0, ?] - alternating with zero
+  - `position_parity`: even/odd positions get different values
+  - `ternary_fixed`: [A, 0, 0, A, 0, ?] - ternary with zeros
+  - `fill_A_positions`, `fill_B_positions`: recognize where values appear
+
+**2. Symbolic Grounding Gap (Phase 1 → Phase 2)**
+- DIs learn to predict sequences but don't learn quantity as stable symbol
+- When seeing `double_each`, they interpret as "complex sequence" not "x→2x"
+- **Missing**: Conservation of quantity, cardinality, symbolic labeling
+- **Solution Needed**: Add patterns that teach:
+  - Same count, different arrangement → still same count
+  - Explicit property labeling (not just next-token prediction)
+
+**3. Executive Function Gap (No Transitional Module)**
+- Math requires structured planning, not linear prediction
+- Working memory for multi-step constraint satisfaction
+- **Missing**: Tower of Hanoi-style planning, DAG reasoning
+- **Solution Needed**: Transitional Module between Year 1 and Year 2
+
+### Social Learning Findings
+
+**Graduated Peer Introduction (not implemented yet)**
+- Stage 0: Solitary (foundational skills)
+- Stage 1: Observational (see anonymized peer solutions)
+- Stage 2: Mirroring (imitate peer approaches)
+- Stage 3: Structured exchange (turn-taking, tutoring)
+- Stage 4: Collaborative (joint problem-solving)
+- Stage 5: Competitive (adversarial examples)
+
+**Social Readiness Signals**
+- Calibration score (confidence vs accuracy) > 0.7
+- Teacher trust score > 0.8
+- Has mastered at least 3 foundational patterns
+
+**Playday Enhancements (implemented)**
+- Targeted struggle challenges for specific patterns
+- Breakthrough tracking ("aha" moments)
+- Play style insights (collaborator, explorer, helper)
+- No exams on playday - pure exploration
+
+### Proposer-Critic Architecture (from Gemini report)
+Maps to existing peer tutoring:
+- **Proposer**: Student generates solution with explicit steps
+- **Critic**: Peer verifies logical validity of reasoning path
+- **LogicReward**: Score path validity, not just final answer
+- Creates autonomous self-correction loop
+
+### Priority Implementation Order
+
+1. **Conservation patterns** (Year 1, section 1A') ✅ IMPLEMENTED
+   - `sequence_length`: Count elements in sequence
+   - `count_value`: Count occurrences of specific value
+   - `distinct_count`: Count unique values
+   - `conservation_shuffle`: Same count despite reordering
+
+2. **Symbolic property patterns** (Year 1, section 1E') ✅ IMPLEMENTED
+   - `compute_step`: Identify additive step size
+   - `compute_first_diff`: Calculate first difference
+   - `compute_ratio`: Identify multiplicative ratio
+   - `is_constant`, `is_increasing`, `is_decreasing`: Classification
+
+3. **Transitional Module** (Year 1.5) ✅ IMPLEMENTED
+   - **1.5A Multi-Step Operations:**
+     - `apply_twice`: Apply operation twice
+     - `reverse_operation`: Inverse operations
+     - `chain_two_steps`: Chain two operations
+   - **1.5B Constraint Satisfaction:**
+     - `find_missing_addend`: What's in the gap?
+     - `conditional_simple`: Simple if-then
+     - `min_of_two`, `max_of_two`: Find extrema
+   - **1.5C Working Memory:**
+     - `working_memory_recall`: Recall first element
+     - `working_memory_last`: Recall last element
+
+4. **LogicReward integration** (Teacher engine) - PLANNED
+   - Score reasoning paths, not just answers
+   - Peer validation of logical steps
+
+---
