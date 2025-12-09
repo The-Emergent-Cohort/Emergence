@@ -736,7 +736,10 @@ def main(args):
         # PLAYDAY every 6 epochs - exploration time!
         if epoch % 6 == 0:
             mastered_patterns = get_mastered_patterns(broker, pattern_to_idx, mastery_level=3)
-            run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch)
+            # Include BOTH mastered priors AND current active patterns
+            # Seeing how they relate is part of the learning!
+            playday_patterns = list(set(mastered_patterns + active_pattern_names))
+            run_playday(broker, playday_patterns, pattern_to_idx, device, epoch)
 
         # Class average
         class_acc = sum(v['accuracy'] for v in val_results.values()) / len(val_results)
