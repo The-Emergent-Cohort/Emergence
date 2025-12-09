@@ -127,39 +127,110 @@ def append_to_log(log_file, record):
         print(f"  [Warning: Failed to write log: {e}]")
 
 
+def identify_tutoring_pairs(
+    broker,
+    pattern_types: list,
+    pattern_to_idx: dict,
+    struggle_threshold: int = 3  # Confirmed level below which = struggling
+) -> dict:
+    """
+    Identify tutor-student pairs for peer teaching.
+
+    A student is "struggling" on a pattern if their confirmed level < threshold.
+    A student can "tutor" if they've graduated (L10) that pattern.
+
+    Returns:
+        Dict[pattern_idx, Dict[struggling_student_name, tutor_student_name]]
+    """
+    tutoring = {}
+
+    for pt_idx, pt in enumerate(pattern_types):
+        tutoring[pt_idx] = {}
+
+        # Find graduates (potential tutors) for this pattern
+        tutors = []
+        struggling = []
+
+        for name, student in broker.students.items():
+            confirmed = student.exam_system.confirmed_level[pt_idx].item()
+            graduated = student.exam_system.topic_graduated[pt_idx].item()
+
+            if graduated:
+                tutors.append(name)
+            elif confirmed < struggle_threshold:
+                struggling.append((name, confirmed))
+
+        # Match struggling students with tutors
+        # Prefer tutors who aren't themselves struggling elsewhere
+        if tutors and struggling:
+            for student_name, level in struggling:
+                # Pick first available tutor (could be smarter)
+                tutor_name = tutors[0]
+                tutoring[pt_idx][student_name] = tutor_name
+
+    return tutoring
+
+
+def get_tutor_predictions(
+    tutor_student,
+    tokens: torch.Tensor,
+    seq_lens: list,
+    temperature: float = 2.0
+) -> torch.Tensor:
+    """Get soft predictions from tutor for knowledge distillation."""
+    tutor_student.eval()
+    with torch.no_grad():
+        logits, _, _ = tutor_student(tokens, seq_lens)
+        # Soften with temperature for better knowledge transfer
+        soft_targets = F.softmax(logits / temperature, dim=-1)
+    tutor_student.train()
+    return soft_targets
+
+
 def train_epoch_parallel(
     broker: ClassroomBroker,
     train_loader: DataLoader,
     optimizers: dict,
     criterion: nn.Module,
     device: torch.device,
-    pattern_to_idx: dict
+    pattern_to_idx: dict,
+    tutoring_pairs: dict = None  # pattern_idx -> {student: tutor}
 ) -> dict:
     """
     One epoch of parallel training for all students.
 
     Each student processes the same batches independently.
+    Includes peer teaching via knowledge distillation.
     Returns per-student metrics.
     """
     broker.train()
     broker.wake_all()
 
+    tutoring_pairs = tutoring_pairs or {}
+
     # Per-student tracking
     results = {name: {
         'loss': 0.0, 'correct': 0, 'total': 0,
         'show_count': 0, 'approval_count': 0,
-        'xp_from_shows': 0.0
+        'xp_from_shows': 0.0,
+        'tutoring_received': 0,  # Times received help
+        'tutoring_given': 0      # Times gave help
     } for name in broker.students.keys()}
 
     # Approval-seeking parameters
     SHOW_CONF_THRESHOLD = 0.7  # Only show when confident
     APPROVAL_XP_BONUS = 3.0    # XP bonus for validated work
+    TUTORING_WEIGHT = 0.3      # Weight for knowledge distillation loss
+    DISTILL_TEMP = 2.0         # Temperature for soft labels
 
     for batch in train_loader:
         tokens = batch['tokens'].to(device)
         targets = batch['target'].to(device)
         seq_lens = batch['seq_len']
         pattern_types = batch['pattern_type']
+
+        # Pre-compute tutor predictions for this batch (cache for efficiency)
+        tutor_cache = {}  # tutor_name -> soft_predictions
 
         # Each student processes the batch
         for name, student in broker.students.items():
@@ -191,8 +262,41 @@ def train_epoch_parallel(
 
             conf_loss = F.binary_cross_entropy(conf, correct_float)
 
+            # === PEER TUTORING (Knowledge Distillation) ===
+            tutoring_loss = torch.tensor(0.0, device=device)
+            tutor_helped = False
+
+            # Check if this student needs tutoring on any pattern in this batch
+            for i, pt in enumerate(pattern_types):
+                pt_idx = pattern_to_idx[pt]
+                if pt_idx in tutoring_pairs and name in tutoring_pairs[pt_idx]:
+                    tutor_name = tutoring_pairs[pt_idx][name]
+                    tutor = broker.students[tutor_name]
+
+                    # Get tutor's soft predictions (cached)
+                    if tutor_name not in tutor_cache:
+                        tutor_cache[tutor_name] = get_tutor_predictions(
+                            tutor, tokens, seq_lens, DISTILL_TEMP
+                        )
+
+                    # KL divergence from student to tutor distribution
+                    student_log_probs = F.log_softmax(logits[i:i+1] / DISTILL_TEMP, dim=-1)
+                    tutor_probs = tutor_cache[tutor_name][i:i+1]
+
+                    # KL(tutor || student) - student learns from tutor
+                    kl = F.kl_div(student_log_probs, tutor_probs, reduction='batchmean')
+                    tutoring_loss = tutoring_loss + kl
+                    tutor_helped = True
+
+                    # Track tutoring
+                    results[name]['tutoring_received'] += 1
+                    results[tutor_name]['tutoring_given'] += 1
+
             # Combined loss
             loss = main_loss + 0.1 * conf_loss
+            if tutor_helped:
+                loss = loss + TUTORING_WEIGHT * tutoring_loss
+
             loss.backward()
             optimizer.step()
 
@@ -383,9 +487,22 @@ def main(args):
         print(f"Epoch {epoch}/{args.epochs}")
         print("=" * 70)
 
+        # Identify peer tutoring pairs (graduates help struggling students)
+        tutoring_pairs = identify_tutoring_pairs(broker, pattern_types, pattern_to_idx)
+
+        # Count active tutoring relationships
+        active_tutoring = sum(len(pairs) for pairs in tutoring_pairs.values())
+        if active_tutoring > 0:
+            print(f"\n  Peer tutoring active: {active_tutoring} pairs")
+            for pt_idx, pairs in tutoring_pairs.items():
+                for student, tutor in pairs.items():
+                    pt = pattern_types[pt_idx]
+                    print(f"    {tutor} → {student} on {pt}")
+
         # Train
         train_results = train_epoch_parallel(
-            broker, train_loader, optimizers, criterion, device, pattern_to_idx
+            broker, train_loader, optimizers, criterion, device, pattern_to_idx,
+            tutoring_pairs=tutoring_pairs
         )
 
         # Evaluate
@@ -399,6 +516,8 @@ def main(args):
                      for name, r in train_results.items()},
             'val': {name: {'accuracy': r['accuracy'], 'per_pattern': r['per_pattern']}
                    for name, r in val_results.items()},
+            'tutoring': {name: {'received': r['tutoring_received'], 'given': r['tutoring_given']}
+                        for name, r in train_results.items()},
             'timestamp': datetime.now().isoformat()
         }
         history.append(epoch_record)
@@ -410,7 +529,12 @@ def main(args):
             tr = train_results[name]
             show_str = f"show={tr['show_rate']:.0%}" if tr['show_rate'] > 0 else ""
             appr_str = f"appr={tr['approval_rate']:.0%}" if tr['show_count'] > 0 else ""
-            print(f"    {name:8s}: loss={tr['loss']:.4f}, acc={tr['accuracy']:.1%} {show_str} {appr_str}")
+            tutor_str = ""
+            if tr['tutoring_received'] > 0:
+                tutor_str = f"📚got help {tr['tutoring_received']}x"
+            if tr['tutoring_given'] > 0:
+                tutor_str += f" 🎓tutored {tr['tutoring_given']}x"
+            print(f"    {name:8s}: loss={tr['loss']:.4f}, acc={tr['accuracy']:.1%} {show_str} {appr_str} {tutor_str}")
 
         print("\n  Validation:")
         for name in broker.students.keys():
