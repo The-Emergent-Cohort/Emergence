@@ -1150,8 +1150,8 @@ def main(args):
             continue  # Skip training on playday
 
         # "Does anyone have any questions?" - check for struggling students
-        # Only on follow-up epochs (not the first epoch after class session)
-        if section_epochs > 1:
+        # Only on follow-up epochs, Year 1+ (Year 0 is parallel play, no classroom Q&A)
+        if section_epochs > 1 and args.year >= 1:
             # Check if any student is struggling on current section patterns
             current_section = active_sections[-1] if active_sections else None
             if current_section:
