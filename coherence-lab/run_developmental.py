@@ -494,6 +494,109 @@ def generate_creative_challenge(mastered_patterns, vocab_size=26):
     return challenge, f"Creative {challenge_type} challenge using {pattern.name}"
 
 
+# Section purpose descriptions (playful for Year 0)
+SECTION_PURPOSES = {
+    '0A': "Learning to count and see what comes next! Numbers are friends that follow each other.",
+    '0B': "Putting numbers together and taking them apart. Addition and subtraction are like giving and sharing!",
+    '0C': "Comparing things - which is bigger? Which is smaller? Finding patterns in how numbers relate.",
+    '1A': "Sequences get longer and trickier! Patterns can repeat in many ways.",
+    '1B': "Numbers can do fancy dances - stepping by 2s, 3s, or even backwards!",
+    '1C': "Mixing it up - using all our number skills together.",
+}
+
+
+def run_class_session(broker, new_section, pattern_to_idx, device, vocab_size=26, year=0):
+    """
+    Run a class session when a new section unlocks.
+
+    Structure (I Do, We Do):
+    1. State the PURPOSE of what we're learning (playfully framed for Year 0)
+    2. Teacher shows worked examples for new patterns (I Do)
+    3. Guided practice - student tries, immediate feedback (We Do)
+
+    This happens BEFORE regular training on new patterns begins.
+    """
+    print(f"\n  {'📚'*20}")
+    print(f"  *** CLASS SESSION: {new_section} ***")
+
+    # 1. PURPOSE - why are we learning this?
+    purpose = SECTION_PURPOSES.get(new_section, "Learning new and exciting patterns!")
+    print(f"\n  📖 Today's lesson: {purpose}")
+
+    # Get new patterns for this section
+    new_patterns = get_patterns_by_section(new_section)
+    if not new_patterns:
+        print(f"  No new patterns for section {new_section}")
+        return
+
+    print(f"  New patterns: {[p.name for p in new_patterns]}")
+
+    # 2. WORKED EXAMPLES (I Do) - Teacher demonstrates each new pattern
+    print(f"\n  --- Teacher Demonstrates (I Do) ---")
+    for pattern in new_patterns:
+        # Show 2 worked examples per pattern
+        print(f"\n  {pattern.name}:")
+        for i in range(2):
+            example = pattern.generator(vocab_size)
+            seq_str = ' '.join(map(str, example['sequence']))
+            print(f"    Example {i+1}: [{seq_str}] → {example['target']}")
+
+    # 3. GUIDED PRACTICE (We Do) - Students try, teacher gives immediate feedback
+    print(f"\n  --- Guided Practice (We Do) ---")
+    print(f"  Students try similar problems. Teacher validates immediately.")
+
+    results = {name: {'correct': 0, 'total': 0} for name in broker.students.keys()}
+
+    for pattern in new_patterns:
+        print(f"\n  Pattern: {pattern.name}")
+
+        # Generate 3 practice problems per pattern
+        for trial in range(3):
+            example = pattern.generator(vocab_size)
+            max_len = 12
+            seq = example['sequence']
+            padded = seq + [0] * (max_len - len(seq))
+            tokens = torch.tensor(padded[:max_len], dtype=torch.long).unsqueeze(0).to(device)
+            target = example['target']
+            seq_len = [len(seq)]
+            seq_str = ' '.join(map(str, seq))
+
+            for name, student in broker.students.items():
+                student.eval()
+                with torch.no_grad():
+                    logits, conf, _ = student(tokens, seq_len)
+                    pred = logits.argmax(dim=-1).item()
+                    correct = (pred == target)
+
+                results[name]['total'] += 1
+
+                # Immediate feedback (the key pedagogical moment)
+                if correct:
+                    results[name]['correct'] += 1
+                    # Small reinforcement for correct guided practice
+                    if pattern.name in pattern_to_idx:
+                        pt_idx = pattern_to_idx[pattern.name]
+                        student.topic_tracker.award_xp(pt_idx, 0.3)  # Guided practice XP
+
+            # Show one example of feedback (not all to avoid spam)
+            if trial == 0:
+                sample_student = list(broker.students.keys())[0]
+                sample_pred = results[sample_student]['correct'] > 0  # Simplified
+                print(f"    [{seq_str}] → ?")
+                print(f"    Teacher: The answer is {target}.")
+
+    # Summary
+    print(f"\n  --- Guided Practice Results ---")
+    for name in broker.students.keys():
+        acc = results[name]['correct'] / max(1, results[name]['total'])
+        print(f"    {name}: {results[name]['correct']}/{results[name]['total']} ({acc:.0%})")
+
+    print(f"\n  Class session complete. Ready for independent practice!")
+    print(f"  {'📚'*20}\n")
+
+    return results
+
+
 def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_size=26, year=0, section_playdays=1,
                 current_section_patterns=None, all_year_patterns=None):
     """
@@ -980,6 +1083,13 @@ def main(args):
     print(f"\nData: {len(train_data)} train, {len(val_data)} val")
     print("=" * 70)
 
+    # INITIAL CLASS SESSION for first section (before any training)
+    initial_section = active_sections[0] if active_sections else '0A'
+    print(f"\n{'='*70}")
+    print("FIRST DAY OF SCHOOL!")
+    print(f"{'='*70}")
+    run_class_session(broker, initial_section, pattern_to_idx, device, year=args.year)
+
     # Training loop
     history = []
     best_acc = 0
@@ -1029,10 +1139,45 @@ def main(args):
                     print(f"  *** Unlocking section {available_sections[current_phase]}! ***")
                     print(f"  *** Active patterns now: {active_pattern_names} ***")
                     print(f"  {'*'*50}")
+
+                    # CLASS SESSION for new section (I Do, We Do before You Do)
+                    new_section = available_sections[current_phase]
+                    run_class_session(broker, new_section, pattern_to_idx, device, year=args.year)
+
                     train_data, val_data = create_datasets(active_sections, args, seed_offset=epoch)
                     train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
                     val_loader = DataLoader(val_data, batch_size=args.batch_size, collate_fn=collate_fn)
             continue  # Skip training on playday
+
+        # "Does anyone have any questions?" - check for struggling students
+        # Only on follow-up epochs (not the first epoch after class session)
+        if section_epochs > 1:
+            # Check if any student is struggling on current section patterns
+            current_section = active_sections[-1] if active_sections else None
+            if current_section:
+                section_pattern_names = [p.name for p in get_patterns_by_section(current_section)]
+                struggling = []
+                for name, student in broker.students.items():
+                    for pt in section_pattern_names:
+                        if pt in pattern_to_idx:
+                            pt_idx = pattern_to_idx[pt]
+                            level = student.exam_system.confirmed_level[pt_idx].item()
+                            if level < 3:  # Still at early levels
+                                struggling.append((name, pt, level))
+
+                if struggling and section_epochs % 3 == 0:  # Ask every 3rd epoch
+                    print(f"\n  📋 Teacher: 'Does anyone have any questions?'")
+                    # Group by pattern
+                    patterns_needing_help = set(p for _, p, _ in struggling)
+                    if patterns_needing_help:
+                        print(f"  Students need help with: {list(patterns_needing_help)[:3]}")
+                        # Quick review - show one example per struggling pattern
+                        for pt_name in list(patterns_needing_help)[:2]:
+                            pattern_obj = next((p for p in ALL_PATTERNS if p.name == pt_name), None)
+                            if pattern_obj:
+                                example = pattern_obj.generator(26)
+                                seq_str = ' '.join(map(str, example['sequence']))
+                                print(f"    Quick review - {pt_name}: [{seq_str}] → {example['target']}")
 
         # Tutoring pairs (only for active patterns, Year 1+ only)
         # Year 0 is cooperative exploration - no hierarchy yet
@@ -1147,6 +1292,10 @@ def main(args):
                 print(f"  *** Unlocking section {available_sections[current_phase]}! ***")
                 print(f"  *** Active patterns now: {active_pattern_names} ***")
                 print(f"  {'*'*50}")
+
+                # CLASS SESSION for new section (I Do, We Do before You Do)
+                new_section = available_sections[current_phase]
+                run_class_session(broker, new_section, pattern_to_idx, device, year=args.year)
 
                 # CELEBRATION PLAYDAY - they earned it!
                 # Play with all mastered patterns before tackling new section
