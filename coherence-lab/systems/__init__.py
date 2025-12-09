@@ -7,8 +7,8 @@ Modular components for pedagogically-grounded ML:
 - logging: Standardized output formatting
 """
 
-from .progression import ProgressionSystem
+from .progression import ProgressionSystem, TopicTracker, XPRewards
 from .examination import ExaminationSystem
 from .logging import TrainingLogger
 
-__all__ = ['ProgressionSystem', 'ExaminationSystem', 'TrainingLogger']
+__all__ = ['ProgressionSystem', 'TopicTracker', 'XPRewards', 'ExaminationSystem', 'TrainingLogger']
