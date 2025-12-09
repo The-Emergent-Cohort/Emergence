@@ -37,6 +37,11 @@ class ProgressionSystem(nn.Module):
         self.register_buffer('topic_xp', torch.zeros(n_topics))
         self.register_buffer('topic_xp_high', torch.zeros(n_topics))  # High water mark
 
+    @property
+    def progression(self):
+        """Self-reference for compatibility with TopicTracker interface."""
+        return self
+
     @staticmethod
     def xp_threshold(level):
         """
