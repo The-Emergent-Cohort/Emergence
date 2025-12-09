@@ -548,15 +548,21 @@ def run_question_period(broker, active_pattern_names, pattern_to_idx, device, ep
     return uncertainties
 
 
-def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_size=26):
+def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch,
+                current_section='1A', vocab_size=26):
     """
     Run a playday session - exploration without grades.
+
+    Structure varies by section:
+    - 1A: Pure free play (blocks, watching peers)
+    - 1B+: Structured with free time, guided activities, and star awards
 
     Features:
     - Unlocked priors: access to all mastered patterns
     - Creative challenges: teacher suggests harder variants
     - Peer challenges: students solve patterns from each other
-    - No penalties: wrong answers don't hurt XP (exploration mode)
+    - Guided activities (1B+): section-specific learning through play
+    - Star awards (1B+): gold/silver/bronze for different strengths
     """
     print(f"\n  {'🎮'*20}")
     print(f"  *** PLAYDAY! (Epoch {epoch}) ***")
@@ -661,22 +667,22 @@ def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_
                 results[solver_name]['peer_correct'] += 1
                 # No XP for peer challenges - just exploration
 
-    # === PHASE 3: TURN-TAKING CHALLENGES ===
-    # Students build sequences together, feeling the rhythm of alternating/ternary
-    # Only run starting from 1D (counting, skip_count) - let them master 1C first
-    has_arithmetic = 'counting' in mastered_patterns or 'skip_count' in mastered_patterns
-    if has_arithmetic:
-        print("\n  --- Turn-Taking Challenges ---")
-        student_names = list(broker.students.keys())
+    # === PHASE 3: GUIDED ACTIVITY (1B+) ===
+    # 1A = pure free play, no guided activity
+    # 1B+ = structured "waiting your turn" activity that presages alternating patterns
+    student_names = list(broker.students.keys())
 
-        # Alternating pairs (every other) - all 3 pair combinations
+    if current_section != '1A':
+        print("\n  --- Guided Activity: Waiting Your Turn ---")
+
+        # Alternating pairs (every other) - teaches rhythm before alternating pattern
         alternating_pairs = [
             (student_names[0], student_names[1]),  # Nova-Rêve
             (student_names[1], student_names[2]),  # Rêve-Alex
             (student_names[2], student_names[0]),  # Alex-Nova
         ]
 
-        print("    [Alternating pairs - 'every other']")
+        print("    [Alternating pairs - 'my turn, your turn']")
         for pair in alternating_pairs:
             # Generate an alternating sequence
             vocab_size = 26
@@ -719,7 +725,7 @@ def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_
             print(f"      {pair[0]}-{pair[1]}: {pair[0]} {p0_acc:.0%}, {pair[1]} {p1_acc:.0%}")
 
         # Ternary trio (every third) - all 3 students together
-        print("    [Ternary trio - 'every third']")
+        print("    [Ternary trio - 'round robin']")
         vocab_size = 26
         a = random.randint(1, vocab_size-1)
         b = random.randint(1, vocab_size-1)
@@ -774,7 +780,55 @@ def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_
         explored = len(r['patterns_explored'])
         print(f"    {name:8s}: Creative {creative_acc:.0%}, Peer {peer_acc:.0%}, Turns {turns_acc:.0%}, Explored {explored} patterns")
 
-    print(f"  {'🎮'*20}\n")
+    # === STAR AWARDS (1B+) ===
+    if current_section != '1A':
+        print("\n  🌟 Star Awards 🌟")
+
+        # Calculate scores for different categories
+        scores = {}
+        for name in broker.students:
+            r = results[name]
+            creative_acc = r['creative_correct'] / r['creative_total'] if r['creative_total'] > 0 else 0
+            peer_acc = r['peer_correct'] / r['peer_total'] if r['peer_total'] > 0 else 0
+            turns_acc = r['turns_correct'] / r['turns_total'] if r['turns_total'] > 0 else 0
+            scores[name] = {
+                'accuracy': (creative_acc + peer_acc) / 2,  # Most right answers
+                'patience': turns_acc,  # Best at waiting/turn-taking
+                'exploration': len(r['patterns_explored'])  # Most curious
+            }
+
+        # Award stars for each category (ties allowed!)
+        categories = [
+            ('accuracy', 'Most Accurate'),
+            ('patience', 'Most Patient'),
+            ('exploration', 'Most Curious')
+        ]
+        medals = ['🥇', '🥈', '🥉']
+        gold_count = {name: 0 for name in broker.students}
+
+        for cat_key, cat_name in categories:
+            # Sort by score
+            ranked = sorted(scores.items(), key=lambda x: x[1][cat_key], reverse=True)
+            print(f"    {cat_name}:")
+
+            # Award medals with tie handling
+            current_medal = 0
+            prev_score = None
+            for name, score_dict in ranked:
+                current_score = score_dict[cat_key]
+                if prev_score is not None and current_score < prev_score:
+                    current_medal += 1
+                if current_medal < 3:
+                    print(f"      {medals[current_medal]} {name}")
+                    if current_medal == 0:
+                        gold_count[name] += 1
+                prev_score = current_score
+
+        # PARTY TIME if everyone gets all gold stars!
+        if all(count == len(categories) for count in gold_count.values()):
+            print("\n  🎉🎉🎉 PARTY TIME! Everyone got ALL gold stars! 🎉🎉🎉")
+
+    print(f"\n  {'🎮'*20}\n")
 
     return results
 
@@ -885,7 +939,8 @@ def main(args):
         if epochs_on_phase % 5 == 0:
             mastered_patterns = get_mastered_patterns(broker, pattern_to_idx, mastery_level=mastery_level)
             playday_patterns = list(set(mastered_patterns + active_pattern_names))
-            run_playday(broker, playday_patterns, pattern_to_idx, device, epoch)
+            current_section = active_sections[-1]
+            run_playday(broker, playday_patterns, pattern_to_idx, device, epoch, current_section)
 
             # No exams on playday - it's a real break!
             # Check section mastery though (in case they crossed threshold during play)
@@ -1017,7 +1072,8 @@ def main(args):
                 print(f"\n  *** CELEBRATION PLAYDAY! ***")
                 mastered_for_play = get_mastered_patterns(broker, pattern_to_idx, mastery_level=mastery_level)
                 celebration_patterns = list(set(mastered_for_play + active_pattern_names))
-                run_playday(broker, celebration_patterns, pattern_to_idx, device, epoch)
+                new_section = available_sections[current_phase]
+                run_playday(broker, celebration_patterns, pattern_to_idx, device, epoch, new_section)
 
             else:
                 # Show progress toward mastery
