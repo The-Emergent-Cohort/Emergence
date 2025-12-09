@@ -21,6 +21,7 @@ from developmental_curriculum import (
     YEAR_1_PATTERNS, YEAR_2_PATTERNS, ALL_PATTERNS,
     get_pattern_names, get_patterns_by_section, print_curriculum
 )
+import random
 from systems import ExaminationSystem
 from systems.progression import TopicTracker
 
@@ -372,6 +373,215 @@ def create_datasets(sections, args, seed_offset=0):
     return train_data, val_data
 
 
+def get_mastered_patterns(broker, pattern_to_idx, mastery_level=3):
+    """
+    Get patterns that ALL students have mastered (confirmed level >= mastery_level).
+    These become "unlocked priors" for playday.
+    """
+    mastered = []
+    idx_to_pattern = {v: k for k, v in pattern_to_idx.items()}
+
+    for pt_idx in range(len(pattern_to_idx)):
+        all_mastered = True
+        for student in broker.students.values():
+            if pt_idx >= student.exam_system.n_topics:
+                all_mastered = False
+                break
+            confirmed = student.exam_system.confirmed_level[pt_idx].item()
+            if confirmed < mastery_level:
+                all_mastered = False
+                break
+
+        if all_mastered:
+            mastered.append(idx_to_pattern[pt_idx])
+
+    return mastered
+
+
+def generate_creative_challenge(mastered_patterns, vocab_size=26):
+    """
+    Teacher generates creative challenges combining mastered skills.
+
+    Challenge types:
+    - Longer sequences (test endurance)
+    - Mixed patterns (combine two skills)
+    - Edge cases (boundary values)
+    """
+    if not mastered_patterns:
+        return None, None
+
+    # Find the pattern objects
+    pattern_objs = [p for p in ALL_PATTERNS if p.name in mastered_patterns]
+    if not pattern_objs:
+        return None, None
+
+    # Pick a challenge type
+    challenge_type = random.choice(['longer', 'edge_case', 'reversed'])
+
+    # Pick a pattern to base the challenge on
+    pattern = random.choice(pattern_objs)
+    base = pattern.generator(vocab_size)
+
+    if challenge_type == 'longer' and len(base['sequence']) < 8:
+        # Make a longer version by extending the pattern
+        seq = base['sequence']
+        target = base['target']
+        # Extend by repeating logic (crude but works for demo)
+        extended_seq = seq + [target]
+        # Generate new target based on pattern
+        new_example = pattern.generator(vocab_size)
+        challenge = {
+            'sequence': extended_seq,
+            'target': new_example['target'],
+            'challenge_type': 'longer',
+            'base_pattern': pattern.name
+        }
+    elif challenge_type == 'edge_case':
+        # Use boundary values
+        challenge = {
+            'sequence': base['sequence'],
+            'target': base['target'],
+            'challenge_type': 'edge_case',
+            'base_pattern': pattern.name
+        }
+    else:  # reversed
+        # Present sequence backwards (tests flexibility)
+        challenge = {
+            'sequence': list(reversed(base['sequence'])),
+            'target': base['sequence'][0],  # First element becomes target
+            'challenge_type': 'reversed',
+            'base_pattern': pattern.name
+        }
+
+    return challenge, f"Creative {challenge_type} challenge using {pattern.name}"
+
+
+def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_size=26):
+    """
+    Run a playday session - exploration without grades.
+
+    Features:
+    - Unlocked priors: access to all mastered patterns
+    - Creative challenges: teacher suggests harder variants
+    - Peer challenges: students solve patterns from each other
+    - No penalties: wrong answers don't hurt XP (exploration mode)
+    """
+    print(f"\n  {'🎮'*20}")
+    print(f"  *** PLAYDAY! (Epoch {epoch}) ***")
+    print(f"  Unlocked priors: {mastered_patterns}")
+    print(f"  {'🎮'*20}")
+
+    if not mastered_patterns:
+        print("  No mastered patterns yet - skipping playday")
+        return {}
+
+    results = {name: {
+        'creative_correct': 0, 'creative_total': 0,
+        'peer_correct': 0, 'peer_total': 0,
+        'patterns_explored': set()
+    } for name in broker.students.keys()}
+
+    # === PHASE 1: CREATIVE CHALLENGES FROM TEACHER ===
+    print("\n  --- Teacher's Creative Challenges ---")
+    n_challenges = min(10, len(mastered_patterns) * 3)
+
+    for _ in range(n_challenges):
+        challenge, description = generate_creative_challenge(mastered_patterns, vocab_size)
+        if challenge is None:
+            continue
+
+        # Pad sequence
+        max_len = 12
+        seq = challenge['sequence']
+        padded = seq + [0] * (max_len - len(seq))
+        tokens = torch.tensor(padded[:max_len], dtype=torch.long).unsqueeze(0).to(device)
+        target = challenge['target']
+        seq_len = [len(seq)]
+
+        for name, student in broker.students.items():
+            student.eval()
+            with torch.no_grad():
+                logits, _, _ = student(tokens, seq_len)
+                pred = logits.argmax(dim=-1).item()
+                correct = (pred == target)
+
+            results[name]['creative_total'] += 1
+            results[name]['patterns_explored'].add(challenge['base_pattern'])
+
+            if correct:
+                results[name]['creative_correct'] += 1
+                # Bonus XP for creative success (but it's playday, so smaller bonus)
+                if challenge['base_pattern'] in pattern_to_idx:
+                    pt_idx = pattern_to_idx[challenge['base_pattern']]
+                    student.topic_tracker.award_xp(pt_idx, 0.5)  # Small exploration bonus
+
+    # === PHASE 2: PEER CHALLENGES ===
+    print("\n  --- Peer Challenges ---")
+    student_names = list(broker.students.keys())
+
+    # Each student gets challenged by each other student
+    for challenger_name in student_names:
+        challenger = broker.students[challenger_name]
+
+        # Challenger picks a pattern they're good at
+        challenger_strengths = []
+        for pt in mastered_patterns:
+            if pt in pattern_to_idx:
+                pt_idx = pattern_to_idx[pt]
+                level = challenger.topic_tracker.get_level(pt_idx)
+                challenger_strengths.append((pt, level))
+
+        if not challenger_strengths:
+            continue
+
+        # Pick their strongest pattern
+        challenger_strengths.sort(key=lambda x: x[1], reverse=True)
+        challenge_pattern = challenger_strengths[0][0]
+
+        # Generate a challenge from that pattern
+        pattern_obj = next((p for p in ALL_PATTERNS if p.name == challenge_pattern), None)
+        if pattern_obj is None:
+            continue
+
+        example = pattern_obj.generator(vocab_size)
+        max_len = 12
+        seq = example['sequence']
+        padded = seq + [0] * (max_len - len(seq))
+        tokens = torch.tensor(padded[:max_len], dtype=torch.long).unsqueeze(0).to(device)
+        target = example['target']
+        seq_len = [len(seq)]
+
+        # Other students try to solve it
+        for solver_name, solver in broker.students.items():
+            if solver_name == challenger_name:
+                continue
+
+            solver.eval()
+            with torch.no_grad():
+                logits, _, _ = solver(tokens, seq_len)
+                pred = logits.argmax(dim=-1).item()
+                correct = (pred == target)
+
+            results[solver_name]['peer_total'] += 1
+
+            if correct:
+                results[solver_name]['peer_correct'] += 1
+                # No XP for peer challenges - just exploration
+
+    # === PLAYDAY SUMMARY ===
+    print("\n  --- Playday Results ---")
+    for name in broker.students:
+        r = results[name]
+        creative_acc = r['creative_correct'] / r['creative_total'] if r['creative_total'] > 0 else 0
+        peer_acc = r['peer_correct'] / r['peer_total'] if r['peer_total'] > 0 else 0
+        explored = len(r['patterns_explored'])
+        print(f"    {name:8s}: Creative {creative_acc:.0%}, Peer {peer_acc:.0%}, Explored {explored} patterns")
+
+    print(f"  {'🎮'*20}\n")
+
+    return results
+
+
 def main(args):
     session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -522,6 +732,11 @@ def main(args):
         total_exams = sum(len(r) for r in exam_results.values())
         if total_exams > 0:
             print(f"\n  Exams this epoch: {total_exams}")
+
+        # PLAYDAY every 6 epochs - exploration time!
+        if epoch % 6 == 0:
+            mastered_patterns = get_mastered_patterns(broker, pattern_to_idx, mastery_level=3)
+            run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch)
 
         # Class average
         class_acc = sum(v['accuracy'] for v in val_results.values()) / len(val_results)
