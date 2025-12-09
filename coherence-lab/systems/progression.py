@@ -187,6 +187,14 @@ class TopicTracker(nn.Module):
         """Get detailed XP info."""
         return self.progression.get_xp_info(topic_idx)
 
+    def get_total_xp(self):
+        """Get total XP across all topics."""
+        return self.progression.get_total_xp()
+
+    def get_average_level(self, active_mask=None):
+        """Get average level across topics."""
+        return self.progression.get_average_level(active_mask)
+
     def update(self, topic_indices, correct, confidence):
         """
         Update XP based on batch results.
