@@ -284,22 +284,21 @@ def gen_trap_constant(vocab_size: int) -> Dict:
 # =============================================================================
 
 def gen_add_two(vocab_size: int) -> Dict:
-    """[a, b] → a + b - Basic addition: 1 + 1 = 2."""
-    # Small numbers for Year 0 - match remainder_from_group range
-    # They'll learn larger numbers in Year 1 extended arithmetic
+    """[a, b] → a + b - Basic addition with b >= 2 (b=1 is add_one)."""
+    # Small numbers for Year 0, but b >= 2 to not overlap with add_one
     max_val = 6
     a = random.randint(0, max_val)
-    b = random.randint(0, max_val)
+    b = random.randint(2, max_val)  # Never 1 - that's add_one's domain
     target = a + b
     return {'sequence': [a, b], 'target': target}
 
 
 def gen_subtract_two(vocab_size: int) -> Dict:
-    """[a, b] → a - b - Basic subtraction (a >= b for positive result)."""
-    # Small numbers for Year 0 - match remainder_from_group range
+    """[a, b] → a - b - Basic subtraction with b >= 2 (b=1 is subtract_one)."""
+    # Small numbers for Year 0, but b >= 2 to not overlap with subtract_one
     max_val = 6
-    a = random.randint(1, max_val)
-    b = random.randint(0, a)  # b <= a ensures non-negative result
+    a = random.randint(2, max_val)  # Must be >= 2 since b >= 2
+    b = random.randint(2, min(a, max_val))  # b >= 2, b <= a
     target = a - b
     return {'sequence': [a, b], 'target': target}
 
@@ -540,12 +539,15 @@ class PatternType:
 # Single-number +1/-1 is ambiguous: [3]→? could be 2 or 4
 # They'll learn +1/-1 from chains and two-input addition first
 YEAR_0_PATTERNS = [
-    # 0A: Chains (context-rich) - easy wins, implicit +1/-1 in sequences
+    # 0A: Fundamentals - chains + explicit +1/-1 (the building blocks)
+    # The "1" token gets tied to +1/-1 operations explicitly
     PatternType('successor_chain', gen_successor_chain, 1, 0, '0A', 'Counting up [1,2,3]→4'),
     PatternType('predecessor_chain', gen_predecessor_chain, 1, 0, '0A', 'Counting down [5,4,3]→2'),
+    PatternType('add_one', gen_add_one, 1, 0, '0A', 'Plus one [n,1]→n+1'),
+    PatternType('subtract_one', gen_subtract_one, 1, 0, '0A', 'Minus one [n,1]→n-1'),
     PatternType('count_sequence', gen_count_sequence, 2, 0, '0A', 'How many? [a,b,c]→3'),
 
-    # 0B: Two-input arithmetic (small numbers, clean signal)
+    # 0B: Two-input arithmetic (b >= 2, generalizes from +1/-1)
     PatternType('add_two', gen_add_two, 1, 0, '0B', 'Add [a,b]→a+b'),
     PatternType('subtract_two', gen_subtract_two, 2, 0, '0B', 'Subtract [a,b]→a-b'),
     PatternType('remainder_from_group', gen_remainder_from_group, 2, 0, '0B', 'Remaining [5,2]→3'),
