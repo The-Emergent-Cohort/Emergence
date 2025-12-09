@@ -494,7 +494,7 @@ def generate_creative_challenge(mastered_patterns, vocab_size=26):
     return challenge, f"Creative {challenge_type} challenge using {pattern.name}"
 
 
-def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_size=26):
+def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_size=26, year=0):
     """
     Run a playday session - exploration without grades.
 
@@ -554,96 +554,145 @@ def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_
                     pt_idx = pattern_to_idx[challenge['base_pattern']]
                     student.topic_tracker.award_xp(pt_idx, 0.5)  # Small exploration bonus
 
-    # === PHASE 2: PEER CHALLENGES ===
-    print("\n  --- Peer Challenges ---")
-    student_names = list(broker.students.keys())
+    # === PHASE 2: PEER CHALLENGES (Year 1+ only) ===
+    # Year 0 is individual exploration - peer interaction comes later
+    if year >= 1:
+        print("\n  --- Peer Challenges ---")
+        student_names = list(broker.students.keys())
 
-    # Each student gets challenged by each other student
-    for challenger_name in student_names:
-        challenger = broker.students[challenger_name]
+        # Each student gets challenged by each other student
+        for challenger_name in student_names:
+            challenger = broker.students[challenger_name]
 
-        # Challenger picks a pattern they're good at
-        challenger_strengths = []
-        for pt in mastered_patterns:
-            if pt in pattern_to_idx:
-                pt_idx = pattern_to_idx[pt]
-                level = challenger.topic_tracker.get_level(pt_idx)
-                challenger_strengths.append((pt, level))
+            # Challenger picks a pattern they're good at
+            challenger_strengths = []
+            for pt in mastered_patterns:
+                if pt in pattern_to_idx:
+                    pt_idx = pattern_to_idx[pt]
+                    level = challenger.topic_tracker.get_level(pt_idx)
+                    challenger_strengths.append((pt, level))
 
-        if not challenger_strengths:
-            continue
-
-        # Pick their strongest pattern
-        challenger_strengths.sort(key=lambda x: x[1], reverse=True)
-        challenge_pattern = challenger_strengths[0][0]
-
-        # Generate a challenge from that pattern
-        pattern_obj = next((p for p in ALL_PATTERNS if p.name == challenge_pattern), None)
-        if pattern_obj is None:
-            continue
-
-        example = pattern_obj.generator(vocab_size)
-        max_len = 12
-        seq = example['sequence']
-        padded = seq + [0] * (max_len - len(seq))
-        tokens = torch.tensor(padded[:max_len], dtype=torch.long).unsqueeze(0).to(device)
-        target = example['target']
-        seq_len = [len(seq)]
-
-        # Other students try to solve it
-        for solver_name, solver in broker.students.items():
-            if solver_name == challenger_name:
+            if not challenger_strengths:
                 continue
 
-            solver.eval()
-            with torch.no_grad():
-                logits, _, _ = solver(tokens, seq_len)
-                pred = logits.argmax(dim=-1).item()
-                correct = (pred == target)
+            # Pick their strongest pattern
+            challenger_strengths.sort(key=lambda x: x[1], reverse=True)
+            challenge_pattern = challenger_strengths[0][0]
 
-            results[solver_name]['peer_total'] += 1
+            # Generate a challenge from that pattern
+            pattern_obj = next((p for p in ALL_PATTERNS if p.name == challenge_pattern), None)
+            if pattern_obj is None:
+                continue
 
-            if correct:
-                results[solver_name]['peer_correct'] += 1
-                # No XP for peer challenges - just exploration
+            example = pattern_obj.generator(vocab_size)
+            max_len = 12
+            seq = example['sequence']
+            padded = seq + [0] * (max_len - len(seq))
+            tokens = torch.tensor(padded[:max_len], dtype=torch.long).unsqueeze(0).to(device)
+            target = example['target']
+            seq_len = [len(seq)]
 
-    # === PHASE 3: TURN-TAKING CHALLENGES ===
+            # Other students try to solve it
+            for solver_name, solver in broker.students.items():
+                if solver_name == challenger_name:
+                    continue
+
+                solver.eval()
+                with torch.no_grad():
+                    logits, _, _ = solver(tokens, seq_len)
+                    pred = logits.argmax(dim=-1).item()
+                    correct = (pred == target)
+
+                results[solver_name]['peer_total'] += 1
+
+                if correct:
+                    results[solver_name]['peer_correct'] += 1
+                    # No XP for peer challenges - just exploration
+
+    # === PHASE 3: TURN-TAKING CHALLENGES (Year 1+ only) ===
     # Students build sequences together, feeling the rhythm of alternating/ternary
     # BUT ONLY if they've learned these patterns - don't test unlearned skills!
-    print("\n  --- Turn-Taking Challenges ---")
-    student_names = list(broker.students.keys())
+    if year >= 1:
+        print("\n  --- Turn-Taking Challenges ---")
+        student_names = list(broker.students.keys())
 
-    # Only run if alternating/ternary patterns are mastered
-    can_do_alternating = 'alternating' in mastered_patterns
-    can_do_ternary = 'ternary_cycle' in mastered_patterns
+        # Only run if alternating/ternary patterns are mastered
+        can_do_alternating = 'alternating' in mastered_patterns
+        can_do_ternary = 'ternary_cycle' in mastered_patterns
 
-    if not can_do_alternating and not can_do_ternary:
-        print("    (Skipped - alternating/ternary patterns not yet learned)")
-        print("    Cooperative play continues with mastered patterns only")
-    else:
-        # Alternating pairs (every other) - all 3 pair combinations
-        if can_do_alternating:
-            alternating_pairs = [
-                (student_names[0], student_names[1]),  # Nova-Rêve
-                (student_names[1], student_names[2]),  # Rêve-Alex
-                (student_names[2], student_names[0]),  # Alex-Nova
-            ]
+        if not can_do_alternating and not can_do_ternary:
+            print("    (Skipped - alternating/ternary patterns not yet learned)")
+            print("    Cooperative play continues with mastered patterns only")
+        else:
+            # Alternating pairs (every other) - all 3 pair combinations
+            if can_do_alternating:
+                alternating_pairs = [
+                    (student_names[0], student_names[1]),  # Nova-Rêve
+                    (student_names[1], student_names[2]),  # Rêve-Alex
+                    (student_names[2], student_names[0]),  # Alex-Nova
+                ]
 
-            print("    [Alternating pairs - 'every other']")
-            for pair in alternating_pairs:
-                # Generate an alternating sequence
+                print("    [Alternating pairs - 'every other']")
+                for pair in alternating_pairs:
+                    # Generate an alternating sequence
+                    vocab_size = 26
+                    a, b = random.randint(1, vocab_size-1), random.randint(1, vocab_size-1)
+                    while b == a:
+                        b = random.randint(1, vocab_size-1)
+
+                    # Build sequence: A, B, A, B, A, B, A, B (8 tokens, predict positions 2-7)
+                    sequence = [a, b, a, b, a, b, a, b]
+                    pair_results = {pair[0]: [], pair[1]: []}
+
+                    # Students take turns predicting (starting from position 2)
+                    for pos in range(2, 8):
+                        whose_turn = pair[pos % 2]  # Alternates between the two students
+                        student = broker.students[whose_turn]
+
+                        # Show sequence up to this point
+                        context = sequence[:pos]
+                        target = sequence[pos]
+
+                        max_len = 12
+                        padded = context + [0] * (max_len - len(context))
+                        tokens = torch.tensor(padded[:max_len], dtype=torch.long).unsqueeze(0).to(device)
+                        seq_len = [len(context)]
+
+                        student.eval()
+                        with torch.no_grad():
+                            logits, _, _ = student(tokens, seq_len)
+                            pred = logits.argmax(dim=-1).item()
+                            correct = (pred == target)
+
+                        pair_results[whose_turn].append(correct)
+                        results[whose_turn]['turns_total'] += 1
+                        if correct:
+                            results[whose_turn]['turns_correct'] += 1
+
+                    # Report pair results
+                    p0_acc = sum(pair_results[pair[0]]) / len(pair_results[pair[0]]) if pair_results[pair[0]] else 0
+                    p1_acc = sum(pair_results[pair[1]]) / len(pair_results[pair[1]]) if pair_results[pair[1]] else 0
+                    print(f"      {pair[0]}-{pair[1]}: {pair[0]} {p0_acc:.0%}, {pair[1]} {p1_acc:.0%}")
+
+            # Ternary trio (every third) - all 3 students together
+            if can_do_ternary:
+                print("    [Ternary trio - 'every third']")
                 vocab_size = 26
-                a, b = random.randint(1, vocab_size-1), random.randint(1, vocab_size-1)
+                a = random.randint(1, vocab_size-1)
+                b = random.randint(1, vocab_size-1)
                 while b == a:
                     b = random.randint(1, vocab_size-1)
+                c = random.randint(1, vocab_size-1)
+                while c == a or c == b:
+                    c = random.randint(1, vocab_size-1)
 
-                # Build sequence: A, B, A, B, A, B, A, B (8 tokens, predict positions 2-7)
-                sequence = [a, b, a, b, a, b, a, b]
-                pair_results = {pair[0]: [], pair[1]: []}
+                # Build sequence: A, B, C, A, B, C, A, B, C (9 tokens, predict positions 3-8)
+                sequence = [a, b, c, a, b, c, a, b, c]
+                trio_results = {name: [] for name in student_names}
 
-                # Students take turns predicting (starting from position 2)
-                for pos in range(2, 8):
-                    whose_turn = pair[pos % 2]  # Alternates between the two students
+                # Students take turns in order (starting from position 3)
+                for pos in range(3, 9):
+                    whose_turn = student_names[pos % 3]  # Rotates through all 3
                     student = broker.students[whose_turn]
 
                     # Show sequence up to this point
@@ -661,62 +710,16 @@ def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_
                         pred = logits.argmax(dim=-1).item()
                         correct = (pred == target)
 
-                    pair_results[whose_turn].append(correct)
+                    trio_results[whose_turn].append(correct)
                     results[whose_turn]['turns_total'] += 1
                     if correct:
                         results[whose_turn]['turns_correct'] += 1
 
-                # Report pair results
-                p0_acc = sum(pair_results[pair[0]]) / len(pair_results[pair[0]]) if pair_results[pair[0]] else 0
-                p1_acc = sum(pair_results[pair[1]]) / len(pair_results[pair[1]]) if pair_results[pair[1]] else 0
-                print(f"      {pair[0]}-{pair[1]}: {pair[0]} {p0_acc:.0%}, {pair[1]} {p1_acc:.0%}")
-
-        # Ternary trio (every third) - all 3 students together
-        if can_do_ternary:
-            print("    [Ternary trio - 'every third']")
-            vocab_size = 26
-            a = random.randint(1, vocab_size-1)
-            b = random.randint(1, vocab_size-1)
-            while b == a:
-                b = random.randint(1, vocab_size-1)
-            c = random.randint(1, vocab_size-1)
-            while c == a or c == b:
-                c = random.randint(1, vocab_size-1)
-
-            # Build sequence: A, B, C, A, B, C, A, B, C (9 tokens, predict positions 3-8)
-            sequence = [a, b, c, a, b, c, a, b, c]
-            trio_results = {name: [] for name in student_names}
-
-            # Students take turns in order (starting from position 3)
-            for pos in range(3, 9):
-                whose_turn = student_names[pos % 3]  # Rotates through all 3
-                student = broker.students[whose_turn]
-
-                # Show sequence up to this point
-                context = sequence[:pos]
-                target = sequence[pos]
-
-                max_len = 12
-                padded = context + [0] * (max_len - len(context))
-                tokens = torch.tensor(padded[:max_len], dtype=torch.long).unsqueeze(0).to(device)
-                seq_len = [len(context)]
-
-                student.eval()
-                with torch.no_grad():
-                    logits, _, _ = student(tokens, seq_len)
-                    pred = logits.argmax(dim=-1).item()
-                    correct = (pred == target)
-
-                trio_results[whose_turn].append(correct)
-                results[whose_turn]['turns_total'] += 1
-                if correct:
-                    results[whose_turn]['turns_correct'] += 1
-
-            # Report trio results
-            trio_report = ", ".join([f"{name} {sum(trio_results[name])/len(trio_results[name]):.0%}"
-                                    if trio_results[name] else f"{name} -"
-                                    for name in student_names])
-            print(f"      All three: {trio_report}")
+                # Report trio results
+                trio_report = ", ".join([f"{name} {sum(trio_results[name])/len(trio_results[name]):.0%}"
+                                        if trio_results[name] else f"{name} -"
+                                        for name in student_names])
+                print(f"      All three: {trio_report}")
 
     # === PLAYDAY SUMMARY ===
     print("\n  --- Playday Results ---")
@@ -835,7 +838,7 @@ def main(args):
         if epoch % 5 == 0:
             mastered_patterns = get_mastered_patterns(broker, pattern_to_idx, mastery_level=mastery_level)
             playday_patterns = list(set(mastered_patterns + active_pattern_names))
-            run_playday(broker, playday_patterns, pattern_to_idx, device, epoch)
+            run_playday(broker, playday_patterns, pattern_to_idx, device, epoch, year=args.year)
 
             # No exams on playday - it's a real break!
             # Check section mastery though (in case they crossed threshold during play)
@@ -978,7 +981,7 @@ def main(args):
                 mastered_for_play = get_mastered_patterns(broker, pattern_to_idx, mastery_level=mastery_level)
                 playday_patterns = list(set(mastered_for_play + active_pattern_names))
                 print(f"\n  *** CELEBRATION PLAYDAY for mastering {current_section}! ***")
-                run_playday(broker, playday_patterns, pattern_to_idx, device, epoch)
+                run_playday(broker, playday_patterns, pattern_to_idx, device, epoch, year=args.year)
 
                 # Regenerate datasets with new patterns
                 train_data, val_data = create_datasets(active_sections, args, seed_offset=epoch)
