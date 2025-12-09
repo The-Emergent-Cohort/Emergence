@@ -15,3 +15,7 @@ __pycache__/
 
 # Logs and checkpoints tracked separately
 *.log
+
+# Model checkpoints (large files)
+*.pt
+data/runs/
