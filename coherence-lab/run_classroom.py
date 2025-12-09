@@ -48,6 +48,80 @@ def get_all_patterns():
     return ['alternating', 'repeating', 'incrementing', 'fixed_offset']
 
 
+def run_student_exams(
+    broker: ClassroomBroker,
+    pattern_types: list,
+    pattern_to_idx: dict,
+    device: torch.device,
+    epoch: int
+) -> dict:
+    """
+    Run level-up exams for any eligible students/topics.
+
+    Returns dict of exam results by student.
+    """
+    results = {}
+
+    for name, student in broker.students.items():
+        student_results = []
+
+        # Tick cooldowns
+        student.exam_system.tick_cooldowns()
+
+        for pt_idx, pt in enumerate(pattern_types):
+            if student.exam_system.check_eligible(pt_idx):
+                # Generate exam dataset for this pattern
+                target_level = student.exam_system.confirmed_level[pt_idx].item() + 1
+                exam_size = student.exam_system.get_exam_size(target_level)
+
+                # Create mini-dataset for exam
+                exam_data = PatternDataset(n_examples=exam_size, seed=epoch * 1000 + pt_idx)
+
+                # Filter to just this pattern (exam_data has all patterns mixed)
+                # For now, run on all patterns but track this one specifically
+                correct_count = 0
+                total_count = 0
+
+                student.eval()
+                with torch.no_grad():
+                    for ex in exam_data:
+                        if ex['pattern_type'] == pt:
+                            tokens = ex['sequence'].unsqueeze(0).to(device)
+                            target = ex['target']
+                            seq_len = [ex['seq_len']]
+
+                            logits, _, _ = student(tokens, seq_len)
+                            pred = logits.argmax(dim=-1).item()
+
+                            total_count += 1
+                            if pred == target:
+                                correct_count += 1
+
+                            if total_count >= exam_size:
+                                break
+
+                # If we didn't get enough samples, generate more targeted
+                if total_count < exam_size // 2:
+                    # Fallback: use what we have
+                    pass
+
+                if total_count > 0:
+                    result = student.exam_system.take_exam(pt_idx, correct_count, total_count)
+                    result['pattern'] = pt
+                    result['student'] = name
+                    student_results.append(result)
+
+                    if result['passed']:
+                        print(f"  ** {student.name} passed L{result['new_level']} exam for {pt}! ({result['score']:.0%})")
+                    else:
+                        print(f"  -- {student.name} failed L{result['new_level']+1} exam for {pt} ({result['score']:.0%} < {result['threshold']:.0%})")
+
+        student.train()
+        results[name] = student_results
+
+    return results
+
+
 def append_to_log(log_file, record):
     """Append a single record to log file (crash-safe)."""
     try:
@@ -79,8 +153,13 @@ def train_epoch_parallel(
     # Per-student tracking
     results = {name: {
         'loss': 0.0, 'correct': 0, 'total': 0,
-        'show_count': 0, 'approval_count': 0
+        'show_count': 0, 'approval_count': 0,
+        'xp_from_shows': 0.0
     } for name in broker.students.keys()}
+
+    # Approval-seeking parameters
+    SHOW_CONF_THRESHOLD = 0.7  # Only show when confident
+    APPROVAL_XP_BONUS = 3.0    # XP bonus for validated work
 
     for batch in train_loader:
         tokens = batch['tokens'].to(device)
@@ -128,6 +207,36 @@ def train_epoch_parallel(
             results[name]['correct'] += correct.sum().item()
             results[name]['total'] += len(targets)
 
+            # Update topic tracker with accuracy and confidence
+            pattern_indices = torch.tensor(
+                [pattern_to_idx[p] for p in pattern_types], device=device
+            )
+            student.topic_tracker.update(pattern_indices, correct, conf)
+
+            # Award XP for correct answers
+            for i, pt in enumerate(pattern_types):
+                if correct[i]:
+                    pt_idx = pattern_to_idx[pt]
+                    student.topic_tracker.award_xp(pt_idx, 1.0)
+
+            # === APPROVAL-SEEKING BEHAVIOR ===
+            # Student decides to "show work" when confident
+            # Teacher validates and awards bonus XP
+            for i in range(len(targets)):
+                conf_val = conf[i].item() if i < len(conf) else 0.5
+
+                # Show work when confident
+                if conf_val >= SHOW_CONF_THRESHOLD:
+                    results[name]['show_count'] += 1
+                    pt_idx = pattern_to_idx[pattern_types[i]]
+
+                    # Teacher approves if correct
+                    if correct[i]:
+                        results[name]['approval_count'] += 1
+                        # Bonus XP for validated confidence
+                        student.topic_tracker.award_xp(pt_idx, APPROVAL_XP_BONUS)
+                        results[name]['xp_from_shows'] += APPROVAL_XP_BONUS
+
     broker.sleep_all()
 
     # Compute averages
@@ -136,8 +245,15 @@ def train_epoch_parallel(
         if total > 0:
             results[name]['loss'] /= total
             results[name]['accuracy'] = results[name]['correct'] / total
+            results[name]['show_rate'] = results[name]['show_count'] / total
+            if results[name]['show_count'] > 0:
+                results[name]['approval_rate'] = results[name]['approval_count'] / results[name]['show_count']
+            else:
+                results[name]['approval_rate'] = 0.0
         else:
             results[name]['accuracy'] = 0.0
+            results[name]['show_rate'] = 0.0
+            results[name]['approval_rate'] = 0.0
 
     return results
 
@@ -190,18 +306,22 @@ def evaluate_all(
     return results
 
 
-def print_leaderboard(results: dict, epoch: int):
-    """Print comparative leaderboard."""
+def print_leaderboard(results: dict, broker: ClassroomBroker, epoch: int):
+    """Print comparative leaderboard with XP/level info."""
     # Sort by accuracy
     ranked = sorted(results.items(), key=lambda x: x[1]['accuracy'], reverse=True)
 
     print(f"\n  Leaderboard (Epoch {epoch}):")
     for i, (name, data) in enumerate(ranked):
-        medal = ["🥇", "🥈", "🥉"][i] if i < 3 else "  "
         acc = data['accuracy']
-        # Use ASCII since emoji might not display
         rank_marker = ["1st", "2nd", "3rd"][i] if i < 3 else f"{i+1}th"
-        print(f"    {rank_marker}: {name:8s} {acc:.1%}")
+
+        # Get XP/level from student
+        student = broker.students[name]
+        xp = student.xp
+        avg_level = student.current_level
+
+        print(f"    {rank_marker}: {name:8s} {acc:.1%}  (XP: {xp:6.0f}, Avg Lvl: {avg_level:.1f})")
 
 
 def main(args):
@@ -294,7 +414,9 @@ def main(args):
         print("\n  Training:")
         for name in broker.students.keys():
             tr = train_results[name]
-            print(f"    {name:8s}: loss={tr['loss']:.4f}, acc={tr['accuracy']:.1%}")
+            show_str = f"show={tr['show_rate']:.0%}" if tr['show_rate'] > 0 else ""
+            appr_str = f"appr={tr['approval_rate']:.0%}" if tr['show_count'] > 0 else ""
+            print(f"    {name:8s}: loss={tr['loss']:.4f}, acc={tr['accuracy']:.1%} {show_str} {appr_str}")
 
         print("\n  Validation:")
         for name in broker.students.keys():
@@ -302,16 +424,27 @@ def main(args):
             print(f"    {name:8s}: acc={vr['accuracy']:.1%}")
 
         # Leaderboard
-        print_leaderboard(val_results, epoch)
+        print_leaderboard(val_results, broker, epoch)
 
-        # Per-pattern detail (first student only, others similar)
+        # Per-pattern detail with XP/level (first student only, others similar)
         if epoch % 5 == 0 or epoch <= 3:
+            nova = broker.students['nova']
             print("\n  Per-pattern (Nova):")
             for section in CURRICULUM:
                 for pt in section['patterns']:
+                    pt_idx = pattern_to_idx[pt]
                     acc = val_results['nova']['per_pattern'].get(pt, 0)
                     bar = "█" * int(acc * 10) + "·" * (10 - int(acc * 10))
-                    print(f"    {pt:18s}: {acc:.0%} {bar}")
+                    level = nova.topic_tracker.get_level(pt_idx)
+                    confirmed = nova.exam_system.confirmed_level[pt_idx].item()
+                    xp, _, progress, _ = nova.topic_tracker.get_xp_info(pt_idx)
+                    print(f"    {pt:18s}: {acc:.0%} {bar} L{confirmed}(+{level-confirmed}) ({xp:.0f}xp)")
+
+        # Run level-up exams for eligible students
+        exam_results = run_student_exams(broker, pattern_types, pattern_to_idx, device, epoch)
+        total_exams = sum(len(r) for r in exam_results.values())
+        if total_exams > 0:
+            print(f"\n  Exams this epoch: {total_exams}")
 
         # Class average
         class_acc = sum(v['accuracy'] for v in val_results.values()) / len(val_results)
@@ -350,7 +483,12 @@ def main(args):
     for name in broker.students:
         acc = final_val[name]['accuracy']
         student = broker.students[name]
-        print(f"  {student.name}: {acc:.1%}")
+        xp = student.xp
+        avg_level = student.current_level
+        # Count confirmed levels and graduations
+        confirmed_levels = sum(student.exam_system.confirmed_level[i].item() for i in range(student._n_topics))
+        graduations = student.exam_system.topic_graduated.sum().item()
+        print(f"  {student.name}: {acc:.1%} | XP: {xp:.0f} | Confirmed Lvls: {confirmed_levels} | Grads: {int(graduations)}")
 
     print(f"\nLog: {log_file}")
     print("=" * 70)

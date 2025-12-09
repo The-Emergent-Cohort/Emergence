@@ -160,3 +160,175 @@ class XPRewards:
     STREAK_DIVISOR = 5        # streak_length // 5 = bonus XP
     VALIDATION = 0.0          # Asking for help is neutral
     SPONTANEOUS = 0.0         # Spontaneous share is neutral
+
+
+class TopicTracker(nn.Module):
+    """
+    Combined XP/level progression with accuracy and calibration tracking.
+
+    Provides unified API for:
+    - XP and leveling (delegates to ProgressionSystem)
+    - Accuracy tracking per topic
+    - Confidence calibration tracking
+    - Streak tracking (consecutive correct answers)
+
+    This is what self_model.topic_tracker points to.
+    """
+
+    def __init__(self, n_topics=10, max_level=10):
+        super().__init__()
+        self.n_topics = n_topics
+
+        # Core progression
+        self.progression = ProgressionSystem(n_topics=n_topics, max_level=max_level)
+
+        # Per-topic accuracy tracking (rolling window via exponential moving average)
+        self.register_buffer('topic_correct', torch.zeros(n_topics))
+        self.register_buffer('topic_total', torch.zeros(n_topics))
+        self.register_buffer('topic_conf_sum', torch.zeros(n_topics))
+
+        # Streak tracking
+        self.register_buffer('topic_streak', torch.zeros(n_topics, dtype=torch.long))
+        self.register_buffer('topic_best_streak', torch.zeros(n_topics, dtype=torch.long))
+        self.register_buffer('topic_mastered', torch.zeros(n_topics, dtype=torch.bool))
+
+    def update(self, pattern_indices: torch.Tensor, correct: torch.Tensor, confidence: torch.Tensor):
+        """
+        Update tracking after a batch of predictions.
+
+        Args:
+            pattern_indices: Tensor of topic indices for each example
+            correct: Bool tensor of whether each prediction was correct
+            confidence: Tensor of model confidence for each example
+        """
+        with torch.no_grad():
+            for i in range(len(pattern_indices)):
+                idx = pattern_indices[i].item()
+                if idx >= self.n_topics:
+                    continue
+
+                is_correct = correct[i].item()
+                conf = confidence[i].item() if confidence.dim() > 0 else confidence.item()
+
+                # Accuracy tracking
+                self.topic_correct[idx] += float(is_correct)
+                self.topic_total[idx] += 1
+                self.topic_conf_sum[idx] += conf
+
+                # Streak tracking
+                if is_correct:
+                    self.topic_streak[idx] += 1
+                    if self.topic_streak[idx] > self.topic_best_streak[idx]:
+                        self.topic_best_streak[idx] = self.topic_streak[idx].clone()
+                    # Mark mastered if streak >= 10
+                    if self.topic_streak[idx] >= 10:
+                        self.topic_mastered[idx] = True
+                else:
+                    self.topic_streak[idx] = 0
+
+    def get_calibration(self, topic_idx: int):
+        """
+        Get calibration stats for a topic.
+
+        Returns: (accuracy, avg_confidence, calibration_gap)
+        """
+        total = self.topic_total[topic_idx].item()
+        if total == 0:
+            return 0.0, 0.5, 0.0
+
+        accuracy = self.topic_correct[topic_idx].item() / total
+        avg_conf = self.topic_conf_sum[topic_idx].item() / total
+        gap = abs(accuracy - avg_conf)
+
+        return accuracy, avg_conf, gap
+
+    def get_streak_info(self, topic_idx: int):
+        """
+        Get streak info for a topic.
+
+        Returns: (current_streak, best_streak, is_mastered)
+        """
+        return (
+            self.topic_streak[topic_idx].item(),
+            self.topic_best_streak[topic_idx].item(),
+            self.topic_mastered[topic_idx].item()
+        )
+
+    # Delegate to ProgressionSystem
+    def award_xp(self, topic_idx: int, amount: float):
+        """Award (or deduct) XP for a topic."""
+        self.progression.award_xp(topic_idx, amount)
+
+    def get_level(self, topic_idx: int) -> int:
+        """Get current level for a topic."""
+        return self.progression.get_level(topic_idx)
+
+    def get_xp_info(self, topic_idx: int):
+        """Get detailed XP info: (xp, level, progress, high_water)"""
+        return self.progression.get_xp_info(topic_idx)
+
+    def get_total_xp(self) -> float:
+        """Get total XP across all topics."""
+        return self.progression.get_total_xp()
+
+    def get_average_level(self, active_mask=None) -> float:
+        """Get average level across topics."""
+        return self.progression.get_average_level(active_mask)
+
+    def expand(self, new_size: int):
+        """Expand to accommodate more topics."""
+        if new_size <= self.n_topics:
+            return
+
+        with torch.no_grad():
+            device = self.topic_correct.device
+
+            # Expand progression
+            self.progression.expand(new_size)
+
+            # Expand our tracking buffers
+            new_correct = torch.zeros(new_size, device=device)
+            new_total = torch.zeros(new_size, device=device)
+            new_conf_sum = torch.zeros(new_size, device=device)
+            new_streak = torch.zeros(new_size, dtype=torch.long, device=device)
+            new_best_streak = torch.zeros(new_size, dtype=torch.long, device=device)
+            new_mastered = torch.zeros(new_size, dtype=torch.bool, device=device)
+
+            new_correct[:self.n_topics] = self.topic_correct
+            new_total[:self.n_topics] = self.topic_total
+            new_conf_sum[:self.n_topics] = self.topic_conf_sum
+            new_streak[:self.n_topics] = self.topic_streak
+            new_best_streak[:self.n_topics] = self.topic_best_streak
+            new_mastered[:self.n_topics] = self.topic_mastered
+
+            del self.topic_correct, self.topic_total, self.topic_conf_sum
+            del self.topic_streak, self.topic_best_streak, self.topic_mastered
+
+            self.register_buffer('topic_correct', new_correct)
+            self.register_buffer('topic_total', new_total)
+            self.register_buffer('topic_conf_sum', new_conf_sum)
+            self.register_buffer('topic_streak', new_streak)
+            self.register_buffer('topic_best_streak', new_best_streak)
+            self.register_buffer('topic_mastered', new_mastered)
+
+            self.n_topics = new_size
+
+    def get_summary(self) -> dict:
+        """Get summary of all topic stats."""
+        summary = {}
+        for i in range(self.n_topics):
+            acc, conf, gap = self.get_calibration(i)
+            xp, level, progress, high = self.get_xp_info(i)
+            streak, best, mastered = self.get_streak_info(i)
+            summary[i] = {
+                'accuracy': acc,
+                'confidence': conf,
+                'calibration_gap': gap,
+                'xp': xp,
+                'level': level,
+                'progress': progress,
+                'streak': streak,
+                'best_streak': best,
+                'mastered': mastered
+            }
+        return summary

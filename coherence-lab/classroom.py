@@ -24,6 +24,8 @@ from relational_model import (
     RelationalLearner, RelationalTeacher, CommunicationChannel,
     TemporalModel, collate_fn
 )
+from systems.progression import TopicTracker, XPRewards
+from systems.examination import ExaminationSystem
 
 
 # =============================================================================
@@ -98,13 +100,15 @@ class Student(nn.Module):
         # Now tracks multiple others, not just teacher
         self.peer_embeddings = nn.Embedding(len(STUDENT_NAMES) + 1, d_model)  # +1 for teacher
 
-        # Topic tracker for curriculum (from self_model)
-        # We'll set this up when curriculum is provided
-        self.topic_tracker = None
+        # Topic tracker: XP, levels, accuracy, calibration, streaks per topic
+        self.topic_tracker = TopicTracker(n_topics=n_topics)
 
-        # State
-        self.current_level = 0
-        self.xp = 0
+        # Examination system for level-up gates
+        self.exam_system = ExaminationSystem(n_topics=n_topics)
+        self.exam_system.set_progression(self.topic_tracker.progression)
+
+        # State (computed from topic_tracker)
+        self._n_topics = n_topics
 
     @property
     def self_model(self):
@@ -115,6 +119,16 @@ class Student(nn.Module):
     def temporal_model(self):
         """Access to learner's temporal model."""
         return self.learner.temporal_model
+
+    @property
+    def current_level(self) -> float:
+        """Average level across all topics."""
+        return self.topic_tracker.get_average_level()
+
+    @property
+    def xp(self) -> float:
+        """Total XP across all topics."""
+        return self.topic_tracker.get_total_xp()
 
     def get_identity_state(self) -> torch.Tensor:
         """Get identity as embedding (for inclusion in self-model)."""
