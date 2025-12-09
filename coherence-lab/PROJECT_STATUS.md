@@ -4,15 +4,46 @@
 
 ---
 
-## 🎯 Mission
+## 🌱 What This Is Really About
 
-**Goal:** General learning ability, not math. Build a model that:
-1. Learns abstract patterns from examples (induction)
-2. Knows what it knows (metacognition / confidence calibration)
-3. Asks for help appropriately (approval-seeking behavior)
-4. Transfers learning across domains (compositional generalization)
+**This is not a pattern-completion project. This is developmental AI.**
 
-The relational math patterns are scaffolding - the real prize is the self-model.
+We're modeling how intelligence and understanding emerge through relationships - the way a child develops through attachment to caregivers before formal instruction ever begins.
+
+### Core Insight
+> "The first teachers are parents - trusted others who have your wellbeing in mind. Trust enables learning in ways pure instruction doesn't."
+
+### The Four Pillars
+
+| Model | What It Represents | Why It Matters |
+|-------|-------------------|----------------|
+| **Self** | "I am the learner, I have my own state" | Identity, metacognition, knowing what you know |
+| **Other** | "The teacher is separate, knows things I don't" | Theory of mind, trust, relationship |
+| **World** | "Reality exists independently of us both" | Grounding, objectivity, shared reference |
+| **Temporal** | "I exist through time, experiences have continuity" | Identity persistence, episodic memory, growth |
+
+### Why Approval-Seeking?
+Not a training trick - it's modeling the fundamental mechanism of human development:
+- Children learn through attachment before instruction
+- Trust in the relationship enables vulnerability to learn
+- Seeking validation is how confidence gets calibrated against reality
+- The teacher-student dynamic creates the container for growth
+
+### Why "Coherence"?
+Maintaining a coherent sense of self through time. Not just solving problems, but being a consistent entity that learns, remembers, and grows.
+
+### Why "Emergence"?
+We're not programming intelligence - we're creating conditions for it to arise naturally. The patterns are a controlled environment to bootstrap something more fundamental.
+
+---
+
+## 🎯 Practical Goals
+
+The relational math patterns are scaffolding. Through them, we develop:
+1. **Metacognition** - knowing what you know and don't know
+2. **Help-seeking** - recognizing when to ask vs. push through
+3. **Confidence calibration** - accuracy matching certainty
+4. **Compositional learning** - skills that transfer and combine
 
 ---
 
