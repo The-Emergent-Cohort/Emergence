@@ -19,7 +19,8 @@ from classroom import ClassroomBroker, Student
 from developmental_curriculum import (
     DevelopmentalDataset, collate_fn,
     YEAR_1_PATTERNS, YEAR_2_PATTERNS, ALL_PATTERNS,
-    get_pattern_names, get_patterns_by_section, print_curriculum
+    get_pattern_names, get_patterns_by_section, print_curriculum,
+    get_playday_spec, PlaydaySpec
 )
 import random
 from systems import ExaminationSystem
@@ -475,7 +476,7 @@ def generate_creative_challenge(mastered_patterns, vocab_size=26):
     return challenge, f"Creative {challenge_type} challenge using {pattern.name}"
 
 
-def run_question_period(broker, active_pattern_names, pattern_to_idx, device, epochs_on_topic):
+def run_question_period(broker, active_pattern_names, pattern_to_idx, device, epochs_on_topic, vocab_size=26):
     """
     Question period at start of epoch - students surface uncertainty.
 
@@ -502,7 +503,7 @@ def run_question_period(broker, active_pattern_names, pattern_to_idx, device, ep
         if pattern is None:
             continue
 
-        example = pattern.generator()
+        example = pattern.generator(vocab_size)
         if len(example['sequence']) < 2:
             continue
 
@@ -667,13 +668,14 @@ def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch,
                 results[solver_name]['peer_correct'] += 1
                 # No XP for peer challenges - just exploration
 
-    # === PHASE 3: GUIDED ACTIVITY (1B+) ===
-    # 1A = pure free play, no guided activity
-    # 1B+ = structured "waiting your turn" activity that presages alternating patterns
+    # === PHASE 3: GUIDED ACTIVITIES (from curriculum spec) ===
+    # Activities scale with developmental maturity
+    playday_spec = get_playday_spec(current_section)
     student_names = list(broker.students.keys())
 
-    if current_section != '1A':
-        print("\n  --- Guided Activity: Waiting Your Turn ---")
+    if 'turn_taking' in playday_spec.activities:
+        print(f"\n  --- Guided Activity: Waiting Your Turn ---")
+        print(f"      ({playday_spec.description})")
 
         # Alternating pairs (every other) - teaches rhythm before alternating pattern
         alternating_pairs = [
@@ -780,11 +782,11 @@ def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch,
         explored = len(r['patterns_explored'])
         print(f"    {name:8s}: Creative {creative_acc:.0%}, Peer {peer_acc:.0%}, Turns {turns_acc:.0%}, Explored {explored} patterns")
 
-    # === STAR AWARDS (1B+) ===
-    if current_section != '1A':
+    # === STAR AWARDS (from curriculum spec) ===
+    if playday_spec.awards:
         print("\n  🌟 Star Awards 🌟")
 
-        # Calculate scores for different categories
+        # Calculate scores for all possible award categories
         scores = {}
         for name in broker.students:
             r = results[name]
@@ -794,28 +796,38 @@ def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch,
             scores[name] = {
                 'accuracy': (creative_acc + peer_acc) / 2,  # Most right answers
                 'patience': turns_acc,  # Best at waiting/turn-taking
-                'exploration': len(r['patterns_explored'])  # Most curious
+                'exploration': len(r['patterns_explored']),  # Most curious
+                'creativity': creative_acc,  # Creative challenge performance
+                'helpfulness': peer_acc,  # Peer challenge performance
+                'improvement': turns_acc,  # Placeholder - could track session-over-session
+                'collaboration': (peer_acc + turns_acc) / 2,  # Group activities
+                'teaching': peer_acc,  # How well they help others
+                'questioning': creative_acc * 0.5 + 0.5,  # Placeholder
+                'prediction': creative_acc,  # Prediction accuracy
+                'intuition': (creative_acc + turns_acc) / 2,  # Gut feel
+                'reasoning': (creative_acc + peer_acc + turns_acc) / 3,  # Overall
+                'persistence': len(r['patterns_explored']) / max(1, len(mastered_patterns)),
+                'hypothesis': creative_acc,  # Placeholder
+                'scientific': (creative_acc + peer_acc) / 2,  # Placeholder
             }
 
-        # Award stars for each category (ties allowed!)
-        categories = [
-            ('accuracy', 'Most Accurate'),
-            ('patience', 'Most Patient'),
-            ('exploration', 'Most Curious')
-        ]
+        # Award stars for categories defined in this section's spec (ties allowed!)
         medals = ['🥇', '🥈', '🥉']
         gold_count = {name: 0 for name in broker.students}
 
-        for cat_key, cat_name in categories:
+        for cat_key, cat_name in playday_spec.awards:
+            if cat_key not in scores[list(scores.keys())[0]]:
+                continue  # Skip undefined categories
+
             # Sort by score
-            ranked = sorted(scores.items(), key=lambda x: x[1][cat_key], reverse=True)
+            ranked = sorted(scores.items(), key=lambda x: x[1].get(cat_key, 0), reverse=True)
             print(f"    {cat_name}:")
 
             # Award medals with tie handling
             current_medal = 0
             prev_score = None
             for name, score_dict in ranked:
-                current_score = score_dict[cat_key]
+                current_score = score_dict.get(cat_key, 0)
                 if prev_score is not None and current_score < prev_score:
                     current_medal += 1
                 if current_medal < 3:
@@ -825,7 +837,7 @@ def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch,
                 prev_score = current_score
 
         # PARTY TIME if everyone gets all gold stars!
-        if all(count == len(categories) for count in gold_count.values()):
+        if all(count == len(playday_spec.awards) for count in gold_count.values()):
             print("\n  🎉🎉🎉 PARTY TIME! Everyone got ALL gold stars! 🎉🎉🎉")
 
     print(f"\n  {'🎮'*20}\n")
