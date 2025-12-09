@@ -353,7 +353,6 @@ def main(args):
         student_names=['nova', 'rêve', 'alex'],
         d_model=args.d_model,
         n_heads=args.n_heads,
-        n_layers=args.n_layers,
         vocab_size=26,
         n_topics=n_topics
     ).to(device)
@@ -496,7 +495,6 @@ if __name__ == '__main__':
     parser.add_argument('--val_size', type=int, default=2000)
     parser.add_argument('--d_model', type=int, default=128)
     parser.add_argument('--n_heads', type=int, default=4)
-    parser.add_argument('--n_layers', type=int, default=3)
     parser.add_argument('--data_dir', type=str, default='data')
 
     args = parser.parse_args()
