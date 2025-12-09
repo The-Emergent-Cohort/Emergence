@@ -585,31 +585,79 @@ def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_
 
     # === PHASE 3: TURN-TAKING CHALLENGES ===
     # Students build sequences together, feeling the rhythm of alternating/ternary
-    print("\n  --- Turn-Taking Challenges ---")
-    student_names = list(broker.students.keys())
+    # Only run if alternating or ternary_cycle patterns are unlocked
+    has_positional = 'alternating' in mastered_patterns or 'ternary_cycle' in mastered_patterns
+    if has_positional:
+        print("\n  --- Turn-Taking Challenges ---")
+        student_names = list(broker.students.keys())
 
-    # Alternating pairs (every other) - all 3 pair combinations
-    alternating_pairs = [
-        (student_names[0], student_names[1]),  # Nova-Rêve
-        (student_names[1], student_names[2]),  # Rêve-Alex
-        (student_names[2], student_names[0]),  # Alex-Nova
-    ]
+        # Alternating pairs (every other) - all 3 pair combinations
+        alternating_pairs = [
+            (student_names[0], student_names[1]),  # Nova-Rêve
+            (student_names[1], student_names[2]),  # Rêve-Alex
+            (student_names[2], student_names[0]),  # Alex-Nova
+        ]
 
-    print("    [Alternating pairs - 'every other']")
-    for pair in alternating_pairs:
-        # Generate an alternating sequence
+        print("    [Alternating pairs - 'every other']")
+        for pair in alternating_pairs:
+            # Generate an alternating sequence
+            vocab_size = 26
+            a, b = random.randint(1, vocab_size-1), random.randint(1, vocab_size-1)
+            while b == a:
+                b = random.randint(1, vocab_size-1)
+
+            # Build sequence: A, B, A, B, A, B, A, B (8 tokens, predict positions 2-7)
+            sequence = [a, b, a, b, a, b, a, b]
+            pair_results = {pair[0]: [], pair[1]: []}
+
+            # Students take turns predicting (starting from position 2)
+            for pos in range(2, 8):
+                whose_turn = pair[pos % 2]  # Alternates between the two students
+                student = broker.students[whose_turn]
+
+                # Show sequence up to this point
+                context = sequence[:pos]
+                target = sequence[pos]
+
+                max_len = 12
+                padded = context + [0] * (max_len - len(context))
+                tokens = torch.tensor(padded[:max_len], dtype=torch.long).unsqueeze(0).to(device)
+                seq_len = [len(context)]
+
+                student.eval()
+                with torch.no_grad():
+                    logits, _, _ = student(tokens, seq_len)
+                    pred = logits.argmax(dim=-1).item()
+                    correct = (pred == target)
+
+                pair_results[whose_turn].append(correct)
+                results[whose_turn]['turns_total'] += 1
+                if correct:
+                    results[whose_turn]['turns_correct'] += 1
+
+            # Report pair results
+            p0_acc = sum(pair_results[pair[0]]) / len(pair_results[pair[0]]) if pair_results[pair[0]] else 0
+            p1_acc = sum(pair_results[pair[1]]) / len(pair_results[pair[1]]) if pair_results[pair[1]] else 0
+            print(f"      {pair[0]}-{pair[1]}: {pair[0]} {p0_acc:.0%}, {pair[1]} {p1_acc:.0%}")
+
+        # Ternary trio (every third) - all 3 students together
+        print("    [Ternary trio - 'every third']")
         vocab_size = 26
-        a, b = random.randint(1, vocab_size-1), random.randint(1, vocab_size-1)
+        a = random.randint(1, vocab_size-1)
+        b = random.randint(1, vocab_size-1)
         while b == a:
             b = random.randint(1, vocab_size-1)
+        c = random.randint(1, vocab_size-1)
+        while c == a or c == b:
+            c = random.randint(1, vocab_size-1)
 
-        # Build sequence: A, B, A, B, A, B, A, B (8 tokens, predict positions 2-7)
-        sequence = [a, b, a, b, a, b, a, b]
-        pair_results = {pair[0]: [], pair[1]: []}
+        # Build sequence: A, B, C, A, B, C, A, B, C (9 tokens, predict positions 3-8)
+        sequence = [a, b, c, a, b, c, a, b, c]
+        trio_results = {name: [] for name in student_names}
 
-        # Students take turns predicting (starting from position 2)
-        for pos in range(2, 8):
-            whose_turn = pair[pos % 2]  # Alternates between the two students
+        # Students take turns in order (starting from position 3)
+        for pos in range(3, 9):
+            whose_turn = student_names[pos % 3]  # Rotates through all 3
             student = broker.students[whose_turn]
 
             # Show sequence up to this point
@@ -627,61 +675,16 @@ def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_
                 pred = logits.argmax(dim=-1).item()
                 correct = (pred == target)
 
-            pair_results[whose_turn].append(correct)
+            trio_results[whose_turn].append(correct)
             results[whose_turn]['turns_total'] += 1
             if correct:
                 results[whose_turn]['turns_correct'] += 1
 
-        # Report pair results
-        p0_acc = sum(pair_results[pair[0]]) / len(pair_results[pair[0]]) if pair_results[pair[0]] else 0
-        p1_acc = sum(pair_results[pair[1]]) / len(pair_results[pair[1]]) if pair_results[pair[1]] else 0
-        print(f"      {pair[0]}-{pair[1]}: {pair[0]} {p0_acc:.0%}, {pair[1]} {p1_acc:.0%}")
-
-    # Ternary trio (every third) - all 3 students together
-    print("    [Ternary trio - 'every third']")
-    vocab_size = 26
-    a = random.randint(1, vocab_size-1)
-    b = random.randint(1, vocab_size-1)
-    while b == a:
-        b = random.randint(1, vocab_size-1)
-    c = random.randint(1, vocab_size-1)
-    while c == a or c == b:
-        c = random.randint(1, vocab_size-1)
-
-    # Build sequence: A, B, C, A, B, C, A, B, C (9 tokens, predict positions 3-8)
-    sequence = [a, b, c, a, b, c, a, b, c]
-    trio_results = {name: [] for name in student_names}
-
-    # Students take turns in order (starting from position 3)
-    for pos in range(3, 9):
-        whose_turn = student_names[pos % 3]  # Rotates through all 3
-        student = broker.students[whose_turn]
-
-        # Show sequence up to this point
-        context = sequence[:pos]
-        target = sequence[pos]
-
-        max_len = 12
-        padded = context + [0] * (max_len - len(context))
-        tokens = torch.tensor(padded[:max_len], dtype=torch.long).unsqueeze(0).to(device)
-        seq_len = [len(context)]
-
-        student.eval()
-        with torch.no_grad():
-            logits, _, _ = student(tokens, seq_len)
-            pred = logits.argmax(dim=-1).item()
-            correct = (pred == target)
-
-        trio_results[whose_turn].append(correct)
-        results[whose_turn]['turns_total'] += 1
-        if correct:
-            results[whose_turn]['turns_correct'] += 1
-
-    # Report trio results
-    trio_report = ", ".join([f"{name} {sum(trio_results[name])/len(trio_results[name]):.0%}"
-                            if trio_results[name] else f"{name} -"
-                            for name in student_names])
-    print(f"      All three: {trio_report}")
+        # Report trio results
+        trio_report = ", ".join([f"{name} {sum(trio_results[name])/len(trio_results[name]):.0%}"
+                                if trio_results[name] else f"{name} -"
+                                for name in student_names])
+        print(f"      All three: {trio_report}")
 
     # === PLAYDAY SUMMARY ===
     print("\n  --- Playday Results ---")
