@@ -47,6 +47,40 @@ def gen_successor_chain(vocab_size: int) -> Dict:
     return {'sequence': seq, 'target': start + length}
 
 
+def gen_predecessor_chain(vocab_size: int) -> Dict:
+    """[5, 4, 3] → 2 - Counting down (predecessor applied repeatedly)."""
+    length = random.randint(2, 4)
+    start = random.randint(length + 1, vocab_size - 1)
+    seq = [start - i for i in range(length)]
+    target = start - length
+    if target < 0:
+        return gen_predecessor_chain(vocab_size)
+    return {'sequence': seq, 'target': target}
+
+
+# Classroom-grounded patterns (self-referential math)
+# 3 students, 4 entities total, when 1 leads → 2 participate
+
+def gen_remainder_from_group(vocab_size: int) -> Dict:
+    """[total, active] → remaining - If 1 leads from 3, 2 remain."""
+    total = random.randint(2, min(6, vocab_size - 1))
+    active = random.randint(1, total - 1)
+    remaining = total - active
+    return {'sequence': [total, active], 'target': remaining}
+
+
+def gen_group_minus_one(vocab_size: int) -> Dict:
+    """[n] → n-1 - From a group, one steps out. (Grounded predecessor)"""
+    n = random.randint(2, min(6, vocab_size - 1))
+    return {'sequence': [n], 'target': n - 1}
+
+
+def gen_group_plus_one(vocab_size: int) -> Dict:
+    """[n] → n+1 - One joins the group. (Grounded successor)"""
+    n = random.randint(1, min(5, vocab_size - 2))
+    return {'sequence': [n], 'target': n + 1}
+
+
 def gen_greater_than(vocab_size: int) -> Dict:
     """[a, b] → 1 if a > b else 0 - Comparison as boolean."""
     a = random.randint(0, vocab_size - 1)
@@ -493,7 +527,8 @@ YEAR_0_PATTERNS = [
     # 0A: Successor & Predecessor (What comes next/before?)
     PatternType('successor', gen_successor, 1, 0, '0A', 'n → n+1'),
     PatternType('predecessor', gen_predecessor, 1, 0, '0A', 'n → n-1'),
-    PatternType('successor_chain', gen_successor_chain, 2, 0, '0A', 'Counting sequence'),
+    PatternType('successor_chain', gen_successor_chain, 2, 0, '0A', 'Counting up'),
+    PatternType('predecessor_chain', gen_predecessor_chain, 2, 0, '0A', 'Counting down'),
 
     # 0B: Quantity & Comparison
     PatternType('count_sequence', gen_count_sequence, 2, 0, '0B', 'How many elements?'),
@@ -504,6 +539,11 @@ YEAR_0_PATTERNS = [
     PatternType('double', gen_double, 2, 0, '0C', 'n → 2n'),
     PatternType('half', gen_half, 2, 0, '0C', 'n → n/2'),
     PatternType('missing_addend', gen_missing_addend, 3, 0, '0C', 'a + ? = c'),
+
+    # 0D: Grounded Group Math (classroom context: 3 students, 4 entities)
+    PatternType('remainder_from_group', gen_remainder_from_group, 2, 0, '0D', 'Group - active = remaining'),
+    PatternType('group_minus_one', gen_group_minus_one, 1, 0, '0D', 'One leaves the group'),
+    PatternType('group_plus_one', gen_group_plus_one, 1, 0, '0D', 'One joins the group'),
 ]
 
 

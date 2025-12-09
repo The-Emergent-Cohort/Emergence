@@ -31,10 +31,11 @@ from systems.progression import TopicTracker
 
 # Section order for phased training
 # YEAR 0: Number sense FIRST - the substrate of all reasoning
-# - 0A: successor/predecessor (what comes next/before)
+# - 0A: successor/predecessor, counting chains (what comes next/before)
 # - 0B: counting, comparison (how many, which is bigger)
 # - 0C: basic operations (double, half, missing addend)
-YEAR_0_SECTIONS = ['0A', '0B', '0C']
+# - 0D: grounded group math (classroom context: 3 students, 4 entities)
+YEAR_0_SECTIONS = ['0A', '0B', '0C', '0D']
 
 # YEAR 1: Patterns build on number sense
 # - 1A, 1B: Pure memory (no arithmetic needed)
