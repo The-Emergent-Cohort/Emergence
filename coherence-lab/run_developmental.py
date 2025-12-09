@@ -488,7 +488,7 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--year', type=int, default=1, help='Year to train (1, 2, or 0 for both)')
-    parser.add_argument('--epochs', type=int, default=50)
+    parser.add_argument('--epochs', type=int, default=900, help='Default: topics × 100 (Year 1=900, Both=2100)')
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--lr', type=float, default=1e-3)
     parser.add_argument('--train_size', type=int, default=20000)
