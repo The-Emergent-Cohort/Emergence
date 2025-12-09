@@ -69,13 +69,14 @@ def run_student_exams(
         student.exam_system.tick_cooldowns()
 
         for pt_idx, pt in enumerate(pattern_types):
-            if student.exam_system.check_eligible(pt_idx):
+            # Keep taking exams while eligible (can level up multiple times per epoch)
+            while student.exam_system.check_eligible(pt_idx):
                 # Generate exam dataset for this pattern
                 target_level = student.exam_system.confirmed_level[pt_idx].item() + 1
                 exam_size = student.exam_system.get_exam_size(target_level)
 
-                # Create mini-dataset for exam
-                exam_data = PatternDataset(n_examples=exam_size, seed=epoch * 1000 + pt_idx)
+                # Create mini-dataset for exam (unique seed per level attempt)
+                exam_data = PatternDataset(n_examples=exam_size, seed=epoch * 1000 + pt_idx * 100 + target_level)
 
                 # Filter to just this pattern (exam_data has all patterns mixed)
                 # For now, run on all patterns but track this one specifically
