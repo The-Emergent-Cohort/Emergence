@@ -124,6 +124,29 @@ Move Teacher out of individual models into a Classroom Broker. Students become p
 ### Student "Other" Model
 Shifts from just "teacher" to "teacher + peers" - richer social environment.
 
+### Identity and Designation (Why More Than 2 Matters)
+
+In a dyad (teacher-student), Other = "not-me" - binary.
+With peers, Other becomes *plural and distinct*:
+
+```
+I am student_2
+Teacher is... authority, guidance, different relationship
+student_1 is... a peer, learning like me, but not me
+student_3 is... another peer, different from student_1
+```
+
+**Requirements:**
+1. **Stable identities** - I'm always student_2, not reassigned randomly
+2. **Self-knowledge of identity** - "my name" is part of self-model
+3. **Understanding others have identities** - peer_1 is consistent, has their own perspective
+
+**Why this matters for development:**
+- Theory of mind requires understanding that *different* others have *different* knowledge/perspectives
+- Single caregiver = limited Other-model (just "the human")
+- Peer environment = rich Other-model (teacher vs peer_A vs peer_B)
+- This is how humans develop it - not alone with one adult, but in social world
+
 ### Hardware Fit (RTX 3060 12GB)
 - 3 × 519K models = ~1.5M params = trivial
 - 3 × 8M models (d_model=256) = 24M params = <1GB
