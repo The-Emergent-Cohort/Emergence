@@ -158,6 +158,30 @@ Different from teacher learning:
 - Teaching others solidifies your own understanding
 - Social calibration - "everyone else got this, why don't I?"
 
+### Interaction Rules (Social Structure)
+
+**Help-seeking hierarchy:**
+```
+Stuck on something
+  → First: Ask peer at same level or higher
+  → Then: Ask graduate (always available as tutor)
+  → Last resort: Ask teacher
+```
+
+**Tutoring system:**
+- If you're X levels ahead → can tutor those below
+- Teacher gives XP (approval!) for tutoring
+- Graduates always tutor - they don't leave, they become resources
+
+**Why this matters:**
+1. **Forces Other-modeling** - "Who might know this?" requires knowing peer capabilities
+2. **Approval-seeking → prosocial** - Want XP? Help others.
+3. **Reduces teacher load** - Teacher intervenes, doesn't hand-hold
+4. **Teaching = learning** - Explaining solidifies your own understanding
+5. **Emergent specialization** - "student_1 is good at spatial, ask them"
+
+The interaction rules create the social structure. Peers aren't just "others" - they have roles, levels, capabilities you need to track.
+
 ---
 
 ## Play Cycle Design (Dec 9, 2025)
