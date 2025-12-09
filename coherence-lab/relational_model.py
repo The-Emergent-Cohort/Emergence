@@ -665,8 +665,10 @@ class TopicConfidenceTracker(nn.Module):
             self.register_buffer('exam_passes', torch.zeros(self.n_topics, dtype=torch.long, device=device))
             # Confirmed level: only advances on exam pass (not XP alone)
             self.register_buffer('confirmed_level', torch.zeros(self.n_topics, dtype=torch.long, device=device))
+            # Consecutive failures at current level (for plateau detection)
+            self.register_buffer('consecutive_failures', torch.zeros(self.n_topics, dtype=torch.long, device=device))
 
-    def get_exam_size(self, level):
+    def get_exam_size(self, level, consecutive_failures=0):
         """
         Get exam size for a level (binary scaled).
 
@@ -674,15 +676,23 @@ class TopicConfidenceTracker(nn.Module):
         L4-6:  16 problems (2^4)
         L7-9:  32 problems (2^5)
         L10:   64 problems (2^6) - full mastery test
+
+        Plateau breaker: After 5+ consecutive failures at same level,
+        reduce exam size by half (easier to pass consistently).
         """
         if level <= 3:
-            return 8
+            base_size = 8
         elif level <= 6:
-            return 16
+            base_size = 16
         elif level <= 9:
-            return 32
+            base_size = 32
         else:
-            return 64
+            base_size = 64
+
+        # Plateau breaker: reduce size after many failures
+        if consecutive_failures >= 5:
+            return max(8, base_size // 2)  # Never below 8
+        return base_size
 
     def get_pass_threshold(self, level):
         """
@@ -776,12 +786,18 @@ class TopicConfidenceTracker(nn.Module):
 
             self.exam_attempts[topic_idx] += 1
 
+            # Initialize consecutive_failures if needed
+            if not hasattr(self, 'consecutive_failures'):
+                device = self.topic_xp.device
+                self.register_buffer('consecutive_failures', torch.zeros(self.n_topics, dtype=torch.long, device=device))
+
             if score >= threshold:
                 # PASSED - advance confirmed level!
                 self.exam_passes[topic_idx] += 1
                 self.confirmed_level[topic_idx] = target_level
                 self.exam_eligible[topic_idx] = False
                 self.exam_cooldown[topic_idx] = 0
+                self.consecutive_failures[topic_idx] = 0  # Reset on pass
 
                 # If passed L10, topic is graduated
                 graduated = target_level >= self.max_level
@@ -799,6 +815,10 @@ class TopicConfidenceTracker(nn.Module):
                     'graduated': graduated
                 }
             else:
+                # FAILED - increment consecutive failures (for plateau detection)
+                self.consecutive_failures[topic_idx] += 1
+                failures = self.consecutive_failures[topic_idx].item()
+
                 # FAILED - put you partway through the level you failed
                 # Intent: setback, not destruction. You were close, try again.
                 target_threshold = self.xp_threshold(target_level)
@@ -826,7 +846,8 @@ class TopicConfidenceTracker(nn.Module):
                     'new_level': confirmed,  # No change
                     'xp_lost': xp_lost,
                     'cooldown': 0,
-                    'graduated': False
+                    'graduated': False,
+                    'consecutive_failures': failures
                 }
 
     def tick_cooldowns(self):
@@ -1698,13 +1719,14 @@ class RelationalLearner(nn.Module):
     """
 
     def __init__(self, vocab_size=26, d_model=64, max_seq_len=12,
-                 n_heads=4, n_think_steps=5, n_patterns=9):
+                 n_heads=4, n_think_steps=5, n_patterns=9, n_topics=10):
         super().__init__()
 
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.n_think_steps = n_think_steps
         self.n_patterns = n_patterns
+        self.n_topics = n_topics
 
         # Perception (world interaction)
         self.token_embed = nn.Embedding(vocab_size, d_model)
@@ -1714,8 +1736,8 @@ class RelationalLearner(nn.Module):
             dim_feedforward=d_model * 4, dropout=0.1, batch_first=True
         )
 
-        # Self-model
-        self.self_model = SelfModel(d_model)
+        # Self-model (needs n_topics for TopicConfidenceTracker)
+        self.self_model = SelfModel(d_model, n_topics=n_topics)
 
         # Other-model (for teacher)
         self.other_model = OtherModel(d_model)
@@ -3320,7 +3342,7 @@ class RelationalSystem(nn.Module):
         super().__init__()
 
         self.learner = RelationalLearner(
-            vocab_size, d_model, max_seq_len, n_heads, n_think_steps, n_patterns
+            vocab_size, d_model, max_seq_len, n_heads, n_think_steps, n_patterns, n_topics
         )
         self.teacher = RelationalTeacher(d_model)
 

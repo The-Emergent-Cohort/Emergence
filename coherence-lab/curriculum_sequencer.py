@@ -407,7 +407,9 @@ class CurriculumSequencer:
                 while self.tracker.check_exam_eligible(idx) and exam_attempt < max_attempts:
                     # Use confirmed_level for exam progression, not XP-level
                     confirmed = self.tracker.confirmed_level[idx].item() if hasattr(self.tracker, 'confirmed_level') else self.tracker.get_level(idx)
-                    exam_size = self.tracker.get_exam_size(confirmed + 1)
+                    # Get consecutive failures for plateau-breaking (smaller exam after 5+ failures)
+                    failures = self.tracker.consecutive_failures[idx].item() if hasattr(self.tracker, 'consecutive_failures') else 0
+                    exam_size = self.tracker.get_exam_size(confirmed + 1, consecutive_failures=failures)
 
                     correct, total = exam_fn(
                         model, topic_name, exam_size,
