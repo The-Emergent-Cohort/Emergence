@@ -27,7 +27,8 @@ from systems.progression import TopicTracker
 
 # Section order for phased training
 # Note: 1F (Trap Patterns) tests overconfidence - add after students master 1A-1E
-YEAR_1_SECTIONS = ['1A', '1B', '1C', '1D', '1E', '1F']
+# Note: 1G (Basic Arithmetic) - fundamental math operations (add, subtract, compare, multiply)
+YEAR_1_SECTIONS = ['1A', '1B', '1C', '1D', '1E', '1F', '1G']
 YEAR_2_SECTIONS = ['2A', '2B', '2C', '2D', '2E']
 ALL_SECTIONS = YEAR_1_SECTIONS + YEAR_2_SECTIONS
 

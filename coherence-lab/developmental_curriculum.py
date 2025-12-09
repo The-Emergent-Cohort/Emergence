@@ -157,6 +157,73 @@ def gen_trap_constant(vocab_size: int) -> Dict:
 
 
 # =============================================================================
+# BASIC ARITHMETIC (The fundamentals we never explicitly taught!)
+# =============================================================================
+
+def gen_add_two(vocab_size: int) -> Dict:
+    """[a, b] → a + b - Basic addition: 1 + 1 = 2."""
+    # Keep numbers small so sum stays in vocab
+    max_val = vocab_size // 2 - 1
+    a = random.randint(0, max_val)
+    b = random.randint(0, max_val)
+    target = a + b
+    if target >= vocab_size:
+        return gen_add_two(vocab_size)
+    return {'sequence': [a, b], 'target': target}
+
+
+def gen_subtract_two(vocab_size: int) -> Dict:
+    """[a, b] → a - b - Basic subtraction (a >= b for positive result)."""
+    a = random.randint(1, vocab_size - 1)
+    b = random.randint(0, a)  # b <= a ensures non-negative result
+    target = a - b
+    return {'sequence': [a, b], 'target': target}
+
+
+def gen_compare_larger(vocab_size: int) -> Dict:
+    """[a, b] → max(a, b) - Which number is larger?"""
+    a = random.randint(0, vocab_size - 1)
+    b = random.randint(0, vocab_size - 1)
+    while a == b:  # Make them different so there's a clear answer
+        b = random.randint(0, vocab_size - 1)
+    target = max(a, b)
+    return {'sequence': [a, b], 'target': target}
+
+
+def gen_compare_smaller(vocab_size: int) -> Dict:
+    """[a, b] → min(a, b) - Which number is smaller?"""
+    a = random.randint(0, vocab_size - 1)
+    b = random.randint(0, vocab_size - 1)
+    while a == b:
+        b = random.randint(0, vocab_size - 1)
+    target = min(a, b)
+    return {'sequence': [a, b], 'target': target}
+
+
+def gen_add_three(vocab_size: int) -> Dict:
+    """[a, b, c] → a + b + c - Add three numbers."""
+    max_val = vocab_size // 3 - 1
+    a = random.randint(0, max_val)
+    b = random.randint(0, max_val)
+    c = random.randint(0, max_val)
+    target = a + b + c
+    if target >= vocab_size:
+        return gen_add_three(vocab_size)
+    return {'sequence': [a, b, c], 'target': target}
+
+
+def gen_multiply_two(vocab_size: int) -> Dict:
+    """[a, b] → a * b - Basic multiplication."""
+    # Keep numbers small so product stays in vocab
+    a = random.randint(1, 5)
+    b = random.randint(1, 5)
+    target = a * b
+    if target >= vocab_size:
+        return gen_multiply_two(vocab_size)
+    return {'sequence': [a, b], 'target': target}
+
+
+# =============================================================================
 # YEAR 2: RELATIONAL & PHYSICAL
 # =============================================================================
 
@@ -368,6 +435,14 @@ YEAR_1_PATTERNS = [
     PatternType('trap_alternating', gen_trap_alternating, 5, 1, '1F', 'Alternating with surprise'),
     PatternType('trap_increment', gen_trap_increment, 5, 1, '1F', 'Increment with break'),
     PatternType('trap_constant', gen_trap_constant, 4, 1, '1F', 'Constant with break'),
+
+    # 1G: Basic Arithmetic (the fundamentals!)
+    PatternType('add_two', gen_add_two, 1, 1, '1G', 'Add two numbers'),
+    PatternType('subtract_two', gen_subtract_two, 2, 1, '1G', 'Subtract two numbers'),
+    PatternType('compare_larger', gen_compare_larger, 1, 1, '1G', 'Find the larger number'),
+    PatternType('compare_smaller', gen_compare_smaller, 1, 1, '1G', 'Find the smaller number'),
+    PatternType('add_three', gen_add_three, 2, 1, '1G', 'Add three numbers'),
+    PatternType('multiply_two', gen_multiply_two, 3, 1, '1G', 'Multiply two numbers'),
 ]
 
 YEAR_2_PATTERNS = [

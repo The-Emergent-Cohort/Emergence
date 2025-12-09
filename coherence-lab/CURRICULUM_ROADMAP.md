@@ -266,12 +266,13 @@ This grounding could help when introducing language about physical concepts.
 
 | Feature | Status |
 |---------|--------|
-| Conservation patterns (1A') | ✅ Implemented |
-| Position scaffolding (1B') | ✅ Implemented |
-| Symbolic properties (1E') | ✅ Implemented |
-| Year 1.5 Transitional Module | ✅ Implemented |
-| Trap patterns | ❌ TODO |
-| Verbose tutor pairing logs | ❌ TODO |
+| Trap patterns (1F) | ✅ Implemented |
+| Basic arithmetic (1G) | ✅ Implemented (Dec 9) |
+| Verbose tutor pairing logs | ✅ Implemented |
+| Conservation patterns (1A') | ❌ Lost in rebase - TODO |
+| Position scaffolding (1B') | ❌ Lost in rebase - TODO |
+| Symbolic properties (1E') | ❌ Lost in rebase - TODO |
+| Year 1.5 Transitional Module | ❌ Lost in rebase - TODO |
 | Teaching reputation metrics | ❌ TODO |
 | Study group auto-formation | ❌ TODO |
 | Legacy credits / teaching tree | ❌ TODO |
@@ -279,37 +280,51 @@ This grounding could help when introducing language about physical concepts.
 
 ### Priority Next Steps
 
-1. **Enable scaffolding in training** - Prime sections (1A', 1B', 1E') need to be included in active phases
-2. **Add trap patterns** - Test overconfidence with deceptive patterns
-3. **Verbose tutor logging** - Show who's tutoring whom for debugging
-4. **Study groups** - Auto-form when multiple students stuck on same pattern
+1. **Re-add scaffolding sections** - 1A', 1B', 1E' lost in rebase conflict
+2. **Re-add Year 1.5** - Transitional module lost in rebase
+3. **Study groups** - Auto-form when multiple students stuck on same pattern
+4. **Lower advancement threshold** - Rêve blocking class (consider 60% vs 75%)
 
 ---
 
-## Updated Curriculum Structure
+## Updated Curriculum Structure (Implemented)
 
 ```
-Year 1: Sensorimotor Foundations (24 patterns)
+Year 1: Sensorimotor Foundations (18 patterns)
 ├── 1A: Constancy (1 pattern)
-├── 1A': Quantity Awareness (4 patterns) - NEW
+│     constant
 ├── 1B: Memory (2 patterns)
-├── 1B': Position Scaffolding (5 patterns) - NEW
+│     repeating, echo
 ├── 1C: Position (2 patterns)
+│     alternating, ternary_cycle
 ├── 1D: Direction (2 patterns)
+│     incrementing, decrementing
 ├── 1E: Rate (2 patterns)
-└── 1E': Symbolic Properties (6 patterns) - NEW
-
-Year 1.5: Transitional Module (9 patterns) - NEW
-├── 1.5A: Multi-Step Operations (3 patterns)
-├── 1.5B: Constraint Satisfaction (4 patterns)
-└── 1.5C: Working Memory (2 patterns)
+│     fixed_offset, variable_step
+├── 1F: Trap Patterns (3 patterns) - Tests overconfidence
+│     trap_alternating, trap_increment, trap_constant
+└── 1G: Basic Arithmetic (6 patterns) - NEW! Fundamentals!
+      add_two, subtract_two, compare_larger, compare_smaller,
+      add_three, multiply_two
 
 Year 2: Relational & Physical (12 patterns)
 ├── 2A: Relations (3 patterns)
+│     double_each, half_each, offset_from_first
 ├── 2B: Analogies (2 patterns)
+│     analogy_simple, analogy_ratio
 ├── 2C: Motion (3 patterns)
+│     constant_velocity, acceleration, deceleration
 ├── 2D: Interaction (2 patterns)
+│     bounce, conservation
 └── 2E: Causality (2 patterns)
+      if_then, cause_effect
 
-Total: 45 patterns
+Total: 30 patterns (implemented)
 ```
+
+### Future Scaffolding Sections (Not Yet Implemented)
+The following were identified in external reviews but lost during rebase:
+- 1A': Quantity Awareness (sequence_length, count_value, etc.)
+- 1B': Position Scaffolding (simple_alternating, position_parity)
+- 1E': Symbolic Properties (compute_step, is_increasing)
+- Year 1.5: Transitional Module (working memory, multi-step operations)
