@@ -174,6 +174,14 @@ class TopicTracker(nn.Module):
         self.progression.expand(new_size)
         self.n_topics = new_size
 
+    def get_total_xp(self):
+        """Get total XP across all topics."""
+        return self.progression.get_total_xp()
+
+    def get_average_level(self):
+        """Get average level across all topics."""
+        return self.progression.get_average_level()
+
     def update(self, topic_indices, correct, confidence=None):
         """
         Update XP based on correctness.
