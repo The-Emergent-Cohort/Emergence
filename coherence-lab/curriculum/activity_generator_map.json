@@ -1,0 +1,36 @@
+{
+  "_comment": "Maps activity IDs (or patterns) to problem generators",
+  "_usage": "Curriculum loader uses this to find generators for activities without embedded problem_generator field",
+
+  "patterns": {
+    "notice": {"name": "constant", "params": {}},
+    "counting": {"name": "counting", "params": {}},
+    "count_1_3": {"name": "counting", "params": {"max_length": 3}},
+    "count_1_5": {"name": "counting", "params": {"max_length": 5}},
+    "count_1_10": {"name": "counting", "params": {"max_length": 10}},
+    "add_one": {"name": "add_one", "params": {}},
+    "subtract_one": {"name": "subtract_one", "params": {}},
+    "repeating": {"name": "repeating", "params": {}},
+    "alternating": {"name": "alternating", "params": {}},
+    "incrementing": {"name": "incrementing", "params": {}},
+    "decrementing": {"name": "decrementing", "params": {}},
+    "physics_swing": {"name": "physics_swing", "params": {}},
+    "physics_throw": {"name": "physics_throw", "params": {}},
+    "physics_bounce": {"name": "physics_bounce", "params": {}}
+  },
+
+  "activity_id_patterns": {
+    "math.counting": "counting",
+    "foundations.notice": "constant",
+    "foundations.counting": "counting",
+    "math.addition": "add_one",
+    "math.subtraction": "subtract_one",
+    "physics.motion": "physics_throw",
+    "physics.pendulum": "physics_swing"
+  },
+
+  "explicit_mappings": {
+    "foundations.notice.unit01.lesson01.act01": {"name": "constant", "params": {}},
+    "math.counting.unit02.lesson01.act01": {"name": "counting", "params": {"max_length": 3}}
+  }
+}

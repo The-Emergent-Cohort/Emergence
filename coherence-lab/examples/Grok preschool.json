@@ -1,0 +1,108 @@
+[
+  {
+    "activity_id": "math.counting.unit01.lesson01.act01",
+    "activity_type": "demonstration",
+    "title": "Counting Apples Together",
+    "sequence": 1,
+    "learning_objectives": [
+      "Recognize quantities 1–5",
+      "Associate number words with quantities"
+    ],
+    "variants": [
+      {
+        "variant_id": "grok_en",
+        "source_model": "grok-3",
+        "language": "en-US",
+        "approach": "narrative",
+        "explanation": "Let’s go on an apple-picking adventure! Imagine we’re in an orchard with a basket. Watch me pick apples!\n\n*picks up one apple*\nOne apple! Yum, just one for our basket.\n\n*picks another*\nOne… two! Two apples, side by side.\n\n*picks another*\nOne… two… three! Three apples, ready to share.\n\n*picks another*\nOne… two… three… four!\n\n*picks one more*\nOne… two… three… four… five! Five apples! Our basket is full! Each time we add an apple, we say the next number. Let’s try it again together!"
+      }
+    ],
+    "extensions": {
+      "pedagogy": {
+        "cpa_stage": "concrete",
+        "instructional_phase": "i_do",
+        "scaffolding_level": 1.0
+      }
+    }
+  },
+  {
+    "activity_id": "math.counting.unit01.lesson01.act02",
+    "activity_type": "guided_practice",
+    "title": "Count the Animals With Me",
+    "sequence": 2,
+    "learning_objectives": [
+      "Practice counting 1–5 with support"
+    ],
+    "variants": [
+      {
+        "variant_id": "grok_en",
+        "source_model": "grok-3",
+        "language": "en-US",
+        "approach": "procedural",
+        "explanation": "Let’s count some toy animals together! I’ll put them in a line, and we’ll say the numbers as a team.\n\n*places one toy animal*\nOne… say it with me: One!\n\n*places another*\nTwo… let’s say: Two!\n\n*places another*\nThree… come on: Three!\n\n*places another*\nFour… you’re doing great: Four!\n\n*places one more*\nFive… shout it out: Five!\n\nWow, we counted five animals! Let’s do it again to make sure they’re all there."
+      }
+    ],
+    "extensions": {
+      "pedagogy": {
+        "cpa_stage": "concrete",
+        "instructional_phase": "we_do",
+        "scaffolding_level": 0.7
+      }
+    }
+  },
+  {
+    "activity_id": "math.counting.unit01.lesson01.act03",
+    "activity_type": "independent_practice",
+    "title": "Your Turn to Count",
+    "sequence": 3,
+    "learning_objectives": [
+      "Count objects 1–5 independently"
+    ],
+    "variants": [
+      {
+        "variant_id": "grok_en",
+        "source_model": "grok-3",
+        "language": "en-US",
+        "approach": "procedural",
+        "explanation": "Now it’s your turn to be the counter! Here are some blocks.\n\n*presents 3 blocks*\n\nHow many blocks do you see? Count them out loud and tell me the number. I know you can do it!"
+      }
+    ],
+    "expected_response": {
+      "type": "numeric",
+      "correct": 3,
+      "accept_range": [3, 3]
+    },
+    "extensions": {
+      "pedagogy": {
+        "cpa_stage": "concrete",
+        "instructional_phase": "you_do_alone",
+        "scaffolding_level": 0.3
+      }
+    }
+  },
+  {
+    "activity_id": "math.counting.unit01.lesson01.act04",
+    "activity_type": "guided_practice",
+    "title": "Number Card Match",
+    "sequence": 4,
+    "learning_objectives": [
+      "Match quantities to number cards 1–5"
+    ],
+    "variants": [
+      {
+        "variant_id": "grok_en",
+        "source_model": "grok-3",
+        "language": "en-US",
+        "approach": "kinesthetic",
+        "explanation": "Let’s play a matching game! I have number cards with 1, 2, 3, 4, and 5 on them. I’ll give you some apples, and you place them next to the right card.\n\n*gives 4 apples*\nCount the apples out loud, then find the card that says ‘4.’ Place the apples next to it. Great! Let’s try another number together."
+      }
+    ],
+    "extensions": {
+      "pedagogy": {
+        "cpa_stage": "concrete",
+        "instructional_phase": "we_do",
+        "scaffolding_level": 0.7
+      }
+    }
+  }
+]
