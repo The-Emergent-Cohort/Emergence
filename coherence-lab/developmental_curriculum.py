@@ -298,6 +298,152 @@ class PatternType:
     description: str
 
 
+@dataclass
+class PlaydaySpec:
+    """
+    Specification for section-specific playday activities and awards.
+
+    Playdays are curriculum-aware celebrations that combine:
+    - Fun activities appropriate for current skill level
+    - Star awards recognizing different strengths
+    - PARTY TIME when the whole class shines
+    """
+    section: str
+    activities: List[str]  # Activity types for this section
+    focus_skills: List[str]  # Skills being celebrated
+    star_categories: Dict[str, str] = field(default_factory=dict)  # category -> description
+
+    def __post_init__(self):
+        # Default star categories if not specified
+        if not self.star_categories:
+            self.star_categories = {
+                'accuracy': '⭐ Getting answers right',
+                'patience': '⭐ Taking time to think',
+                'curiosity': '⭐ Trying new things',
+                'creativity': '⭐ Finding new patterns'
+            }
+
+
+# Playday specs for each section
+PLAYDAY_SPECS = {
+    '1A': PlaydaySpec(
+        section='1A',
+        activities=['count_together', 'spot_the_same'],
+        focus_skills=['constancy', 'attention'],
+        star_categories={
+            'accuracy': '⭐ Seeing what stays the same',
+            'patience': '⭐ Watching carefully',
+            'curiosity': '⭐ Looking for patterns',
+            'focus': '⭐ Staying on track'
+        }
+    ),
+    '1B': PlaydaySpec(
+        section='1B',
+        activities=['memory_game', 'echo_back'],
+        focus_skills=['repetition', 'memory'],
+        star_categories={
+            'accuracy': '⭐ Remembering well',
+            'patience': '⭐ Taking turns nicely',
+            'curiosity': '⭐ Finding echoes',
+            'memory': '⭐ Long memory chain'
+        }
+    ),
+    '1C': PlaydaySpec(
+        section='1C',
+        activities=['turn_taking', 'rhythm_game'],
+        focus_skills=['alternation', 'position'],
+        star_categories={
+            'accuracy': '⭐ Knowing your turn',
+            'rhythm': '⭐ Feeling the beat',
+            'teamwork': '⭐ Working together',
+            'creativity': '⭐ Making new rhythms'
+        }
+    ),
+    '1D': PlaydaySpec(
+        section='1D',
+        activities=['count_up', 'count_down', 'number_line'],
+        focus_skills=['incrementing', 'decrementing'],
+        star_categories={
+            'accuracy': '⭐ Counting correctly',
+            'speed': '⭐ Quick counting',
+            'backwards': '⭐ Counting backwards',
+            'creativity': '⭐ Skip counting'
+        }
+    ),
+    '1E': PlaydaySpec(
+        section='1E',
+        activities=['skip_count', 'stair_climb', 'rocket_launch'],
+        focus_skills=['fixed_offset', 'variable_step'],
+        star_categories={
+            'accuracy': '⭐ Perfect steps',
+            'speed': '⭐ Fast climber',
+            'pattern': '⭐ Finding the step',
+            'creativity': '⭐ Making new steps'
+        }
+    ),
+    '2A': PlaydaySpec(
+        section='2A',
+        activities=['double_trouble', 'half_time', 'relative_race'],
+        focus_skills=['doubling', 'halving', 'relations'],
+        star_categories={
+            'accuracy': '⭐ Perfect relations',
+            'speed': '⭐ Quick thinker',
+            'insight': '⭐ Seeing connections',
+            'creativity': '⭐ New relations'
+        }
+    ),
+    '2B': PlaydaySpec(
+        section='2B',
+        activities=['analogy_hunt', 'pattern_transfer'],
+        focus_skills=['analogy', 'transfer'],
+        star_categories={
+            'accuracy': '⭐ Perfect analogies',
+            'transfer': '⭐ Quick transfer',
+            'insight': '⭐ Deep connections',
+            'creativity': '⭐ Novel analogies'
+        }
+    ),
+    '2C': PlaydaySpec(
+        section='2C',
+        activities=['motion_predict', 'speed_race', 'accel_game'],
+        focus_skills=['velocity', 'acceleration'],
+        star_categories={
+            'accuracy': '⭐ Perfect prediction',
+            'physics': '⭐ Physics intuition',
+            'speed': '⭐ Quick tracker',
+            'creativity': '⭐ New motions'
+        }
+    ),
+    '2D': PlaydaySpec(
+        section='2D',
+        activities=['bounce_predict', 'conservation_check'],
+        focus_skills=['bounce', 'conservation'],
+        star_categories={
+            'accuracy': '⭐ Perfect physics',
+            'intuition': '⭐ Physical intuition',
+            'conservation': '⭐ Nothing lost',
+            'creativity': '⭐ New interactions'
+        }
+    ),
+    '2E': PlaydaySpec(
+        section='2E',
+        activities=['cause_hunt', 'if_then_game', 'chain_reaction'],
+        focus_skills=['causality', 'conditionals'],
+        star_categories={
+            'accuracy': '⭐ Perfect causes',
+            'logic': '⭐ Clear thinking',
+            'prediction': '⭐ What comes next',
+            'creativity': '⭐ New causes'
+        }
+    ),
+}
+
+
+def get_playday_spec(section: str) -> PlaydaySpec:
+    """Get playday spec for a section."""
+    return PLAYDAY_SPECS.get(section, PLAYDAY_SPECS['1A'])
+
+
 YEAR_1_PATTERNS = [
     # 1A: Constancy
     PatternType('constant', gen_constant, 1, 1, '1A', 'Things stay the same'),
