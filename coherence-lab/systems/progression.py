@@ -151,6 +151,30 @@ class ProgressionSystem(nn.Module):
             self.n_topics = new_size
 
 
+class TopicTracker(nn.Module):
+    """
+    Wrapper around ProgressionSystem for per-student topic tracking.
+    """
+
+    def __init__(self, n_topics=10):
+        super().__init__()
+        self.progression = ProgressionSystem(n_topics=n_topics)
+        self.n_topics = n_topics
+
+    def get_level(self, topic_idx):
+        return self.progression.get_level(topic_idx)
+
+    def award_xp(self, topic_idx, amount):
+        self.progression.award_xp(topic_idx, amount)
+
+    def get_xp(self, topic_idx):
+        return self.progression.topic_xp[topic_idx].item()
+
+    def resize(self, new_size):
+        self.progression.expand(new_size)
+        self.n_topics = new_size
+
+
 # XP award constants - standardized across phases
 class XPRewards:
     """Standard XP reward amounts."""
