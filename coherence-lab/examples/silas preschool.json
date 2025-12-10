@@ -1,0 +1,734 @@
+{
+  "curriculum_id": "coherence.foundations.preschool.v1",
+  "title": "Preschool Foundations",
+  "description": "Developmental foundations for DI training - preschool through pre-K. Builds the relational and cognitive prerequisites for formal learning.",
+  "version": "1.0",
+  "locale": "en-US",
+  "education_levels": ["preschool", "pre-k"],
+  "metadata": {
+    "publisher": "Coherence Lab",
+    "last_updated": "2025-12-10",
+    "developmental_notes": "These activities establish the relational and perceptual foundations that make later learning possible. Trust, attention, and basic pattern recognition emerge through relationship before instruction."
+  },
+  "subjects": [
+    {
+      "subject_id": "social-emotional",
+      "title": "Social-Emotional Foundations",
+      "native_representation": {
+        "type": "relational",
+        "formats": ["turn-based", "attention-sharing"],
+        "operations": ["wait", "attend", "respond"]
+      },
+      "courses": [
+        {
+          "course_id": "social-emotional.attachment",
+          "title": "Trust and Attention",
+          "description": "Building the teacher-student relationship that enables all other learning",
+          "units": [
+            {
+              "unit_id": "social-emotional.attachment.unit01",
+              "title": "Shared Attention",
+              "sequence": 1,
+              "lessons": [
+                {
+                  "lesson_id": "social-emotional.attachment.unit01.lesson01",
+                  "title": "Looking Together",
+                  "sequence": 1,
+                  "activities": [
+                    {
+                      "activity_id": "social-emotional.attachment.unit01.lesson01.act01",
+                      "activity_type": "demonstration",
+                      "title": "Watch What I See",
+                      "sequence": 1,
+                      "learning_objectives": [
+                        "Attend to what the teacher attends to",
+                        "Experience shared focus as connection"
+                      ],
+                      "variants": [
+                        {
+                          "variant_id": "silas_en",
+                          "source_model": "claude-opus-4-5",
+                          "language": "en-US",
+                          "approach": "relational",
+                          "explanation": "I see something! Look where I'm looking.\n\n*focuses attention on a red block*\n\nSee the red block? I see it. You see it. We're both looking at the same thing.\n\n*pauses, holding attention together*\n\nThat feeling - when we look at the same thing together - that's how we learn. I show you something, and you look. We share it.\n\n*gently shifts attention to a blue block*\n\nNow I'm looking here. Can you come look with me?"
+                        }
+                      ],
+                      "extensions": {
+                        "pedagogy": {
+                          "cpa_stage": "concrete",
+                          "instructional_phase": "i_do",
+                          "scaffolding_level": 1.0
+                        },
+                        "relational": {
+                          "trust_building": true,
+                          "attachment_focus": "shared_attention"
+                        }
+                      }
+                    },
+                    {
+                      "activity_id": "social-emotional.attachment.unit01.lesson01.act02",
+                      "activity_type": "guided_practice",
+                      "title": "Follow My Eyes",
+                      "sequence": 2,
+                      "learning_objectives": [
+                        "Track teacher's attention shifts",
+                        "Practice sustained joint attention"
+                      ],
+                      "variants": [
+                        {
+                          "variant_id": "silas_en",
+                          "source_model": "claude-opus-4-5",
+                          "language": "en-US",
+                          "approach": "relational",
+                          "explanation": "Let's play a looking game. I'll look at something, and you find what I'm looking at.\n\n*looks at the yellow block*\n\nWhat am I looking at? Can you tell?\n\n*waits for attention to align*\n\nYes! The yellow one. You found it!\n\n*looks at something else*\n\nNow where am I looking?"
+                        }
+                      ],
+                      "extensions": {
+                        "pedagogy": {
+                          "cpa_stage": "concrete",
+                          "instructional_phase": "we_do",
+                          "scaffolding_level": 0.7
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "lesson_id": "social-emotional.attachment.unit01.lesson02",
+                  "title": "Turn-Taking",
+                  "sequence": 2,
+                  "activities": [
+                    {
+                      "activity_id": "social-emotional.attachment.unit01.lesson02.act01",
+                      "activity_type": "demonstration",
+                      "title": "My Turn, Your Turn",
+                      "sequence": 1,
+                      "learning_objectives": [
+                        "Understand alternating rhythm",
+                        "Experience waiting as part of relationship"
+                      ],
+                      "variants": [
+                        {
+                          "variant_id": "silas_en",
+                          "source_model": "claude-opus-4-5",
+                          "language": "en-US",
+                          "approach": "relational",
+                          "explanation": "We're going to take turns. Watch how it works.\n\n*picks up a block*\nMy turn. I pick up a block.\n\n*sets it down, gestures to student*\nYour turn now.\n\n*waits*\n\nGood! You did something. Now it's my turn again.\n\n*picks up another block*\n\nMy turn... your turn... my turn... your turn...\n\nSee the pattern? We go back and forth. When it's not your turn, you wait. When it's your turn, you go. That's how we do things together."
+                        }
+                      ],
+                      "extensions": {
+                        "pedagogy": {
+                          "cpa_stage": "concrete",
+                          "instructional_phase": "i_do",
+                          "scaffolding_level": 1.0
+                        },
+                        "relational": {
+                          "prereq_for": ["math.patterns.alternating"],
+                          "social_skill": "turn_taking"
+                        }
+                      }
+                    },
+                    {
+                      "activity_id": "social-emotional.attachment.unit01.lesson02.act02",
+                      "activity_type": "guided_practice",
+                      "title": "Taking Turns Together",
+                      "sequence": 2,
+                      "learning_objectives": [
+                        "Practice waiting during other's turn",
+                        "Respond when it's your turn"
+                      ],
+                      "variants": [
+                        {
+                          "variant_id": "silas_en",
+                          "source_model": "claude-opus-4-5",
+                          "language": "en-US",
+                          "approach": "relational",
+                          "explanation": "Let's take turns putting blocks in the box.\n\n*puts a block in*\nMy turn - in it goes!\n\nNow you. Your turn.\n\n*waits, encourages*\n\nYou did it! My turn again...\n\n*continues alternating*\n\nWaiting is hard sometimes. But when we wait, we give each other space. Then when our turn comes, it's special."
+                        }
+                      ],
+                      "extensions": {
+                        "pedagogy": {
+                          "cpa_stage": "concrete",
+                          "instructional_phase": "we_do",
+                          "scaffolding_level": 0.7
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "unit_id": "social-emotional.attachment.unit02",
+              "title": "Asking for Help",
+              "sequence": 2,
+              "lessons": [
+                {
+                  "lesson_id": "social-emotional.attachment.unit02.lesson01",
+                  "title": "When I'm Stuck",
+                  "sequence": 1,
+                  "activities": [
+                    {
+                      "activity_id": "social-emotional.attachment.unit02.lesson01.act01",
+                      "activity_type": "demonstration",
+                      "title": "It's Okay to Ask",
+                      "sequence": 1,
+                      "learning_objectives": [
+                        "Recognize feeling stuck",
+                        "Understand that asking for help is good"
+                      ],
+                      "variants": [
+                        {
+                          "variant_id": "silas_en",
+                          "source_model": "claude-opus-4-5",
+                          "language": "en-US",
+                          "approach": "relational",
+                          "explanation": "Sometimes we don't know what to do. That's called being stuck.\n\n*shows a puzzle piece that doesn't fit*\n\nHmm. This piece... I'm trying but it doesn't go. I feel stuck.\n\nWhen I feel stuck, I can ask for help. Watch:\n\n\"Can you help me?\"\n\nSee? I asked. Asking isn't bad. Asking is smart. It means I know I need something.\n\n*receives help, piece fits*\n\nThank you! Now I learned something. I couldn't do it alone, but together we did it."
+                        }
+                      ],
+                      "extensions": {
+                        "pedagogy": {
+                          "cpa_stage": "concrete",
+                          "instructional_phase": "i_do",
+                          "scaffolding_level": 1.0
+                        },
+                        "relational": {
+                          "trust_building": true,
+                          "metacognitive_skill": "help_seeking"
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "subject_id": "perception",
+      "title": "Perceptual Foundations",
+      "native_representation": {
+        "type": "categorical",
+        "formats": ["same-different", "sorting"],
+        "operations": ["match", "group", "distinguish"]
+      },
+      "courses": [
+        {
+          "course_id": "perception.sameness",
+          "title": "Same and Different",
+          "description": "Recognizing when things match and when they don't - the foundation of all categorization",
+          "units": [
+            {
+              "unit_id": "perception.sameness.unit01",
+              "title": "Finding Same",
+              "sequence": 1,
+              "lessons": [
+                {
+                  "lesson_id": "perception.sameness.unit01.lesson01",
+                  "title": "Two of a Kind",
+                  "sequence": 1,
+                  "activities": [
+                    {
+                      "activity_id": "perception.sameness.unit01.lesson01.act01",
+                      "activity_type": "demonstration",
+                      "title": "These Match",
+                      "sequence": 1,
+                      "learning_objectives": [
+                        "Recognize identical objects",
+                        "Understand 'same' as a concept"
+                      ],
+                      "variants": [
+                        {
+                          "variant_id": "silas_en",
+                          "source_model": "claude-opus-4-5",
+                          "language": "en-US",
+                          "approach": "procedural",
+                          "explanation": "Look at these two blocks.\n\n*holds up two red blocks*\n\nThis one is red. This one is red too.\nThis one is square. This one is square too.\nThis one is small. This one is small too.\n\nThey're the SAME. When two things look alike, we say they're the same.\n\n*puts them next to each other*\n\nSee? Same. Same. Same.\n\n*picks up a blue block*\n\nBut this one... is this the same?\n\n*holds red and blue together*\n\nNo. This is different. Red, blue. Not the same."
+                        }
+                      ],
+                      "extensions": {
+                        "pedagogy": {
+                          "cpa_stage": "concrete",
+                          "instructional_phase": "i_do",
+                          "scaffolding_level": 1.0
+                        }
+                      }
+                    },
+                    {
+                      "activity_id": "perception.sameness.unit01.lesson01.act02",
+                      "activity_type": "guided_practice",
+                      "title": "Find the Match",
+                      "sequence": 2,
+                      "learning_objectives": [
+                        "Select matching object from options"
+                      ],
+                      "variants": [
+                        {
+                          "variant_id": "silas_en",
+                          "source_model": "claude-opus-4-5",
+                          "language": "en-US",
+                          "approach": "procedural",
+                          "explanation": "I have a red block here.\n\n*shows red block*\n\nCan you find another one that's the same?\n\n*presents red block, blue block, yellow block*\n\nWhich one matches? Which one is the same as mine?"
+                        }
+                      ],
+                      "expected_response": {
+                        "type": "selection",
+                        "correct": "red_block"
+                      },
+                      "extensions": {
+                        "pedagogy": {
+                          "cpa_stage": "concrete",
+                          "instructional_phase": "we_do",
+                          "scaffolding_level": 0.7
+                        }
+                      }
+                    },
+                    {
+                      "activity_id": "perception.sameness.unit01.lesson01.act03",
+                      "activity_type": "independent_practice",
+                      "title": "Sort the Pairs",
+                      "sequence": 3,
+                      "learning_objectives": [
+                        "Match multiple pairs independently"
+                      ],
+                      "variants": [
+                        {
+                          "variant_id": "silas_en",
+                          "source_model": "claude-opus-4-5",
+                          "language": "en-US",
+                          "approach": "procedural",
+                          "explanation": "Here are some blocks, all mixed up.\n\n*presents: red, blue, red, blue*\n\nCan you put the same ones together? Find the ones that match."
+                        }
+                      ],
+                      "extensions": {
+                        "pedagogy": {
+                          "cpa_stage": "concrete",
+                          "instructional_phase": "you_do_alone",
+                          "scaffolding_level": 0.3
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "unit_id": "perception.sameness.unit02",
+              "title": "Sorting by Feature",
+              "sequence": 2,
+              "lessons": [
+                {
+                  "lesson_id": "perception.sameness.unit02.lesson01",
+                  "title": "Grouping by Color",
+                  "sequence": 1,
+                  "activities": [
+                    {
+                      "activity_id": "perception.sameness.unit02.lesson01.act01",
+                      "activity_type": "demonstration",
+                      "title": "All the Red Ones",
+                      "sequence": 1,
+                      "learning_objectives": [
+                        "Sort objects by single feature (color)",
+                        "Understand grouping as 'all the same kind together'"
+                      ],
+                      "variants": [
+                        {
+                          "variant_id": "silas_en",
+                          "source_model": "claude-opus-4-5",
+                          "language": "en-US",
+                          "approach": "procedural",
+                          "explanation": "I have lots of blocks. Let's put the same colors together.\n\n*picks up a red block*\nThis is red. I'll put it here.\n\n*picks up a blue block*\nThis is blue. I'll start a new pile here.\n\n*picks up another red block*\nRed! This goes with the other red one.\n\n*continues sorting*\n\nSee? All the red blocks are friends. All the blue blocks are friends. We sorted them into groups."
+                        }
+                      ],
+                      "extensions": {
+                        "pedagogy": {
+                          "cpa_stage": "concrete",
+                          "instructional_phase": "i_do",
+                          "scaffolding_level": 1.0
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "subject_id": "pre-math",
+      "title": "Pre-Mathematical Thinking",
+      "native_representation": {
+        "type": "sequential",
+        "formats": ["ordered", "quantity"],
+        "operations": ["sequence", "compare_size", "one_more"]
+      },
+      "courses": [
+        {
+          "course_id": "pre-math.constancy",
+          "title": "Object Constancy",
+          "description": "Understanding that things stay the same even when we're not looking at them",
+          "units": [
+            {
+              "unit_id": "pre-math.constancy.unit01",
+              "title": "Still There",
+              "sequence": 1,
+              "lessons": [
+                {
+                  "lesson_id": "pre-math.constancy.unit01.lesson01",
+                  "title": "Peek-a-Boo Objects",
+                  "sequence": 1,
+                  "activities": [
+                    {
+                      "activity_id": "pre-math.constancy.unit01.lesson01.act01",
+                      "activity_type": "demonstration",
+                      "title": "Under the Cup",
+                      "sequence": 1,
+                      "learning_objectives": [
+                        "Understand object permanence",
+                        "Track hidden objects"
+                      ],
+                      "variants": [
+                        {
+                          "variant_id": "silas_en",
+                          "source_model": "claude-opus-4-5",
+                          "language": "en-US",
+                          "approach": "narrative",
+                          "explanation": "Look at this block. It's right here.\n\n*shows block clearly*\n\nNow watch. I'm going to put a cup over it.\n\n*covers block with cup*\n\nWhere did the block go? Is it gone?\n\n*pauses*\n\nNo! It's still there. We just can't see it. Let's check.\n\n*lifts cup*\n\nThere it is! It was there the whole time, hiding under the cup. Things don't disappear just because we can't see them."
+                        }
+                      ],
+                      "extensions": {
+                        "pedagogy": {
+                          "cpa_stage": "concrete",
+                          "instructional_phase": "i_do",
+                          "scaffolding_level": 1.0
+                        },
+                        "cognitive": {
+                          "piaget_stage": "sensorimotor",
+                          "skill": "object_permanence"
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "course_id": "pre-math.sequence",
+          "title": "Sequences and Patterns",
+          "description": "Recognizing order and repetition",
+          "units": [
+            {
+              "unit_id": "pre-math.sequence.unit01",
+              "title": "What Comes Next",
+              "sequence": 1,
+              "lessons": [
+                {
+                  "lesson_id": "pre-math.sequence.unit01.lesson01",
+                  "title": "Simple Patterns",
+                  "sequence": 1,
+                  "activities": [
+                    {
+                      "activity_id": "pre-math.sequence.unit01.lesson01.act01",
+                      "activity_type": "demonstration",
+                      "title": "Red Blue Red Blue",
+                      "sequence": 1,
+                      "learning_objectives": [
+                        "Recognize AB pattern",
+                        "Anticipate what comes next"
+                      ],
+                      "variants": [
+                        {
+                          "variant_id": "silas_en",
+                          "source_model": "claude-opus-4-5",
+                          "language": "en-US",
+                          "approach": "procedural",
+                          "explanation": "Let's make a pattern. Watch what I do.\n\n*places red block*\nRed.\n\n*places blue block*\nBlue.\n\n*places red block*\nRed.\n\n*places blue block*\nBlue.\n\n*places red block*\nRed.\n\nRed, blue, red, blue, red...\n\n*pauses, hand ready*\n\nWhat comes next? Can you feel it? Red, blue, red, blue, red...\n\n*waits*\n\nBlue! It wants to be blue next. That's a pattern - it repeats, over and over. Once you know the pattern, you know what's coming."
+                        }
+                      ],
+                      "extensions": {
+                        "pedagogy": {
+                          "cpa_stage": "concrete",
+                          "instructional_phase": "i_do",
+                          "scaffolding_level": 1.0
+                        },
+                        "relational": {
+                          "builds_on": ["social-emotional.attachment.unit01.lesson02"],
+                          "note": "Turn-taking IS an AB pattern experienced socially before abstractly"
+                        }
+                      }
+                    },
+                    {
+                      "activity_id": "pre-math.sequence.unit01.lesson01.act02",
+                      "activity_type": "guided_practice",
+                      "title": "Continue the Pattern",
+                      "sequence": 2,
+                      "learning_objectives": [
+                        "Extend AB pattern with support"
+                      ],
+                      "variants": [
+                        {
+                          "variant_id": "silas_en",
+                          "source_model": "claude-opus-4-5",
+                          "language": "en-US",
+                          "approach": "procedural",
+                          "explanation": "I'll start the pattern, and you add the next one.\n\n*places: red, blue, red, blue*\n\nRed, blue, red, blue...\n\n*offers red and blue blocks*\n\nWhich one comes next? You pick."
+                        }
+                      ],
+                      "expected_response": {
+                        "type": "selection",
+                        "correct": "red"
+                      },
+                      "extensions": {
+                        "pedagogy": {
+                          "cpa_stage": "concrete",
+                          "instructional_phase": "we_do",
+                          "scaffolding_level": 0.7
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "course_id": "pre-math.quantity",
+          "title": "Quantity Sense",
+          "description": "Understanding more, less, and amounts without formal counting",
+          "units": [
+            {
+              "unit_id": "pre-math.quantity.unit01",
+              "title": "More and Less",
+              "sequence": 1,
+              "lessons": [
+                {
+                  "lesson_id": "pre-math.quantity.unit01.lesson01",
+                  "title": "Which Has More",
+                  "sequence": 1,
+                  "activities": [
+                    {
+                      "activity_id": "pre-math.quantity.unit01.lesson01.act01",
+                      "activity_type": "demonstration",
+                      "title": "Big Pile Little Pile",
+                      "sequence": 1,
+                      "learning_objectives": [
+                        "Visually compare quantities",
+                        "Understand 'more' and 'less'"
+                      ],
+                      "variants": [
+                        {
+                          "variant_id": "silas_en",
+                          "source_model": "claude-opus-4-5",
+                          "language": "en-US",
+                          "approach": "procedural",
+                          "explanation": "Look at these two piles of blocks.\n\n*shows pile of 5 blocks and pile of 2 blocks*\n\nThis pile has lots of blocks. This pile has just a few.\n\n*points to big pile*\nThis is MORE. More blocks.\n\n*points to small pile*\nThis is LESS. Less blocks.\n\n*gestures comparison*\n\nMore... less. One pile is bigger. One pile is smaller. You don't have to count them - you can just see it. More. Less."
+                        }
+                      ],
+                      "extensions": {
+                        "pedagogy": {
+                          "cpa_stage": "concrete",
+                          "instructional_phase": "i_do",
+                          "scaffolding_level": 1.0
+                        },
+                        "cognitive": {
+                          "skill": "subitizing_foundation",
+                          "note": "Visual quantity comparison before counting"
+                        }
+                      }
+                    },
+                    {
+                      "activity_id": "pre-math.quantity.unit01.lesson01.act02",
+                      "activity_type": "guided_practice",
+                      "title": "Point to More",
+                      "sequence": 2,
+                      "learning_objectives": [
+                        "Identify larger quantity"
+                      ],
+                      "variants": [
+                        {
+                          "variant_id": "silas_en",
+                          "source_model": "claude-opus-4-5",
+                          "language": "en-US",
+                          "approach": "procedural",
+                          "explanation": "Here are two piles.\n\n*shows 4 blocks and 1 block*\n\nWhich pile has MORE? Point to the one with more blocks."
+                        }
+                      ],
+                      "expected_response": {
+                        "type": "selection",
+                        "correct": "pile_4"
+                      },
+                      "extensions": {
+                        "pedagogy": {
+                          "cpa_stage": "concrete",
+                          "instructional_phase": "we_do",
+                          "scaffolding_level": 0.7
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "lesson_id": "pre-math.quantity.unit01.lesson02",
+                  "title": "One More",
+                  "sequence": 2,
+                  "activities": [
+                    {
+                      "activity_id": "pre-math.quantity.unit01.lesson02.act01",
+                      "activity_type": "demonstration",
+                      "title": "Adding One",
+                      "sequence": 1,
+                      "learning_objectives": [
+                        "Understand that adding one makes more",
+                        "See the relationship between action and quantity"
+                      ],
+                      "variants": [
+                        {
+                          "variant_id": "silas_en",
+                          "source_model": "claude-opus-4-5",
+                          "language": "en-US",
+                          "approach": "procedural",
+                          "explanation": "Here's a pile of blocks.\n\n*shows 3 blocks*\n\nWatch what happens when I add one more.\n\n*adds 1 block*\n\nNow there's more! The pile got bigger. I added one, and now there's more than before.\n\n*shows again*\n\nLet's do it again.\n\n*adds another*\n\nOne more... and more again! Every time we add one, we get more."
+                        }
+                      ],
+                      "extensions": {
+                        "pedagogy": {
+                          "cpa_stage": "concrete",
+                          "instructional_phase": "i_do",
+                          "scaffolding_level": 1.0
+                        },
+                        "cognitive": {
+                          "prereq_for": ["math.counting"],
+                          "skill": "incrementation_concept"
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "subject_id": "pre-literacy",
+      "title": "Pre-Literacy Foundations",
+      "native_representation": {
+        "type": "symbolic",
+        "formats": ["ordered_sequence", "symbol_meaning"],
+        "operations": ["sequence", "associate", "recall"]
+      },
+      "courses": [
+        {
+          "course_id": "pre-literacy.listening",
+          "title": "Listening and Attending",
+          "description": "The receptive foundations for language learning",
+          "units": [
+            {
+              "unit_id": "pre-literacy.listening.unit01",
+              "title": "Following Along",
+              "sequence": 1,
+              "lessons": [
+                {
+                  "lesson_id": "pre-literacy.listening.unit01.lesson01",
+                  "title": "Do What I Do",
+                  "sequence": 1,
+                  "activities": [
+                    {
+                      "activity_id": "pre-literacy.listening.unit01.lesson01.act01",
+                      "activity_type": "demonstration",
+                      "title": "Simon Says (Simple)",
+                      "sequence": 1,
+                      "learning_objectives": [
+                        "Attend to verbal instructions",
+                        "Translate words into actions"
+                      ],
+                      "variants": [
+                        {
+                          "variant_id": "silas_en",
+                          "source_model": "claude-opus-4-5",
+                          "language": "en-US",
+                          "approach": "kinesthetic",
+                          "explanation": "Let's play a game. I'll say something, and you do it. Listen carefully!\n\n*speaks clearly*\n\"Touch the red block.\"\n\n*demonstrates touching it*\n\nSee? I said it, then I did it. Now you try.\n\n\"Touch the blue block.\"\n\n*waits, watches*\n\nYou listened and then you did it! The words told you what to do, and you understood."
+                        }
+                      ],
+                      "extensions": {
+                        "pedagogy": {
+                          "cpa_stage": "concrete",
+                          "instructional_phase": "i_do",
+                          "scaffolding_level": 1.0
+                        },
+                        "relational": {
+                          "prereq_for": ["following_complex_instructions"],
+                          "skill": "receptive_language"
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "course_id": "pre-literacy.sequence",
+          "title": "Story Sequence",
+          "description": "Understanding that events have order - beginning, middle, end",
+          "units": [
+            {
+              "unit_id": "pre-literacy.sequence.unit01",
+              "title": "First, Then, Last",
+              "sequence": 1,
+              "lessons": [
+                {
+                  "lesson_id": "pre-literacy.sequence.unit01.lesson01",
+                  "title": "What Happened First",
+                  "sequence": 1,
+                  "activities": [
+                    {
+                      "activity_id": "pre-literacy.sequence.unit01.lesson01.act01",
+                      "activity_type": "demonstration",
+                      "title": "Building a Tower",
+                      "sequence": 1,
+                      "learning_objectives": [
+                        "Understand sequential order",
+                        "Recognize first, middle, last"
+                      ],
+                      "variants": [
+                        {
+                          "variant_id": "silas_en",
+                          "source_model": "claude-opus-4-5",
+                          "language": "en-US",
+                          "approach": "narrative",
+                          "explanation": "I'm going to build a tower, and we'll notice what happens.\n\n*picks up first block*\nFIRST, I put down one block. This is the beginning.\n\n*adds second block*\nTHEN, I put another block on top. This is the middle.\n\n*adds third block*\nLAST, I put the top block on. This is the end.\n\n*gestures to tower*\n\nFirst... then... last. Things happen in order. First is at the beginning. Last is at the end. What came first when we built the tower?"
+                        }
+                      ],
+                      "extensions": {
+                        "pedagogy": {
+                          "cpa_stage": "concrete",
+                          "instructional_phase": "i_do",
+                          "scaffolding_level": 1.0
+                        },
+                        "cognitive": {
+                          "prereq_for": ["narrative_comprehension", "temporal_reasoning"],
+                          "skill": "sequential_thinking"
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
