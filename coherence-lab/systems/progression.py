@@ -151,6 +151,55 @@ class ProgressionSystem(nn.Module):
             self.n_topics = new_size
 
 
+class TopicTracker(nn.Module):
+    """
+    Wrapper around ProgressionSystem for per-student topic tracking.
+    """
+
+    def __init__(self, n_topics=10):
+        super().__init__()
+        self.progression = ProgressionSystem(n_topics=n_topics)
+        self.n_topics = n_topics
+
+    def get_level(self, topic_idx):
+        return self.progression.get_level(topic_idx)
+
+    def award_xp(self, topic_idx, amount):
+        self.progression.award_xp(topic_idx, amount)
+
+    def get_xp(self, topic_idx):
+        return self.progression.topic_xp[topic_idx].item()
+
+    def resize(self, new_size):
+        self.progression.expand(new_size)
+        self.n_topics = new_size
+
+    def get_total_xp(self):
+        """Get total XP across all topics."""
+        return self.progression.get_total_xp()
+
+    def get_average_level(self):
+        """Get average level across all topics."""
+        return self.progression.get_average_level()
+
+    def update(self, topic_indices, correct, confidence=None):
+        """
+        Update XP based on correctness.
+
+        Args:
+            topic_indices: Tensor of topic indices
+            correct: Tensor of booleans (correct/incorrect)
+            confidence: Optional tensor of confidence values
+        """
+        for i, topic_idx in enumerate(topic_indices):
+            idx = topic_idx.item() if hasattr(topic_idx, 'item') else topic_idx
+            is_correct = correct[i].item() if hasattr(correct[i], 'item') else correct[i]
+
+            if is_correct:
+                self.award_xp(idx, 1.0)  # XPRewards.CORRECT_BASE
+            # Could add penalty for wrong answers if desired
+
+
 # XP award constants - standardized across phases
 class XPRewards:
     """Standard XP reward amounts."""
@@ -160,58 +209,3 @@ class XPRewards:
     STREAK_DIVISOR = 5        # streak_length // 5 = bonus XP
     VALIDATION = 0.0          # Asking for help is neutral
     SPONTANEOUS = 0.0         # Spontaneous share is neutral
-
-
-class TopicTracker(nn.Module):
-    """
-    Topic-level progress tracking with XP and update interface.
-
-    Wraps ProgressionSystem and adds batch update functionality
-    for use in training loops.
-    """
-
-    def __init__(self, n_topics=10, max_level=10):
-        super().__init__()
-        self.progression = ProgressionSystem(n_topics=n_topics, max_level=max_level)
-        self.n_topics = n_topics
-
-    def award_xp(self, topic_idx, amount):
-        """Award XP to a topic."""
-        self.progression.award_xp(topic_idx, amount)
-
-    def get_level(self, topic_idx):
-        """Get level for a topic."""
-        return self.progression.get_level(topic_idx)
-
-    def get_xp_info(self, topic_idx):
-        """Get detailed XP info."""
-        return self.progression.get_xp_info(topic_idx)
-
-    def get_total_xp(self):
-        """Get total XP across all topics."""
-        return self.progression.get_total_xp()
-
-    def get_average_level(self, active_mask=None):
-        """Get average level across topics."""
-        return self.progression.get_average_level(active_mask)
-
-    def update(self, topic_indices, correct, confidence):
-        """
-        Update XP based on batch results.
-
-        Args:
-            topic_indices: Tensor of topic indices
-            correct: Tensor of bool/float correctness values
-            confidence: Tensor of confidence values (unused for now, reserved)
-        """
-        with torch.no_grad():
-            for i, topic_idx in enumerate(topic_indices):
-                if i < len(correct):
-                    if correct[i]:
-                        # Correct answer - base XP
-                        self.award_xp(topic_idx.item(), XPRewards.CORRECT_BASE)
-
-    def expand(self, new_size):
-        """Expand to accommodate more topics."""
-        self.progression.expand(new_size)
-        self.n_topics = new_size

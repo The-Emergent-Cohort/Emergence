@@ -1,9 +1,21 @@
 """
-Developmental Curriculum - Years 1 & 2
-From Sequences to Agents
+Developmental Curriculum - Phase 1 & 2
+From Numbers to Relations
 
-Year 1: Sensorimotor Foundations
-Year 2: Relational & Physical Understanding
+Phase 1 (Year 1): Foundational Numeracy - Following Singapore Math CPA approach
+    1A: Number Operations - counting, +1, -1 (Concrete operations FIRST)
+    1B: Constancy - things stay the same
+    1C: Repetition & Memory - remember what was seen
+    1D: Alternation & Position - cycles and turns
+    1E: Linear Change - counting sequences (+1, -1)
+    1F: Rate of Change - skip counting (fixed step)
+
+Phase 2 (Year 2): Relational & Physical Understanding
+    2A: Simple Relations - doubling, halving, offsets
+    2B: Analogies - transfer relationships
+    2C: Physical Motion - velocity, acceleration
+    2D: Physical Interaction - bounce, conservation
+    2E: Causality - if-then, cause-effect
 """
 
 import random
@@ -14,7 +26,56 @@ from dataclasses import dataclass, field
 
 
 # =============================================================================
-# YEAR 1: SENSORIMOTOR FOUNDATIONS
+# PHASE 1A: NUMBER OPERATIONS (Foundational)
+# Following Singapore Math CPA - Concrete operations BEFORE abstract patterns
+# =============================================================================
+
+def gen_counting(vocab_size: int) -> Dict:
+    """[0, 1, 2, 3, ?] → 4 - The number line itself."""
+    length = random.randint(3, 6)
+    start = 0  # Always start from 0 for counting
+    seq = [start + i for i in range(length)]
+    target = start + length
+    if target >= vocab_size:
+        return gen_counting(vocab_size)
+    return {'sequence': seq, 'target': target}
+
+
+def gen_add_one(vocab_size: int) -> Dict:
+    """[3, 1, 4, 0, 7, 1, 8, 0, 5, 1, ?] → 6 - Explicit triplets: a + 1 = b."""
+    # Show triplets: [operand, delta, result] separated by 0
+    # This reads like "3 plus 1 equals 4, 7 plus 1 equals 8, 5 plus 1 equals ?"
+    n = random.randint(1, vocab_size - 2)  # query value (avoid 0 separator, leave room for +1)
+    n_examples = random.randint(2, 3)
+    seq = []
+    for i in range(n_examples):
+        operand = random.randint(1, vocab_size - 3)  # avoid 0, leave room for +1
+        seq.extend([operand, 1, operand + 1])  # a + 1 = b
+        seq.append(0)  # separator after each triplet
+    seq.extend([n, 1])  # query: n + 1 = ?
+    target = n + 1
+    return {'sequence': seq, 'target': target}
+
+
+def gen_subtract_one(vocab_size: int) -> Dict:
+    """[5, 1, 4, 0, 8, 1, 7, 0, 3, 1, ?] → 2 - Explicit triplets: a - 1 = b."""
+    # Show triplets: [operand, delta, result] separated by 0
+    # Result is SMALLER than operand, so student learns "subtract 1"
+    # This reads like "5 minus 1 equals 4, 8 minus 1 equals 7, 3 minus 1 equals ?"
+    n = random.randint(2, vocab_size - 1)  # query value (need n >= 2 for n-1 >= 1)
+    n_examples = random.randint(2, 3)
+    seq = []
+    for i in range(n_examples):
+        operand = random.randint(2, vocab_size - 1)  # need operand >= 2
+        seq.extend([operand, 1, operand - 1])  # a - 1 = b (result < operand)
+        seq.append(0)  # separator after each triplet
+    seq.extend([n, 1])  # query: n - 1 = ?
+    target = n - 1
+    return {'sequence': seq, 'target': target}
+
+
+# =============================================================================
+# PHASE 1B: CONSTANCY & STABILITY
 # =============================================================================
 
 def gen_constant(vocab_size: int) -> Dict:
@@ -23,6 +84,10 @@ def gen_constant(vocab_size: int) -> Dict:
     length = random.randint(3, 6)
     return {'sequence': [a] * length, 'target': a}
 
+
+# =============================================================================
+# PHASE 1C: REPETITION & MEMORY
+# =============================================================================
 
 def gen_repeating(vocab_size: int) -> Dict:
     """[3, 3, 3, 3, ?] → 3 - Remember what was seen."""
@@ -42,6 +107,10 @@ def gen_echo(vocab_size: int) -> Dict:
     return {'sequence': seq, 'target': target}
 
 
+# =============================================================================
+# PHASE 1D: ALTERNATION & POSITION
+# =============================================================================
+
 def gen_alternating(vocab_size: int) -> Dict:
     """[A, B, A, B, ?] → A - Two-element cycle."""
     a, b = random.sample(range(vocab_size), 2)
@@ -60,6 +129,10 @@ def gen_ternary_cycle(vocab_size: int) -> Dict:
     target = cycle[length % 3]
     return {'sequence': seq, 'target': target}
 
+
+# =============================================================================
+# PHASE 1E: LINEAR CHANGE (Counting Sequences)
+# =============================================================================
 
 def gen_incrementing(vocab_size: int) -> Dict:
     """[1, 2, 3, ?] → 4 - Count up by 1."""
@@ -82,6 +155,10 @@ def gen_decrementing(vocab_size: int) -> Dict:
         return gen_decrementing(vocab_size)
     return {'sequence': seq, 'target': target}
 
+
+# =============================================================================
+# PHASE 1F: RATE OF CHANGE (Skip Counting)
+# =============================================================================
 
 def gen_fixed_offset(vocab_size: int) -> Dict:
     """[2, 5, 8, ?] → 11 - Count by fixed step."""
@@ -296,157 +373,298 @@ class PatternType:
     year: int
     section: str
     description: str
+    # Teacher's Edition content - what to say when teaching this pattern
+    teacher_intro: str = ""  # What to say when introducing
+    teacher_explain: str = ""  # How to explain the pattern
+    teacher_watch_for: str = ""  # Common mistakes to watch for
+
+
+# =============================================================================
+# TEACHER'S EDITION - Pattern explanations and teaching notes
+# Like the answer key + teaching guide in a textbook
+# =============================================================================
+
+TEACHER_NOTES = {
+    # 1A: Number Operations
+    'counting': {
+        'intro': "Today we're learning about counting - the number line!",
+        'explain': "Start at 0 and add 1 each time. 0, 1, 2, 3... Each number is one more than before.",
+        'watch_for': "Students might skip numbers or lose track. Emphasize the +1 pattern.",
+        'worked_example': "Look: [0, 1, 2, 3, ?] - we've been adding 1 each time, so next is 4!",
+    },
+    'add_one': {
+        'intro': "Let's learn addition! We're adding 1 to numbers.",
+        'explain': "Each triplet shows: number, plus 1, equals result. Like 3+1=4. Watch how the result is always 1 bigger!",
+        'watch_for': "Look at the result - it's always BIGGER than the starting number. That's how you know it's addition.",
+        'worked_example': "[3, 1, 4, 0, 7, 1, 8, 0, 5, 1, ?] - see it? 3+1=4, 7+1=8, so 5+1=6!",
+    },
+    'subtract_one': {
+        'intro': "Now subtraction! We're taking 1 away from numbers.",
+        'explain': "Each triplet shows: number, minus 1, equals result. Like 5-1=4. Watch how the result is always 1 smaller!",
+        'watch_for': "Look at the result - it's always SMALLER than the starting number. That's how you know it's subtraction.",
+        'worked_example': "[5, 1, 4, 0, 8, 1, 7, 0, 3, 1, ?] - see it? 5-1=4, 8-1=7, so 3-1=2!",
+    },
+    # 1B: Constancy
+    'constant': {
+        'intro': "Sometimes things stay the same!",
+        'explain': "When you see the same number repeating, it will keep repeating.",
+        'watch_for': "Students might look for change when there is none.",
+        'worked_example': "[7, 7, 7, 7, ?] - it's been 7 every time. What comes next? 7!",
+    },
+    # 1C: Repetition & Memory
+    'repeating': {
+        'intro': "Remember what you saw - it comes back!",
+        'explain': "Same as constant - the value keeps repeating.",
+        'watch_for': "This is like constant but framed as memory.",
+        'worked_example': "[5, 5, 5, ?] - remember what it was? 5!",
+    },
+    'echo': {
+        'intro': "Listen for the echo! The pattern has gaps.",
+        'explain': "A value appears, then 0, then the value again. The value echoes back!",
+        'watch_for': "Students might predict 0 when they should predict the value, or vice versa.",
+        'worked_example': "[4, 0, 4, 0, ?] - the 4 keeps echoing back!",
+    },
+    # 1D: Alternation
+    'alternating': {
+        'intro': "Two values take turns - A, B, A, B...",
+        'explain': "Track position. Odd positions get A, even positions get B (or vice versa).",
+        'watch_for': "Losing track of whose turn it is.",
+        'worked_example': "[3, 7, 3, 7, 3, ?] - 3 and 7 take turns. 3's turn next!",
+    },
+    'ternary_cycle': {
+        'intro': "Three values cycle - A, B, C, A, B, C...",
+        'explain': "Like alternating but with three. Position mod 3 tells you which value.",
+        'watch_for': "Harder to track than pairs. Count the cycle.",
+        'worked_example': "[2, 5, 8, 2, 5, ?] - we're cycling 2,5,8. Next is 8!",
+    },
+    # 1E: Linear Change
+    'incrementing': {
+        'intro': "Counting up - each number is bigger!",
+        'explain': "This is like counting but can start anywhere. Just add 1 each time.",
+        'watch_for': "This is essentially counting from any start point.",
+        'worked_example': "[5, 6, 7, 8, ?] - going up by 1. Next is 9!",
+    },
+    'decrementing': {
+        'intro': "Counting down - each number is smaller!",
+        'explain': "Like incrementing but backwards. Subtract 1 each time.",
+        'watch_for': "Students comfortable with counting might struggle going backwards.",
+        'worked_example': "[10, 9, 8, 7, ?] - going down by 1. Next is 6!",
+    },
+    # 1F: Rate of Change
+    'fixed_offset': {
+        'intro': "Skip counting - same jump each time!",
+        'explain': "Like counting but by 2s or 3s. Find the step size, then keep stepping.",
+        'watch_for': "Identifying the step size from the sequence.",
+        'worked_example': "[2, 5, 8, 11, ?] - jumping by 3 each time. 11+3=14!",
+    },
+    'variable_step': {
+        'intro': "The jumps get bigger each time!",
+        'explain': "First jump is 1, then 2, then 3... The step size increases.",
+        'watch_for': "This is tricky - need to track step size, not just values.",
+        'worked_example': "[1, 2, 4, 7, ?] - jumps are 1, 2, 3... next jump is 4! 7+4=11.",
+    },
+}
+
+
+def get_teacher_notes(pattern_name: str) -> dict:
+    """Get teacher's edition notes for a pattern."""
+    return TEACHER_NOTES.get(pattern_name, {
+        'intro': f"Learning {pattern_name}",
+        'explain': "Watch the pattern carefully.",
+        'watch_for': "Common mistakes.",
+        'worked_example': "Study the examples."
+    })
 
 
 @dataclass
 class PlaydaySpec:
-    """Defines playday structure for a developmental section."""
+    """
+    Specification for section-specific playday activities and awards.
+
+    Playdays are curriculum-aware celebrations that combine:
+    - Fun activities appropriate for current skill level
+    - Star awards recognizing different strengths
+    - PARTY TIME when the whole class shines
+    """
     section: str
-    activities: List[str] = field(default_factory=list)  # Which guided activities
-    awards: List[tuple] = field(default_factory=list)     # (key, display_name) pairs
-    description: str = ""
+    activities: List[str]  # Activity types for this section
+    focus_skills: List[str]  # Skills being celebrated
+    star_categories: Dict[str, str] = field(default_factory=dict)  # category -> description
+
+    def __post_init__(self):
+        # Default star categories if not specified
+        if not self.star_categories:
+            self.star_categories = {
+                'accuracy': '⭐ Getting answers right',
+                'patience': '⭐ Taking time to think',
+                'curiosity': '⭐ Trying new things',
+                'creativity': '⭐ Finding new patterns'
+            }
 
 
-# =============================================================================
-# PLAYDAY SPECIFICATIONS BY SECTION
-# Scales with developmental maturity
-# =============================================================================
-
-SECTION_PLAYDAYS = {
-    # Year 1: Building foundations through play
+# Playday specs for each section
+PLAYDAY_SPECS = {
+    # =================================================================
+    # Phase 1: Foundational Numeracy
+    # =================================================================
     '1A': PlaydaySpec(
         section='1A',
-        activities=[],  # Pure free play - just exploring blocks
-        awards=[],      # No awards yet - just play!
-        description='Free play with blocks - exploration without structure'
+        activities=['count_together', 'whats_next', 'whats_before'],
+        focus_skills=['counting', 'add_one', 'subtract_one'],
+        star_categories={
+            'accuracy': '⭐ Counting correctly',
+            'speed': '⭐ Quick with numbers',
+            'curiosity': '⭐ Finding number neighbors',
+            'confidence': '⭐ Trying without hints'
+        }
     ),
     '1B': PlaydaySpec(
         section='1B',
-        activities=['turn_taking'],  # Introduces waiting your turn
-        awards=[
-            ('accuracy', 'Most Accurate'),
-            ('patience', 'Most Patient'),
-            ('exploration', 'Most Curious'),
-        ],
-        description='Learning to wait your turn - presages alternating patterns'
+        activities=['spot_the_same', 'steady_eddie'],
+        focus_skills=['constancy', 'attention'],
+        star_categories={
+            'accuracy': '⭐ Seeing what stays the same',
+            'patience': '⭐ Watching carefully',
+            'curiosity': '⭐ Looking for patterns',
+            'focus': '⭐ Staying on track'
+        }
     ),
     '1C': PlaydaySpec(
         section='1C',
-        activities=['turn_taking', 'pattern_mixing'],
-        awards=[
-            ('accuracy', 'Most Accurate'),
-            ('patience', 'Most Patient'),
-            ('exploration', 'Most Curious'),
-            ('creativity', 'Most Creative'),
-        ],
-        description='Pattern play - mixing and matching learned sequences'
+        activities=['memory_game', 'echo_back'],
+        focus_skills=['repetition', 'memory'],
+        star_categories={
+            'accuracy': '⭐ Remembering well',
+            'patience': '⭐ Taking turns nicely',
+            'curiosity': '⭐ Finding echoes',
+            'memory': '⭐ Long memory chain'
+        }
     ),
     '1D': PlaydaySpec(
         section='1D',
-        activities=['turn_taking', 'counting_games'],
-        awards=[
-            ('accuracy', 'Most Accurate'),
-            ('patience', 'Most Patient'),
-            ('exploration', 'Most Curious'),
-            ('helpfulness', 'Most Helpful'),
-        ],
-        description='Number play - counting together, helping peers'
+        activities=['turn_taking', 'rhythm_game'],
+        focus_skills=['alternation', 'position'],
+        star_categories={
+            'accuracy': '⭐ Knowing your turn',
+            'rhythm': '⭐ Feeling the beat',
+            'teamwork': '⭐ Working together',
+            'creativity': '⭐ Making new rhythms'
+        }
     ),
     '1E': PlaydaySpec(
         section='1E',
-        activities=['turn_taking', 'rate_challenges'],
-        awards=[
-            ('accuracy', 'Most Accurate'),
-            ('patience', 'Most Patient'),
-            ('exploration', 'Most Curious'),
-            ('improvement', 'Most Improved'),
-        ],
-        description='Speed and rhythm - feeling rates of change'
+        activities=['count_up', 'count_down', 'number_line'],
+        focus_skills=['incrementing', 'decrementing'],
+        star_categories={
+            'accuracy': '⭐ Counting correctly',
+            'speed': '⭐ Quick counting',
+            'backwards': '⭐ Counting backwards',
+            'creativity': '⭐ Number patterns'
+        }
     ),
-
-    # Year 2: More sophisticated collaborative play
+    '1F': PlaydaySpec(
+        section='1F',
+        activities=['skip_count', 'stair_climb', 'rocket_launch'],
+        focus_skills=['fixed_offset', 'variable_step'],
+        star_categories={
+            'accuracy': '⭐ Perfect steps',
+            'speed': '⭐ Fast climber',
+            'pattern': '⭐ Finding the step',
+            'creativity': '⭐ Making new steps'
+        }
+    ),
     '2A': PlaydaySpec(
         section='2A',
-        activities=['turn_taking', 'relation_building'],
-        awards=[
-            ('accuracy', 'Most Accurate'),
-            ('patience', 'Most Patient'),
-            ('creativity', 'Most Creative'),
-            ('collaboration', 'Best Collaborator'),
-        ],
-        description='Building relationships between numbers'
+        activities=['double_trouble', 'half_time', 'relative_race'],
+        focus_skills=['doubling', 'halving', 'relations'],
+        star_categories={
+            'accuracy': '⭐ Perfect relations',
+            'speed': '⭐ Quick thinker',
+            'insight': '⭐ Seeing connections',
+            'creativity': '⭐ New relations'
+        }
     ),
     '2B': PlaydaySpec(
         section='2B',
-        activities=['analogy_games', 'peer_teaching'],
-        awards=[
-            ('accuracy', 'Most Accurate'),
-            ('creativity', 'Most Creative'),
-            ('teaching', 'Best Teacher'),
-            ('questioning', 'Best Question'),
-        ],
-        description='Analogy play - finding similarities and teaching peers'
+        activities=['analogy_hunt', 'pattern_transfer'],
+        focus_skills=['analogy', 'transfer'],
+        star_categories={
+            'accuracy': '⭐ Perfect analogies',
+            'transfer': '⭐ Quick transfer',
+            'insight': '⭐ Deep connections',
+            'creativity': '⭐ Novel analogies'
+        }
     ),
     '2C': PlaydaySpec(
         section='2C',
-        activities=['motion_simulation', 'prediction_games'],
-        awards=[
-            ('accuracy', 'Most Accurate'),
-            ('prediction', 'Best Predictor'),
-            ('creativity', 'Most Creative'),
-            ('intuition', 'Best Intuition'),
-        ],
-        description='Motion play - predicting where things will go'
+        activities=['motion_predict', 'speed_race', 'accel_game'],
+        focus_skills=['velocity', 'acceleration'],
+        star_categories={
+            'accuracy': '⭐ Perfect prediction',
+            'physics': '⭐ Physics intuition',
+            'speed': '⭐ Quick tracker',
+            'creativity': '⭐ New motions'
+        }
     ),
     '2D': PlaydaySpec(
         section='2D',
-        activities=['physics_games', 'conservation_puzzles'],
-        awards=[
-            ('accuracy', 'Most Accurate'),
-            ('reasoning', 'Best Reasoning'),
-            ('creativity', 'Most Creative'),
-            ('persistence', 'Most Persistent'),
-        ],
-        description='Physics play - bouncing, conserving, transforming'
+        activities=['bounce_predict', 'conservation_check'],
+        focus_skills=['bounce', 'conservation'],
+        star_categories={
+            'accuracy': '⭐ Perfect physics',
+            'intuition': '⭐ Physical intuition',
+            'conservation': '⭐ Nothing lost',
+            'creativity': '⭐ New interactions'
+        }
     ),
     '2E': PlaydaySpec(
         section='2E',
-        activities=['causality_games', 'experiment_design'],
-        awards=[
-            ('accuracy', 'Most Accurate'),
-            ('reasoning', 'Best Reasoning'),
-            ('hypothesis', 'Best Hypothesis'),
-            ('scientific', 'Most Scientific'),
-        ],
-        description='Causality play - if this then that, designing experiments'
+        activities=['cause_hunt', 'if_then_game', 'chain_reaction'],
+        focus_skills=['causality', 'conditionals'],
+        star_categories={
+            'accuracy': '⭐ Perfect causes',
+            'logic': '⭐ Clear thinking',
+            'prediction': '⭐ What comes next',
+            'creativity': '⭐ New causes'
+        }
     ),
 }
 
 
 def get_playday_spec(section: str) -> PlaydaySpec:
-    """Get the playday specification for a section."""
-    return SECTION_PLAYDAYS.get(section, SECTION_PLAYDAYS['1A'])
+    """Get playday spec for a section."""
+    return PLAYDAY_SPECS.get(section, PLAYDAY_SPECS['1A'])
 
 
 YEAR_1_PATTERNS = [
-    # 1A: Constancy
-    PatternType('constant', gen_constant, 1, 1, '1A', 'Things stay the same'),
+    # =================================================================
+    # Phase 1: Foundational Numeracy (Singapore Math CPA approach)
+    # Concrete operations BEFORE abstract pattern recognition
+    # =================================================================
 
-    # 1B: Repetition & Memory
-    PatternType('repeating', gen_repeating, 1, 1, '1B', 'Remember what was seen'),
-    PatternType('echo', gen_echo, 2, 1, '1B', 'Pattern with gaps'),
+    # 1A: Number Operations - The truly foundational skills
+    PatternType('counting', gen_counting, 1, 1, '1A', 'The number line'),
+    PatternType('add_one', gen_add_one, 1, 1, '1A', 'What comes next (+1)'),
+    PatternType('subtract_one', gen_subtract_one, 1, 1, '1A', 'What comes before (-1)'),
 
-    # 1C: Alternation & Position
-    PatternType('alternating', gen_alternating, 3, 1, '1C', 'Two-element cycle'),
-    PatternType('ternary_cycle', gen_ternary_cycle, 4, 1, '1C', 'Three-element cycle'),
+    # 1B: Constancy - First pattern recognition
+    PatternType('constant', gen_constant, 1, 1, '1B', 'Things stay the same'),
 
-    # 1D: Linear Change
-    PatternType('incrementing', gen_incrementing, 2, 1, '1D', 'Count up by 1'),
-    PatternType('decrementing', gen_decrementing, 2, 1, '1D', 'Count down by 1'),
+    # 1C: Repetition & Memory
+    PatternType('repeating', gen_repeating, 1, 1, '1C', 'Remember what was seen'),
+    PatternType('echo', gen_echo, 2, 1, '1C', 'Pattern with gaps'),
 
-    # 1E: Rate of Change
-    PatternType('fixed_offset', gen_fixed_offset, 3, 1, '1E', 'Count by fixed step'),
-    PatternType('variable_step', gen_variable_step, 4, 1, '1E', 'Increasing step size'),
+    # 1D: Alternation & Position
+    PatternType('alternating', gen_alternating, 3, 1, '1D', 'Two-element cycle'),
+    PatternType('ternary_cycle', gen_ternary_cycle, 4, 1, '1D', 'Three-element cycle'),
+
+    # 1E: Linear Change (Counting Sequences)
+    PatternType('incrementing', gen_incrementing, 2, 1, '1E', 'Count up by 1'),
+    PatternType('decrementing', gen_decrementing, 2, 1, '1E', 'Count down by 1'),
+
+    # 1F: Rate of Change (Skip Counting)
+    PatternType('fixed_offset', gen_fixed_offset, 3, 1, '1F', 'Count by fixed step'),
+    PatternType('variable_step', gen_variable_step, 4, 1, '1F', 'Increasing step size'),
 ]
 
 YEAR_2_PATTERNS = [
