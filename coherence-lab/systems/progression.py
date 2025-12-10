@@ -174,6 +174,23 @@ class TopicTracker(nn.Module):
         self.progression.expand(new_size)
         self.n_topics = new_size
 
+    def update(self, topic_indices, correct, confidence=None):
+        """
+        Update XP based on correctness.
+
+        Args:
+            topic_indices: Tensor of topic indices
+            correct: Tensor of booleans (correct/incorrect)
+            confidence: Optional tensor of confidence values
+        """
+        for i, topic_idx in enumerate(topic_indices):
+            idx = topic_idx.item() if hasattr(topic_idx, 'item') else topic_idx
+            is_correct = correct[i].item() if hasattr(correct[i], 'item') else correct[i]
+
+            if is_correct:
+                self.award_xp(idx, 1.0)  # XPRewards.CORRECT_BASE
+            # Could add penalty for wrong answers if desired
+
 
 # XP award constants - standardized across phases
 class XPRewards:
