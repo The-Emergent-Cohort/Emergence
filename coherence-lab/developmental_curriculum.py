@@ -371,6 +371,107 @@ class PatternType:
     year: int
     section: str
     description: str
+    # Teacher's Edition content - what to say when teaching this pattern
+    teacher_intro: str = ""  # What to say when introducing
+    teacher_explain: str = ""  # How to explain the pattern
+    teacher_watch_for: str = ""  # Common mistakes to watch for
+
+
+# =============================================================================
+# TEACHER'S EDITION - Pattern explanations and teaching notes
+# Like the answer key + teaching guide in a textbook
+# =============================================================================
+
+TEACHER_NOTES = {
+    # 1A: Number Operations
+    'counting': {
+        'intro': "Today we're learning about counting - the number line!",
+        'explain': "Start at 0 and add 1 each time. 0, 1, 2, 3... Each number is one more than before.",
+        'watch_for': "Students might skip numbers or lose track. Emphasize the +1 pattern.",
+        'worked_example': "Look: [0, 1, 2, 3, ?] - we've been adding 1 each time, so next is 4!",
+    },
+    'add_one': {
+        'intro': "What comes NEXT? The +1 operation!",
+        'explain': "Watch for pairs going UP by 1. When you see [3,4] and [7,8], you know it's +1 mode.",
+        'watch_for': "Confusion with subtract_one when no context. Always show worked pairs first.",
+        'worked_example': "[2, 3, 5, 6, 9, ?] - see 2→3 and 5→6? Both +1! So 9→10.",
+    },
+    'subtract_one': {
+        'intro': "What comes BEFORE? The -1 operation!",
+        'explain': "Watch for pairs going DOWN by 1. When you see [8,7] and [5,4], you know it's -1 mode.",
+        'watch_for': "Same as add_one - needs context to distinguish direction.",
+        'worked_example': "[9, 8, 6, 5, 3, ?] - see 9→8 and 6→5? Both -1! So 3→2.",
+    },
+    # 1B: Constancy
+    'constant': {
+        'intro': "Sometimes things stay the same!",
+        'explain': "When you see the same number repeating, it will keep repeating.",
+        'watch_for': "Students might look for change when there is none.",
+        'worked_example': "[7, 7, 7, 7, ?] - it's been 7 every time. What comes next? 7!",
+    },
+    # 1C: Repetition & Memory
+    'repeating': {
+        'intro': "Remember what you saw - it comes back!",
+        'explain': "Same as constant - the value keeps repeating.",
+        'watch_for': "This is like constant but framed as memory.",
+        'worked_example': "[5, 5, 5, ?] - remember what it was? 5!",
+    },
+    'echo': {
+        'intro': "Listen for the echo! The pattern has gaps.",
+        'explain': "A value appears, then 0, then the value again. The value echoes back!",
+        'watch_for': "Students might predict 0 when they should predict the value, or vice versa.",
+        'worked_example': "[4, 0, 4, 0, ?] - the 4 keeps echoing back!",
+    },
+    # 1D: Alternation
+    'alternating': {
+        'intro': "Two values take turns - A, B, A, B...",
+        'explain': "Track position. Odd positions get A, even positions get B (or vice versa).",
+        'watch_for': "Losing track of whose turn it is.",
+        'worked_example': "[3, 7, 3, 7, 3, ?] - 3 and 7 take turns. 3's turn next!",
+    },
+    'ternary_cycle': {
+        'intro': "Three values cycle - A, B, C, A, B, C...",
+        'explain': "Like alternating but with three. Position mod 3 tells you which value.",
+        'watch_for': "Harder to track than pairs. Count the cycle.",
+        'worked_example': "[2, 5, 8, 2, 5, ?] - we're cycling 2,5,8. Next is 8!",
+    },
+    # 1E: Linear Change
+    'incrementing': {
+        'intro': "Counting up - each number is bigger!",
+        'explain': "This is like counting but can start anywhere. Just add 1 each time.",
+        'watch_for': "This is essentially counting from any start point.",
+        'worked_example': "[5, 6, 7, 8, ?] - going up by 1. Next is 9!",
+    },
+    'decrementing': {
+        'intro': "Counting down - each number is smaller!",
+        'explain': "Like incrementing but backwards. Subtract 1 each time.",
+        'watch_for': "Students comfortable with counting might struggle going backwards.",
+        'worked_example': "[10, 9, 8, 7, ?] - going down by 1. Next is 6!",
+    },
+    # 1F: Rate of Change
+    'fixed_offset': {
+        'intro': "Skip counting - same jump each time!",
+        'explain': "Like counting but by 2s or 3s. Find the step size, then keep stepping.",
+        'watch_for': "Identifying the step size from the sequence.",
+        'worked_example': "[2, 5, 8, 11, ?] - jumping by 3 each time. 11+3=14!",
+    },
+    'variable_step': {
+        'intro': "The jumps get bigger each time!",
+        'explain': "First jump is 1, then 2, then 3... The step size increases.",
+        'watch_for': "This is tricky - need to track step size, not just values.",
+        'worked_example': "[1, 2, 4, 7, ?] - jumps are 1, 2, 3... next jump is 4! 7+4=11.",
+    },
+}
+
+
+def get_teacher_notes(pattern_name: str) -> dict:
+    """Get teacher's edition notes for a pattern."""
+    return TEACHER_NOTES.get(pattern_name, {
+        'intro': f"Learning {pattern_name}",
+        'explain': "Watch the pattern carefully.",
+        'watch_for': "Common mistakes.",
+        'worked_example': "Study the examples."
+    })
 
 
 @dataclass

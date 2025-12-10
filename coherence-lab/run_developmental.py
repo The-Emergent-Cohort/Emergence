@@ -20,7 +20,8 @@ from developmental_curriculum import (
     DevelopmentalDataset, collate_fn,
     YEAR_1_PATTERNS, YEAR_2_PATTERNS, ALL_PATTERNS,
     get_pattern_names, get_patterns_by_section, print_curriculum,
-    PlaydaySpec, PLAYDAY_SPECS, get_playday_spec
+    PlaydaySpec, PLAYDAY_SPECS, get_playday_spec,
+    TEACHER_NOTES, get_teacher_notes
 )
 import random
 from systems import ExaminationSystem
@@ -504,6 +505,113 @@ def get_mastered_patterns(broker, pattern_to_idx, mastery_level=3):
             mastered.append(idx_to_pattern[pt_idx])
 
     return mastered
+
+
+def run_teacher_demonstration(broker, pattern_obj, device, vocab_size=26):
+    """
+    "I Do" phase - Teacher demonstrates a pattern with explanation.
+
+    Following Gradual Release of Responsibility:
+    1. Show worked example
+    2. Explain the pattern explicitly
+    3. Students observe and listen
+
+    Uses Teacher's Edition notes from curriculum (like textbook teacher's guide).
+    """
+    # Get teacher's edition notes
+    notes = get_teacher_notes(pattern_obj.name)
+
+    print(f"\n  📚 Teacher Demonstration: {pattern_obj.name}")
+    print(f"     \"{notes['intro']}\"")
+
+    # Generate 3 worked examples
+    print("\n     Worked examples:")
+    for i in range(3):
+        example = pattern_obj.generator(vocab_size)
+        seq = example['sequence']
+        target = example['target']
+
+        # Show the sequence with explanation
+        seq_str = ', '.join(str(x) for x in seq)
+        print(f"       [{seq_str}, ?] → {target}")
+
+    # Teacher explains the pattern (from textbook)
+    print(f"\n     💡 Explanation: {notes['explain']}")
+
+    # Show the scripted worked example from teacher's edition
+    if notes.get('worked_example'):
+        print(f"     📖 \"{notes['worked_example']}\"")
+
+    # What to watch for (teacher notes)
+    print(f"     👀 Watch for: {notes['watch_for']}")
+
+    return True
+
+
+def run_guided_practice(broker, pattern_obj, device, vocab_size=26, n_problems=5):
+    """
+    "We Do" phase - Guided practice with scaffolding and feedback.
+
+    Students predict, then see the answer with explanation.
+    Target ~80% success before moving to independent practice.
+    """
+    print(f"\n  🤝 Guided Practice: {pattern_obj.name}")
+
+    results = {name: {'correct': 0, 'total': 0} for name in broker.students.keys()}
+
+    for problem_num in range(n_problems):
+        example = pattern_obj.generator(vocab_size)
+        seq = example['sequence']
+        target = example['target']
+
+        # Prepare input
+        max_len = 12
+        padded = seq + [0] * (max_len - len(seq))
+        tokens = torch.tensor(padded[:max_len], dtype=torch.long).unsqueeze(0).to(device)
+        seq_len = [len(seq)]
+
+        seq_str = ', '.join(str(x) for x in seq)
+        print(f"     Problem {problem_num + 1}: [{seq_str}, ?]")
+
+        # Each student predicts
+        predictions = {}
+        for name, student in broker.students.items():
+            student.eval()
+            with torch.no_grad():
+                logits, _, _ = student(tokens, seq_len)
+                pred = logits.argmax(dim=-1).item()
+                predictions[name] = pred
+                results[name]['total'] += 1
+                if pred == target:
+                    results[name]['correct'] += 1
+
+        # Show predictions and give feedback
+        pred_strs = []
+        for name, pred in predictions.items():
+            marker = "✓" if pred == target else "✗"
+            pred_strs.append(f"{name}:{pred}{marker}")
+
+        print(f"       Predictions: {', '.join(pred_strs)}")
+        print(f"       Answer: {target}")
+
+        # Brief feedback if anyone got it wrong
+        wrong = [name for name, pred in predictions.items() if pred != target]
+        if wrong and problem_num < n_problems - 1:
+            print(f"       (Keep watching the pattern, {', '.join(wrong)}!)")
+
+    # Summary
+    print("     Results:")
+    for name in broker.students:
+        acc = results[name]['correct'] / max(1, results[name]['total'])
+        bar = '█' * int(acc * 5)
+        print(f"       {name}: {results[name]['correct']}/{results[name]['total']} {bar}")
+
+    # Return average success rate
+    total_correct = sum(r['correct'] for r in results.values())
+    total_problems = sum(r['total'] for r in results.values())
+    avg_success = total_correct / max(1, total_problems)
+
+    return avg_success
 
 
 def generate_creative_challenge(mastered_patterns, vocab_size=26):
@@ -1324,6 +1432,31 @@ def main(args):
         # QUESTION PERIOD at start of epoch
         run_question_period(broker, active_pattern_names, pattern_to_idx, device,
                            epochs_on_phase, notebooks, epoch)
+
+        # "I DO, WE DO" - Teacher demonstration on day 1 of new section
+        if epochs_on_phase == 1 and phased:
+            current_section = active_sections[-1]
+            section_patterns = get_patterns_by_section(current_section)
+            print(f"\n  {'='*50}")
+            print(f"  📖 NEW SECTION: {current_section} - Teacher's Introduction")
+            print(f"  {'='*50}")
+
+            for pattern_obj in section_patterns:
+                # "I Do" - Teacher demonstrates
+                run_teacher_demonstration(broker, pattern_obj, device)
+
+                # "We Do" - Guided practice
+                success_rate = run_guided_practice(broker, pattern_obj, device, n_problems=5)
+
+                # Feedback on readiness
+                if success_rate >= 0.8:
+                    print(f"     ✓ Class ready for independent practice!")
+                elif success_rate >= 0.6:
+                    print(f"     ~ Class needs more practice, but can continue.")
+                else:
+                    print(f"     ✗ Class struggling - will need more examples.")
+
+            print(f"  {'='*50}\n")
 
         # PLAYDAY every 5th epoch on topic (4 work, 1 play)
         if epochs_on_phase % 5 == 0:
