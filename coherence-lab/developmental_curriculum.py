@@ -42,32 +42,34 @@ def gen_counting(vocab_size: int) -> Dict:
 
 
 def gen_add_one(vocab_size: int) -> Dict:
-    """[3, 4, 7, ?] → 8 - See +1 pattern, then apply it."""
-    # Always show the operation first (worked example), then ask to apply
-    # This makes it unambiguous: "I saw +1, so I do +1"
-    n = random.randint(0, vocab_size - 2)
-    # Show 2-3 examples of +1, then the query
+    """[3, 1, 4, 0, 7, 1, 8, 0, 5, 1, ?] → 6 - Explicit triplets: a + 1 = b."""
+    # Show triplets: [operand, delta, result] separated by 0
+    # This reads like "3 plus 1 equals 4, 7 plus 1 equals 8, 5 plus 1 equals ?"
+    n = random.randint(1, vocab_size - 2)  # query value (avoid 0 separator, leave room for +1)
     n_examples = random.randint(2, 3)
     seq = []
-    for _ in range(n_examples):
-        prev = random.randint(0, vocab_size - 3)
-        seq.extend([prev, prev + 1])
-    seq.append(n)
+    for i in range(n_examples):
+        operand = random.randint(1, vocab_size - 3)  # avoid 0, leave room for +1
+        seq.extend([operand, 1, operand + 1])  # a + 1 = b
+        seq.append(0)  # separator after each triplet
+    seq.extend([n, 1])  # query: n + 1 = ?
     target = n + 1
     return {'sequence': seq, 'target': target}
 
 
 def gen_subtract_one(vocab_size: int) -> Dict:
-    """[9, 8, 5, ?] → 4 - See -1 pattern, then apply it."""
-    # Always show the operation first (worked example), then ask to apply
-    n = random.randint(1, vocab_size - 1)
-    # Show 2-3 examples of -1, then the query
+    """[5, 1, 4, 0, 8, 1, 7, 0, 3, 1, ?] → 2 - Explicit triplets: a - 1 = b."""
+    # Show triplets: [operand, delta, result] separated by 0
+    # Result is SMALLER than operand, so student learns "subtract 1"
+    # This reads like "5 minus 1 equals 4, 8 minus 1 equals 7, 3 minus 1 equals ?"
+    n = random.randint(2, vocab_size - 1)  # query value (need n >= 2 for n-1 >= 1)
     n_examples = random.randint(2, 3)
     seq = []
-    for _ in range(n_examples):
-        prev = random.randint(2, vocab_size - 1)
-        seq.extend([prev, prev - 1])
-    seq.append(n)
+    for i in range(n_examples):
+        operand = random.randint(2, vocab_size - 1)  # need operand >= 2
+        seq.extend([operand, 1, operand - 1])  # a - 1 = b (result < operand)
+        seq.append(0)  # separator after each triplet
+    seq.extend([n, 1])  # query: n - 1 = ?
     target = n - 1
     return {'sequence': seq, 'target': target}
 
@@ -391,16 +393,16 @@ TEACHER_NOTES = {
         'worked_example': "Look: [0, 1, 2, 3, ?] - we've been adding 1 each time, so next is 4!",
     },
     'add_one': {
-        'intro': "What comes NEXT? The +1 operation!",
-        'explain': "Watch for pairs going UP by 1. When you see [3,4] and [7,8], you know it's +1 mode.",
-        'watch_for': "Confusion with subtract_one when no context. Always show worked pairs first.",
-        'worked_example': "[2, 3, 5, 6, 9, ?] - see 2→3 and 5→6? Both +1! So 9→10.",
+        'intro': "Let's learn addition! We're adding 1 to numbers.",
+        'explain': "Each triplet shows: number, plus 1, equals result. Like 3+1=4. Watch how the result is always 1 bigger!",
+        'watch_for': "Look at the result - it's always BIGGER than the starting number. That's how you know it's addition.",
+        'worked_example': "[3, 1, 4, 0, 7, 1, 8, 0, 5, 1, ?] - see it? 3+1=4, 7+1=8, so 5+1=6!",
     },
     'subtract_one': {
-        'intro': "What comes BEFORE? The -1 operation!",
-        'explain': "Watch for pairs going DOWN by 1. When you see [8,7] and [5,4], you know it's -1 mode.",
-        'watch_for': "Same as add_one - needs context to distinguish direction.",
-        'worked_example': "[9, 8, 6, 5, 3, ?] - see 9→8 and 6→5? Both -1! So 3→2.",
+        'intro': "Now subtraction! We're taking 1 away from numbers.",
+        'explain': "Each triplet shows: number, minus 1, equals result. Like 5-1=4. Watch how the result is always 1 smaller!",
+        'watch_for': "Look at the result - it's always SMALLER than the starting number. That's how you know it's subtraction.",
+        'worked_example': "[5, 1, 4, 0, 8, 1, 7, 0, 3, 1, ?] - see it? 5-1=4, 8-1=7, so 3-1=2!",
     },
     # 1B: Constancy
     'constant': {
