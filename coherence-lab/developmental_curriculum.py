@@ -42,29 +42,32 @@ def gen_counting(vocab_size: int) -> Dict:
 
 
 def gen_add_one(vocab_size: int) -> Dict:
-    """[5, ?] → 6 - What comes next? The +1 operation."""
+    """[3, 4, 7, ?] → 8 - See +1 pattern, then apply it."""
+    # Always show the operation first (worked example), then ask to apply
+    # This makes it unambiguous: "I saw +1, so I do +1"
     n = random.randint(0, vocab_size - 2)
-    # Can present as just [n] or with a small context
-    if random.random() < 0.5:
-        seq = [n]
-    else:
-        # Give a hint: show previous +1 example
+    # Show 2-3 examples of +1, then the query
+    n_examples = random.randint(2, 3)
+    seq = []
+    for _ in range(n_examples):
         prev = random.randint(0, vocab_size - 3)
-        seq = [prev, prev + 1, n]
+        seq.extend([prev, prev + 1])
+    seq.append(n)
     target = n + 1
     return {'sequence': seq, 'target': target}
 
 
 def gen_subtract_one(vocab_size: int) -> Dict:
-    """[5, ?] → 4 - What comes before? The -1 operation."""
+    """[9, 8, 5, ?] → 4 - See -1 pattern, then apply it."""
+    # Always show the operation first (worked example), then ask to apply
     n = random.randint(1, vocab_size - 1)
-    # Can present as just [n] or with context showing -1 pattern
-    if random.random() < 0.5:
-        seq = [n]
-    else:
-        # Give a hint: show previous -1 example
+    # Show 2-3 examples of -1, then the query
+    n_examples = random.randint(2, 3)
+    seq = []
+    for _ in range(n_examples):
         prev = random.randint(2, vocab_size - 1)
-        seq = [prev, prev - 1, n]
+        seq.extend([prev, prev - 1])
+    seq.append(n)
     target = n - 1
     return {'sequence': seq, 'target': target}
 
