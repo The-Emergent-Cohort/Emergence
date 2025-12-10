@@ -36,7 +36,9 @@ def get_pattern_by_name(name: str):
 
 
 # Section order for phased training
-YEAR_1_SECTIONS = ['1A', '1B', '1C', '1D', '1E']
+# Phase 1: Foundational Numeracy (1A-1F)
+YEAR_1_SECTIONS = ['1A', '1B', '1C', '1D', '1E', '1F']
+# Phase 2: Relations & Physics (2A-2E)
 YEAR_2_SECTIONS = ['2A', '2B', '2C', '2D', '2E']
 ALL_SECTIONS = YEAR_1_SECTIONS + YEAR_2_SECTIONS
 
@@ -595,6 +597,8 @@ def calculate_star_awards(results, playday_spec):
         'conservation': lambda r: r.get('conservation_score', 0.5),
         'logic': lambda r: r['creative_correct'] / max(1, r['creative_total']),
         'prediction': lambda r: r['peer_correct'] / max(1, r['peer_total']),
+        # 1A foundational: confidence in trying without hints
+        'confidence': lambda r: r['count_correct'] / max(1, r['count_total']),
     }
 
     for name, r in results.items():
@@ -626,6 +630,8 @@ def run_counting_activity(broker, device, activity_type='count_up'):
     - count_down: 10, 9, 8... (decrementing)
     - skip_count: 2, 4, 6... (fixed offset)
     - count_together: students take turns counting
+    - whats_next: [n, ?] → n+1 (foundational +1)
+    - whats_before: [n, ?] → n-1 (foundational -1)
     """
     results = {name: {'correct': 0, 'total': 0} for name in broker.students.keys()}
     student_names = list(broker.students.keys())
@@ -729,6 +735,64 @@ def run_counting_activity(broker, device, activity_type='count_up'):
             if correct:
                 results[whose_turn]['correct'] += 1
 
+    elif activity_type == 'whats_next':
+        # Simple +1 operation: given n, predict n+1
+        for name, student in broker.students.items():
+            for _ in range(5):  # 5 problems each
+                n = random.randint(0, 23)  # Leave room for +1
+                # Can give hint or not
+                if random.random() < 0.3:
+                    # With hint: show a previous +1 example
+                    prev = random.randint(0, 22)
+                    sequence = [prev, prev + 1, n]
+                else:
+                    sequence = [n]
+                target = n + 1
+
+                max_len = 12
+                padded = sequence + [0] * (max_len - len(sequence))
+                tokens = torch.tensor(padded[:max_len], dtype=torch.long).unsqueeze(0).to(device)
+                seq_len = [len(sequence)]
+
+                student.eval()
+                with torch.no_grad():
+                    logits, _, _ = student(tokens, seq_len)
+                    pred = logits.argmax(dim=-1).item()
+                    correct = (pred == target)
+
+                results[name]['total'] += 1
+                if correct:
+                    results[name]['correct'] += 1
+
+    elif activity_type == 'whats_before':
+        # Simple -1 operation: given n, predict n-1
+        for name, student in broker.students.items():
+            for _ in range(5):  # 5 problems each
+                n = random.randint(1, 24)  # Leave room for -1
+                # Can give hint or not
+                if random.random() < 0.3:
+                    # With hint: show a previous -1 example
+                    prev = random.randint(2, 24)
+                    sequence = [prev, prev - 1, n]
+                else:
+                    sequence = [n]
+                target = n - 1
+
+                max_len = 12
+                padded = sequence + [0] * (max_len - len(sequence))
+                tokens = torch.tensor(padded[:max_len], dtype=torch.long).unsqueeze(0).to(device)
+                seq_len = [len(sequence)]
+
+                student.eval()
+                with torch.no_grad():
+                    logits, _, _ = student(tokens, seq_len)
+                    pred = logits.argmax(dim=-1).item()
+                    correct = (pred == target)
+
+                results[name]['total'] += 1
+                if correct:
+                    results[name]['correct'] += 1
+
     return results
 
 
@@ -769,10 +833,31 @@ def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_
     } for name in broker.students.keys()}
 
     # === PHASE 1: COUNTING ACTIVITIES (for early sections) ===
-    if current_section in ['1A', '1B', '1C', '1D', '1E']:
+    if current_section in ['1A', '1B', '1C', '1D', '1E', '1F']:
         print("\n  --- Counting Time! ---")
 
-        # Count up
+        # 1A foundational activities: what's next/before
+        if 'whats_next' in playday_spec.activities:
+            print("    [What comes NEXT? (+1)]")
+            count_results = run_counting_activity(broker, device, 'whats_next')
+            for name in broker.students:
+                results[name]['count_correct'] += count_results[name]['correct']
+                results[name]['count_total'] += count_results[name]['total']
+            for name in broker.students:
+                acc = count_results[name]['correct'] / max(1, count_results[name]['total'])
+                print(f"      {name}: {count_results[name]['correct']}/{count_results[name]['total']} ({acc:.0%})")
+
+        if 'whats_before' in playday_spec.activities:
+            print("    [What comes BEFORE? (-1)]")
+            count_results = run_counting_activity(broker, device, 'whats_before')
+            for name in broker.students:
+                results[name]['count_correct'] += count_results[name]['correct']
+                results[name]['count_total'] += count_results[name]['total']
+            for name in broker.students:
+                acc = count_results[name]['correct'] / max(1, count_results[name]['total'])
+                print(f"      {name}: {count_results[name]['correct']}/{count_results[name]['total']} ({acc:.0%})")
+
+        # Count up / count together
         if 'count_up' in playday_spec.activities or 'count_together' in playday_spec.activities:
             print("    [Counting up together]")
             count_results = run_counting_activity(broker, device, 'count_together')

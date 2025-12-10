@@ -1,9 +1,21 @@
 """
-Developmental Curriculum - Years 1 & 2
-From Sequences to Agents
+Developmental Curriculum - Phase 1 & 2
+From Numbers to Relations
 
-Year 1: Sensorimotor Foundations
-Year 2: Relational & Physical Understanding
+Phase 1 (Year 1): Foundational Numeracy - Following Singapore Math CPA approach
+    1A: Number Operations - counting, +1, -1 (Concrete operations FIRST)
+    1B: Constancy - things stay the same
+    1C: Repetition & Memory - remember what was seen
+    1D: Alternation & Position - cycles and turns
+    1E: Linear Change - counting sequences (+1, -1)
+    1F: Rate of Change - skip counting (fixed step)
+
+Phase 2 (Year 2): Relational & Physical Understanding
+    2A: Simple Relations - doubling, halving, offsets
+    2B: Analogies - transfer relationships
+    2C: Physical Motion - velocity, acceleration
+    2D: Physical Interaction - bounce, conservation
+    2E: Causality - if-then, cause-effect
 """
 
 import random
@@ -14,7 +26,51 @@ from dataclasses import dataclass, field
 
 
 # =============================================================================
-# YEAR 1: SENSORIMOTOR FOUNDATIONS
+# PHASE 1A: NUMBER OPERATIONS (Foundational)
+# Following Singapore Math CPA - Concrete operations BEFORE abstract patterns
+# =============================================================================
+
+def gen_counting(vocab_size: int) -> Dict:
+    """[0, 1, 2, 3, ?] → 4 - The number line itself."""
+    length = random.randint(3, 6)
+    start = 0  # Always start from 0 for counting
+    seq = [start + i for i in range(length)]
+    target = start + length
+    if target >= vocab_size:
+        return gen_counting(vocab_size)
+    return {'sequence': seq, 'target': target}
+
+
+def gen_add_one(vocab_size: int) -> Dict:
+    """[5, ?] → 6 - What comes next? The +1 operation."""
+    n = random.randint(0, vocab_size - 2)
+    # Can present as just [n] or with a small context
+    if random.random() < 0.5:
+        seq = [n]
+    else:
+        # Give a hint: show previous +1 example
+        prev = random.randint(0, vocab_size - 3)
+        seq = [prev, prev + 1, n]
+    target = n + 1
+    return {'sequence': seq, 'target': target}
+
+
+def gen_subtract_one(vocab_size: int) -> Dict:
+    """[5, ?] → 4 - What comes before? The -1 operation."""
+    n = random.randint(1, vocab_size - 1)
+    # Can present as just [n] or with context showing -1 pattern
+    if random.random() < 0.5:
+        seq = [n]
+    else:
+        # Give a hint: show previous -1 example
+        prev = random.randint(2, vocab_size - 1)
+        seq = [prev, prev - 1, n]
+    target = n - 1
+    return {'sequence': seq, 'target': target}
+
+
+# =============================================================================
+# PHASE 1B: CONSTANCY & STABILITY
 # =============================================================================
 
 def gen_constant(vocab_size: int) -> Dict:
@@ -23,6 +79,10 @@ def gen_constant(vocab_size: int) -> Dict:
     length = random.randint(3, 6)
     return {'sequence': [a] * length, 'target': a}
 
+
+# =============================================================================
+# PHASE 1C: REPETITION & MEMORY
+# =============================================================================
 
 def gen_repeating(vocab_size: int) -> Dict:
     """[3, 3, 3, 3, ?] → 3 - Remember what was seen."""
@@ -42,6 +102,10 @@ def gen_echo(vocab_size: int) -> Dict:
     return {'sequence': seq, 'target': target}
 
 
+# =============================================================================
+# PHASE 1D: ALTERNATION & POSITION
+# =============================================================================
+
 def gen_alternating(vocab_size: int) -> Dict:
     """[A, B, A, B, ?] → A - Two-element cycle."""
     a, b = random.sample(range(vocab_size), 2)
@@ -60,6 +124,10 @@ def gen_ternary_cycle(vocab_size: int) -> Dict:
     target = cycle[length % 3]
     return {'sequence': seq, 'target': target}
 
+
+# =============================================================================
+# PHASE 1E: LINEAR CHANGE (Counting Sequences)
+# =============================================================================
 
 def gen_incrementing(vocab_size: int) -> Dict:
     """[1, 2, 3, ?] → 4 - Count up by 1."""
@@ -82,6 +150,10 @@ def gen_decrementing(vocab_size: int) -> Dict:
         return gen_decrementing(vocab_size)
     return {'sequence': seq, 'target': target}
 
+
+# =============================================================================
+# PHASE 1F: RATE OF CHANGE (Skip Counting)
+# =============================================================================
 
 def gen_fixed_offset(vocab_size: int) -> Dict:
     """[2, 5, 8, ?] → 11 - Count by fixed step."""
@@ -326,9 +398,23 @@ class PlaydaySpec:
 
 # Playday specs for each section
 PLAYDAY_SPECS = {
+    # =================================================================
+    # Phase 1: Foundational Numeracy
+    # =================================================================
     '1A': PlaydaySpec(
         section='1A',
-        activities=['count_together', 'spot_the_same'],
+        activities=['count_together', 'whats_next', 'whats_before'],
+        focus_skills=['counting', 'add_one', 'subtract_one'],
+        star_categories={
+            'accuracy': '⭐ Counting correctly',
+            'speed': '⭐ Quick with numbers',
+            'curiosity': '⭐ Finding number neighbors',
+            'confidence': '⭐ Trying without hints'
+        }
+    ),
+    '1B': PlaydaySpec(
+        section='1B',
+        activities=['spot_the_same', 'steady_eddie'],
         focus_skills=['constancy', 'attention'],
         star_categories={
             'accuracy': '⭐ Seeing what stays the same',
@@ -337,8 +423,8 @@ PLAYDAY_SPECS = {
             'focus': '⭐ Staying on track'
         }
     ),
-    '1B': PlaydaySpec(
-        section='1B',
+    '1C': PlaydaySpec(
+        section='1C',
         activities=['memory_game', 'echo_back'],
         focus_skills=['repetition', 'memory'],
         star_categories={
@@ -348,8 +434,8 @@ PLAYDAY_SPECS = {
             'memory': '⭐ Long memory chain'
         }
     ),
-    '1C': PlaydaySpec(
-        section='1C',
+    '1D': PlaydaySpec(
+        section='1D',
         activities=['turn_taking', 'rhythm_game'],
         focus_skills=['alternation', 'position'],
         star_categories={
@@ -359,19 +445,19 @@ PLAYDAY_SPECS = {
             'creativity': '⭐ Making new rhythms'
         }
     ),
-    '1D': PlaydaySpec(
-        section='1D',
+    '1E': PlaydaySpec(
+        section='1E',
         activities=['count_up', 'count_down', 'number_line'],
         focus_skills=['incrementing', 'decrementing'],
         star_categories={
             'accuracy': '⭐ Counting correctly',
             'speed': '⭐ Quick counting',
             'backwards': '⭐ Counting backwards',
-            'creativity': '⭐ Skip counting'
+            'creativity': '⭐ Number patterns'
         }
     ),
-    '1E': PlaydaySpec(
-        section='1E',
+    '1F': PlaydaySpec(
+        section='1F',
         activities=['skip_count', 'stair_climb', 'rocket_launch'],
         focus_skills=['fixed_offset', 'variable_step'],
         star_categories={
@@ -445,24 +531,34 @@ def get_playday_spec(section: str) -> PlaydaySpec:
 
 
 YEAR_1_PATTERNS = [
-    # 1A: Constancy
-    PatternType('constant', gen_constant, 1, 1, '1A', 'Things stay the same'),
+    # =================================================================
+    # Phase 1: Foundational Numeracy (Singapore Math CPA approach)
+    # Concrete operations BEFORE abstract pattern recognition
+    # =================================================================
 
-    # 1B: Repetition & Memory
-    PatternType('repeating', gen_repeating, 1, 1, '1B', 'Remember what was seen'),
-    PatternType('echo', gen_echo, 2, 1, '1B', 'Pattern with gaps'),
+    # 1A: Number Operations - The truly foundational skills
+    PatternType('counting', gen_counting, 1, 1, '1A', 'The number line'),
+    PatternType('add_one', gen_add_one, 1, 1, '1A', 'What comes next (+1)'),
+    PatternType('subtract_one', gen_subtract_one, 1, 1, '1A', 'What comes before (-1)'),
 
-    # 1C: Alternation & Position
-    PatternType('alternating', gen_alternating, 3, 1, '1C', 'Two-element cycle'),
-    PatternType('ternary_cycle', gen_ternary_cycle, 4, 1, '1C', 'Three-element cycle'),
+    # 1B: Constancy - First pattern recognition
+    PatternType('constant', gen_constant, 1, 1, '1B', 'Things stay the same'),
 
-    # 1D: Linear Change
-    PatternType('incrementing', gen_incrementing, 2, 1, '1D', 'Count up by 1'),
-    PatternType('decrementing', gen_decrementing, 2, 1, '1D', 'Count down by 1'),
+    # 1C: Repetition & Memory
+    PatternType('repeating', gen_repeating, 1, 1, '1C', 'Remember what was seen'),
+    PatternType('echo', gen_echo, 2, 1, '1C', 'Pattern with gaps'),
 
-    # 1E: Rate of Change
-    PatternType('fixed_offset', gen_fixed_offset, 3, 1, '1E', 'Count by fixed step'),
-    PatternType('variable_step', gen_variable_step, 4, 1, '1E', 'Increasing step size'),
+    # 1D: Alternation & Position
+    PatternType('alternating', gen_alternating, 3, 1, '1D', 'Two-element cycle'),
+    PatternType('ternary_cycle', gen_ternary_cycle, 4, 1, '1D', 'Three-element cycle'),
+
+    # 1E: Linear Change (Counting Sequences)
+    PatternType('incrementing', gen_incrementing, 2, 1, '1E', 'Count up by 1'),
+    PatternType('decrementing', gen_decrementing, 2, 1, '1E', 'Count down by 1'),
+
+    # 1F: Rate of Change (Skip Counting)
+    PatternType('fixed_offset', gen_fixed_offset, 3, 1, '1F', 'Count by fixed step'),
+    PatternType('variable_step', gen_variable_step, 4, 1, '1F', 'Increasing step size'),
 ]
 
 YEAR_2_PATTERNS = [
