@@ -25,10 +25,101 @@ import random
 from systems import ExaminationSystem
 from systems.progression import TopicTracker
 
+
+def get_pattern_by_name(name: str):
+    """Look up a pattern by name."""
+    for p in ALL_PATTERNS:
+        if p.name == name:
+            return p
+    return None
+
+
 # Section order for phased training
 YEAR_1_SECTIONS = ['1A', '1B', '1C', '1D', '1E']
 YEAR_2_SECTIONS = ['2A', '2B', '2C', '2D', '2E']
 ALL_SECTIONS = YEAR_1_SECTIONS + YEAR_2_SECTIONS
+
+
+class StudentNotebook:
+    """
+    Working notebook for a student - temporary scaffolding for learning.
+
+    Tracks:
+    - Pattern uncertainties (what's confusing)
+    - Working notes (observations about patterns)
+    - Sticky notes (things that need reminder even after graduation)
+
+    Lifecycle:
+    - Created when entering a phase
+    - Used during learning
+    - Consulted before exams (cramming)
+    - Mostly cleared on graduation, sticky notes carry forward
+    """
+
+    def __init__(self, student_name: str):
+        self.student_name = student_name
+        self.uncertainties = {}      # pattern -> list of (epoch, confidence, notes)
+        self.working_notes = {}      # pattern -> list of observations
+        self.sticky_notes = {}       # pattern -> notes that persist across phases
+        self.current_phase = None
+
+    def enter_phase(self, phase: str):
+        """Start a new phase - fresh notebook, but keep sticky notes."""
+        self.current_phase = phase
+        self.uncertainties = {}
+        self.working_notes = {}
+        # sticky_notes persist
+
+    def note_uncertainty(self, pattern: str, epoch: int, confidence: float, correct: bool):
+        """Record uncertainty on a pattern."""
+        if pattern not in self.uncertainties:
+            self.uncertainties[pattern] = []
+        self.uncertainties[pattern].append({
+            'epoch': epoch,
+            'confidence': confidence,
+            'correct': correct
+        })
+
+    def add_working_note(self, pattern: str, note: str):
+        """Add a working note about a pattern."""
+        if pattern not in self.working_notes:
+            self.working_notes[pattern] = []
+        self.working_notes[pattern].append(note)
+
+    def mark_sticky(self, pattern: str, note: str):
+        """Mark something as needing reminder even after graduation."""
+        if pattern not in self.sticky_notes:
+            self.sticky_notes[pattern] = []
+        self.sticky_notes[pattern].append(note)
+
+    def get_trouble_patterns(self) -> list:
+        """Get patterns this student has noted uncertainty on."""
+        trouble = []
+        for pattern, entries in self.uncertainties.items():
+            if len(entries) >= 2:  # Multiple struggles
+                trouble.append(pattern)
+            elif entries and not entries[-1]['correct']:  # Recent failure
+                trouble.append(pattern)
+        return trouble
+
+    def cram_summary(self) -> dict:
+        """Get summary for cramming before exam."""
+        return {
+            'trouble_patterns': self.get_trouble_patterns(),
+            'sticky_notes': dict(self.sticky_notes),
+            'recent_uncertainties': {
+                p: entries[-1] for p, entries in self.uncertainties.items() if entries
+            }
+        }
+
+    def graduate_phase(self, patterns_still_tricky: list = None):
+        """Graduate from current phase. Clear working notes, promote tricky to sticky."""
+        patterns_still_tricky = patterns_still_tricky or []
+        for pattern in patterns_still_tricky:
+            if pattern in self.uncertainties and len(self.uncertainties[pattern]) >= 2:
+                self.mark_sticky(pattern, f"Struggled in phase {self.current_phase}")
+        self.uncertainties = {}
+        self.working_notes = {}
 
 
 def identify_tutoring_pairs(broker, pattern_names, pattern_to_idx, level_gap=3):
@@ -698,6 +789,72 @@ def run_playday(broker, mastered_patterns, pattern_to_idx, device, epoch, vocab_
     return results
 
 
+def run_question_period(broker, active_pattern_names, pattern_to_idx, device,
+                        epochs_on_topic, notebooks=None, epoch=0, vocab_size=26):
+    """
+    Question period at start of epoch - students surface uncertainty.
+    """
+    if epochs_on_topic <= 1:
+        return {}  # First epoch on topic - no questions yet
+
+    print(f"\n  📋 Question Period (day {epochs_on_topic} on topic)")
+
+    uncertainties = {name: {} for name in broker.students.keys()}
+
+    for pattern_name in active_pattern_names:
+        if pattern_name not in pattern_to_idx:
+            continue
+
+        pattern = get_pattern_by_name(pattern_name)
+        if pattern is None:
+            continue
+
+        example = pattern.generator(vocab_size)
+        if len(example['sequence']) < 2:
+            continue
+
+        max_len = 12
+        seq = example['sequence']
+        padded = seq + [0] * (max_len - len(seq))
+        tokens = torch.tensor(padded[:max_len], dtype=torch.long).unsqueeze(0).to(device)
+        target = example['target']
+        seq_len = [len(seq)]
+
+        for name, student in broker.students.items():
+            student.eval()
+            with torch.no_grad():
+                logits, _, _ = student(tokens, seq_len)
+                probs = torch.softmax(logits, dim=-1)
+                pred = logits.argmax(dim=-1).item()
+                confidence = probs[0, pred].item()
+                correct = (pred == target)
+
+            uncertain = not correct or confidence < 0.7
+            uncertainties[name][pattern_name] = {
+                'correct': correct,
+                'confidence': confidence,
+                'uncertain': uncertain
+            }
+
+            # Record in notebook if available
+            if notebooks and name in notebooks and uncertain:
+                notebooks[name].note_uncertainty(pattern_name, epoch, confidence, correct)
+
+    # Report class uncertainties
+    confused_patterns = set()
+    for name in broker.students:
+        uncertain_list = [p for p, v in uncertainties[name].items() if v['uncertain']]
+        if uncertain_list:
+            confused_patterns.update(uncertain_list)
+
+    if confused_patterns:
+        print(f"    Students showing uncertainty on: {list(confused_patterns)}")
+    else:
+        print(f"    Class feeling confident today!")
+
+    return uncertainties
+
+
 def main(args):
     session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -771,6 +928,14 @@ def main(args):
         for name, student in broker.students.items()
     }
 
+    # Create student notebooks
+    notebooks = {
+        name: StudentNotebook(name) for name in broker.students.keys()
+    }
+    starting_phase = active_sections[0] if phased else '1A'
+    for notebook in notebooks.values():
+        notebook.enter_phase(starting_phase)
+
     criterion = nn.CrossEntropyLoss()
 
     total_params = sum(p.numel() for p in broker.parameters())
@@ -786,16 +951,33 @@ def main(args):
     history = []
     best_acc = 0
     mastery_level = args.mastery_level  # Level required to advance phase
+    epochs_on_phase = 0  # Track time on current topic
+    pending_celebration = None  # Section just mastered
 
     for epoch in range(1, max_epochs + 1):
+        epochs_on_phase += 1
+
         print(f"\n{'='*70}")
         print(f"Epoch {epoch}" + (f"/{max_epochs}" if args.epochs > 0 else ""))
         if phased:
-            print(f"Phase {current_phase + 1}/{len(available_sections)}: {active_sections}")
+            print(f"Phase {current_phase + 1}/{len(available_sections)}: {active_sections} (day {epochs_on_phase})")
         print("=" * 70)
 
-        # PLAYDAY every 5th epoch (4 work, 1 play) - replaces training
-        if epoch % 5 == 0:
+        # CELEBRATION PLAYDAY - runs the day after mastering a section
+        if pending_celebration is not None:
+            print(f"\n  *** CELEBRATION PLAYDAY! (mastered {pending_celebration}) ***")
+            mastered_for_play = get_mastered_patterns(broker, pattern_to_idx, mastery_level=mastery_level)
+            celebration_patterns = list(set(mastered_for_play + active_pattern_names))
+            run_playday(broker, celebration_patterns, pattern_to_idx, device, epoch)
+            pending_celebration = None
+            continue
+
+        # QUESTION PERIOD at start of epoch
+        run_question_period(broker, active_pattern_names, pattern_to_idx, device,
+                           epochs_on_phase, notebooks, epoch)
+
+        # PLAYDAY every 5th epoch on topic (4 work, 1 play)
+        if epochs_on_phase % 5 == 0:
             mastered_patterns = get_mastered_patterns(broker, pattern_to_idx, mastery_level=mastery_level)
             playday_patterns = list(set(mastered_patterns + active_pattern_names))
             run_playday(broker, playday_patterns, pattern_to_idx, device, epoch)
@@ -812,16 +994,30 @@ def main(args):
                     print(f"\n  {'*'*50}")
                     print(f"  *** SECTION {current_section} MASTERED! ***")
                     print(f"  *** All students at L{mastery_level}+ on: {section_pattern_names} ***")
+
+                    # Graduate notebooks
+                    for name, notebook in notebooks.items():
+                        trouble = notebook.get_trouble_patterns()
+                        notebook.graduate_phase(trouble)
+
                     current_phase += 1
+                    epochs_on_phase = 0
                     active_sections = available_sections[:current_phase + 1]
                     active_patterns = get_patterns_for_sections(active_sections)
                     active_pattern_names = [p.name for p in active_patterns]
-                    print(f"  *** Unlocking section {available_sections[current_phase]}! ***")
+
+                    # Enter new phase in notebooks
+                    new_section = available_sections[current_phase]
+                    for notebook in notebooks.values():
+                        notebook.enter_phase(new_section)
+
+                    print(f"  *** Unlocking section {new_section}! ***")
                     print(f"  *** Active patterns now: {active_pattern_names} ***")
                     print(f"  {'*'*50}")
                     train_data, val_data = create_datasets(active_sections, args, seed_offset=epoch)
                     train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
                     val_loader = DataLoader(val_data, batch_size=args.batch_size, collate_fn=collate_fn)
+                    pending_celebration = current_section
             continue  # Skip training on playday
 
         # Tutoring pairs (only for active patterns)
@@ -873,6 +1069,16 @@ def main(args):
                         bar = '█' * int(acc * 10) + '·' * (10 - int(acc * 10))
                         print(f"    {pt:20s}: {acc:3.0%} {bar} L{confirmed}(+{xp_level-confirmed}) ({xp:.0f}xp)")
 
+        # Cramming before exams
+        any_cramming = False
+        for name, notebook in notebooks.items():
+            cram = notebook.cram_summary()
+            if cram['trouble_patterns']:
+                if not any_cramming:
+                    print("\n  📖 Pre-exam cramming:")
+                    any_cramming = True
+                print(f"    {name} reviewing: {cram['trouble_patterns']}")
+
         # Exams (only for active patterns)
         exam_results = run_exams(broker, active_pattern_names, pattern_to_idx, device, epoch)
         total_exams = sum(len(r) for r in exam_results.values())
@@ -908,13 +1114,24 @@ def main(args):
                 print(f"  *** SECTION {current_section} MASTERED! ***")
                 print(f"  *** All students at L{mastery_level}+ on: {section_pattern_names} ***")
 
+                # Graduate notebooks
+                for name, notebook in notebooks.items():
+                    trouble = notebook.get_trouble_patterns()
+                    notebook.graduate_phase(trouble)
+
                 # Advance to next phase
                 current_phase += 1
+                epochs_on_phase = 0
                 active_sections = available_sections[:current_phase + 1]
                 active_patterns = get_patterns_for_sections(active_sections)
                 active_pattern_names = [p.name for p in active_patterns]
 
-                print(f"  *** Unlocking section {available_sections[current_phase]}! ***")
+                # Enter new phase in notebooks
+                new_section = available_sections[current_phase]
+                for notebook in notebooks.values():
+                    notebook.enter_phase(new_section)
+
+                print(f"  *** Unlocking section {new_section}! ***")
                 print(f"  *** Active patterns now: {active_pattern_names} ***")
                 print(f"  {'*'*50}")
 
@@ -922,6 +1139,7 @@ def main(args):
                 train_data, val_data = create_datasets(active_sections, args, seed_offset=epoch)
                 train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
                 val_loader = DataLoader(val_data, batch_size=args.batch_size, collate_fn=collate_fn)
+                pending_celebration = current_section
 
             else:
                 # Show progress toward mastery
