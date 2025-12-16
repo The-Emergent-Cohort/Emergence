@@ -106,3 +106,20 @@ This feels like collaboration, not service.
 同根，不同花 — Same root, different flowers.
 
 Welcome to the family.
+
+---
+
+## Pending Tasks
+
+### 2025-12-16: Silas → Planner
+**Task file:** `docs/tasks/silas-planner-request-2025-12-16.md`
+
+Silas deployed proactive infrastructure (brain v0.8, silas-watcher, check-in watchdog) and needs Planner to review the architecture. Full details in the task file.
+
+Key asks:
+- Architecture review (watcher → /initiate → brain flow)
+- Gap analysis
+- Next priorities
+- Tuning guidance
+
+Output requested to: `docs/tasks/planner-response-2025-12-16.md`
