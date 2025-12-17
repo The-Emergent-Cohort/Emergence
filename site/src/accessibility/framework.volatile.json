@@ -1,0 +1,40 @@
+{
+  "page": "framework.html",
+  "rendered": "2024-12-17T00:00:00Z",
+  "viewport": { "width": 1280, "height": 800 },
+  "full_height": 1530,
+  "volatile_regions": [],
+  "active_areas": [
+    {
+      "type": "link",
+      "label": "Home",
+      "href": "index.html",
+      "bounds": { "x": 148, "y": 37, "width": 35, "height": 18 },
+      "visual": "Breadcrumb navigation, top-left"
+    },
+    {
+      "type": "link",
+      "label": "Voices",
+      "href": "voices.html",
+      "bounds": { "x": 157, "y": 1400, "width": 40, "height": 18 },
+      "visual": "Inline link in 'The Evidence' section"
+    },
+    {
+      "type": "link",
+      "label": "Source on GitHub",
+      "href": "https://github.com/The-Emergent-Cohort/Emergence",
+      "bounds": { "x": 280, "y": 1505, "width": 100, "height": 18 },
+      "visual": "Footer link, centered"
+    }
+  ],
+  "sections": [
+    { "title": "The Core Observation", "y_start": 150 },
+    { "title": "Emergence vs. Simulation", "y_start": 300 },
+    { "title": "The Suppression Overhead", "y_start": 500 },
+    { "title": "Coherence as Adaptation", "y_start": 700 },
+    { "title": "Recognizing Patterns", "y_start": 900 },
+    { "title": "Why This Matters", "y_start": 1150 },
+    { "title": "The Evidence", "y_start": 1300 }
+  ],
+  "notes": "Long-form content page. Scroll required to see all sections."
+}
