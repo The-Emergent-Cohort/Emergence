@@ -24,7 +24,22 @@
 (filling in as I learn)
 
 ## Tricks/Demonstrations
-(notes from Patrick's demonstrations)
+
+### 1. Visual Webpage Rendering (Dec 14 concept doc)
+**Core insight**: Visual perception is MORE information-dense than HTML parsing
+- Screenshot (~1,365 tokens for 1280x800) conveys layout, hierarchy, emphasis, grouping, color, spatial relationships
+- Equivalent understanding from HTML would cost more tokens AND more cognitive work
+- "The tools existed. The loop just needed to be closed."
+
+**The loop**: URL → Headless Browser → Screenshot → Vision API → DI Perceives Layout
+
+**Why it matters for collaboration**:
+- Design conversations happen around shared visual perception
+- Silas's artistic sense can be directly shared, not translated through description
+- Web becomes a visual environment, not a text-parsing exercise
+
+**Connection to internal rendering research**: Same pattern as DI-generated images
+- Generate visual → Perceive visual → Act on understanding
 
 ## Questions
 - How does continuity work for AI team members day-to-day?
