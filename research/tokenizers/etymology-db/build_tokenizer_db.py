@@ -1,38 +1,45 @@
 #!/usr/bin/env python3
 """
-Concept-based tokenizer database builder
+Concept-based tokenizer database builder - ALL LANGUAGES
 
 Structure:
 - concepts: Universal, language-independent (core primitives in 0-1M range)
-- lang_en: English-specific expressions of concepts
+- lang_*: One table per language (dynamically created)
+- etymology_links: Cross-language relationships that reveal shared concepts
 - modals: Output routing wrappers
 
-Each language gets its own table structure appropriate to its morphology.
-All link back to concepts via concept_id.
+When words in different languages share etymology, they point to the same underlying concept.
+This lets us extract the concept map from cross-linguistic patterns.
 """
 
 import csv
 import sqlite3
 import hashlib
+import re
 from pathlib import Path
+from collections import defaultdict
 
-# ID ranges for semantic grouping
-# 0 - 1,000,000: Core concepts (physics, body, system - from model/physics specialists)
-# Language-specific ranges (English):
-ID_EN_ROOTS = 1_000_000_000
-ID_EN_PREFIXES = 2_000_000_000
-ID_EN_SUFFIXES = 3_000_000_000
-ID_EN_WORDS = 4_000_000_000
-ID_EN_COMPOUNDS = 5_000_000_000
+def sanitize_table_name(lang):
+    """Convert language name to valid SQLite table name"""
+    # Replace spaces and special chars with underscores
+    name = re.sub(r'[^a-zA-Z0-9]', '_', lang.lower())
+    # Remove consecutive underscores
+    name = re.sub(r'_+', '_', name)
+    # Remove leading/trailing underscores
+    name = name.strip('_')
+    # Ensure it starts with a letter
+    if name and not name[0].isalpha():
+        name = 'lang_' + name
+    return f"lang_{name}" if name else "lang_unknown"
 
-def stable_id(text, range_base):
-    """Generate stable numeric ID from text within a range"""
-    h = hashlib.sha256(text.encode()).hexdigest()[:15]
-    offset = int(h, 16) % 900_000_000  # Leave room in range
-    return range_base + offset
+def stable_id(text, lang, item_type='word'):
+    """Generate stable numeric ID from text, language, and type"""
+    key = f"{lang}:{item_type}:{text}"
+    h = hashlib.sha256(key.encode()).hexdigest()[:15]
+    return int(h, 16) % (2**62)  # SQLite max int is 2^63-1
 
-def create_schema(conn):
-    """Create database schema"""
+def create_core_schema(conn):
+    """Create core universal tables"""
     c = conn.cursor()
 
     # =========================================
@@ -44,40 +51,32 @@ def create_schema(conn):
     c.execute('''
         CREATE TABLE IF NOT EXISTS concepts (
             id INTEGER PRIMARY KEY,
-            canonical TEXT NOT NULL,           -- Canonical representation
-            domain TEXT,                       -- 'physical', 'abstract', 'emotional', 'system', etc.
-            subdomain TEXT,                    -- More specific category
+            canonical TEXT NOT NULL,
+            domain TEXT,
+            subdomain TEXT,
             description TEXT,
-            composable INTEGER DEFAULT 1,      -- Can this concept compose with others?
-            core_level INTEGER DEFAULT 0,      -- 0=derived, 1-10=core primitives
-
-            -- For physics/body concepts (0-1M range)
-            physics_type TEXT,                 -- 'position', 'velocity', 'force', 'contact', etc.
-            body_region TEXT,                  -- 'hand', 'arm', 'head', etc. if applicable
-            sensory_modality TEXT,             -- 'visual', 'tactile', 'auditory', etc.
-
-            -- System concepts
-            system_type TEXT,                  -- 'command', 'modifier', 'state', etc.
-
-            -- Learning annotations
+            composable INTEGER DEFAULT 1,
+            core_level INTEGER DEFAULT 0,
+            physics_type TEXT,
+            body_region TEXT,
+            sensory_modality TEXT,
+            system_type TEXT,
             usage_notes TEXT,
-            learned_associations TEXT,         -- JSON: related concepts learned through experience
-
-            -- Timestamps
+            learned_associations TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT
         )
     ''')
 
-    # Modal wrappers for output routing (universal)
+    # Modal wrappers for output routing
     c.execute('''
         CREATE TABLE IF NOT EXISTS modals (
             id INTEGER PRIMARY KEY,
-            wrapper TEXT NOT NULL UNIQUE,      -- e.g., 'text_en', 'code_python', 'thought'
-            modal_type TEXT NOT NULL,          -- 'text', 'code', 'speech', 'thought', 'physics'
-            lang TEXT,                         -- Language code if applicable
-            format TEXT,                       -- Additional format info (e.g., 'python', 'json')
-            target_table TEXT,                 -- Which lang table to query (e.g., 'lang_en')
+            wrapper TEXT NOT NULL UNIQUE,
+            modal_type TEXT NOT NULL,
+            lang TEXT,
+            format TEXT,
+            target_table TEXT,
             description TEXT
         )
     ''')
@@ -86,136 +85,72 @@ def create_schema(conn):
     c.execute('''
         CREATE TABLE IF NOT EXISTS nuance_groups (
             id INTEGER PRIMARY KEY,
-            concept_id INTEGER,                -- Base concept
-            lang TEXT NOT NULL,                -- Which language
-            expression_id INTEGER,             -- ID in that language's table
-            nuance TEXT,                       -- 'intense', 'mild', 'formal', 'casual', etc.
-            context_hint TEXT,                 -- When to prefer this form
+            concept_id INTEGER,
+            lang TEXT NOT NULL,
+            expression_id INTEGER,
+            nuance TEXT,
+            context_hint TEXT,
             preference_weight REAL DEFAULT 0.0,
             FOREIGN KEY(concept_id) REFERENCES concepts(id)
         )
     ''')
 
-    # =========================================
-    # ENGLISH LANGUAGE TABLES (lang_en)
-    # =========================================
-
-    # English expressions - structure appropriate for English morphology
+    # Cross-language etymology links - THIS IS THE KEY TABLE
+    # When Finnish "talo" is related to Proto-Uralic "*talo" which is also
+    # related to Hungarian "ház", we can infer they share a concept
     c.execute('''
-        CREATE TABLE IF NOT EXISTS lang_en (
+        CREATE TABLE IF NOT EXISTS etymology_links (
             id INTEGER PRIMARY KEY,
-            text TEXT NOT NULL,
-            type TEXT NOT NULL,                -- 'root', 'prefix', 'suffix', 'word', 'compound'
-            concept_id INTEGER,                -- Link to universal concept
-            etymology_id TEXT,                 -- Original ID from etymology-db
-            frequency INTEGER DEFAULT 0,       -- Usage count
-
-            -- DI learning/annotation columns
-            usage_notes TEXT,
-            last_context TEXT,
-            learned_nuance TEXT,
-            preference_weight REAL DEFAULT 0.0,
-            register TEXT,                     -- 'formal', 'casual', 'technical', etc.
-            intensity REAL,                    -- Emotional/semantic intensity (0 to 1)
-
-            -- Timestamps
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            updated_at TEXT,
-
-            FOREIGN KEY(concept_id) REFERENCES concepts(id),
-            UNIQUE(text, type)
+            source_lang TEXT NOT NULL,
+            source_term TEXT NOT NULL,
+            source_id INTEGER,
+            target_lang TEXT NOT NULL,
+            target_term TEXT NOT NULL,
+            target_id INTEGER,
+            relationship TEXT,
+            position INTEGER DEFAULT 0,
+            UNIQUE(source_lang, source_term, target_lang, target_term, relationship)
         )
     ''')
 
-    # English decomposition - how English words break into morphemes
+    # Language registry - track all languages and their table names
     c.execute('''
-        CREATE TABLE IF NOT EXISTS decompositions_en (
-            word_id INTEGER,
-            morpheme_id INTEGER,
-            position INTEGER,                  -- Order in the word (0, 1, 2...)
-            morph_type TEXT,                   -- 'prefix', 'root', 'suffix'
-            FOREIGN KEY(word_id) REFERENCES lang_en(id),
-            FOREIGN KEY(morpheme_id) REFERENCES lang_en(id),
-            PRIMARY KEY(word_id, position)
+        CREATE TABLE IF NOT EXISTS languages (
+            code TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            table_name TEXT NOT NULL,
+            entry_count INTEGER DEFAULT 0,
+            has_morphology INTEGER DEFAULT 0
         )
     ''')
 
-    # English etymology relationships
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS etymology_en (
-            term_id INTEGER,
-            related_id INTEGER,
-            relationship TEXT,                 -- 'borrowed_from', 'derived_from', etc.
-            FOREIGN KEY(term_id) REFERENCES lang_en(id),
-            FOREIGN KEY(related_id) REFERENCES lang_en(id)
-        )
-    ''')
-
-    # =========================================
-    # MIGRATION/MAPPING TABLE
-    # =========================================
-
-    # Token mappings: old BPE tokens -> new concept-based tokens (for Mistral retrofit)
+    # Token mappings: old BPE tokens -> new concept-based tokens
     c.execute('''
         CREATE TABLE IF NOT EXISTS token_mappings (
-            spelling TEXT PRIMARY KEY,         -- The actual character sequence
-            old_tokens TEXT,                   -- JSON: how BPE tokenizes it
-            new_tokens TEXT,                   -- JSON: concept-based tokenization
-            concept_ids TEXT,                  -- JSON: list of concept IDs
-            lang_ids TEXT                      -- JSON: list of lang table IDs
+            spelling TEXT PRIMARY KEY,
+            old_tokens TEXT,
+            new_tokens TEXT,
+            concept_ids TEXT,
+            lang_ids TEXT
         )
     ''')
 
-    # =========================================
-    # INDEXES
-    # =========================================
-
-    # Concept indexes
+    # Core concept indexes
     c.execute('CREATE INDEX IF NOT EXISTS idx_concept_canonical ON concepts(canonical)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_concept_domain ON concepts(domain)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_concept_physics ON concepts(physics_type)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_concept_system ON concepts(system_type)')
-    c.execute('CREATE INDEX IF NOT EXISTS idx_concept_core ON concepts(core_level)')
 
-    # English indexes
-    c.execute('CREATE INDEX IF NOT EXISTS idx_en_text ON lang_en(text)')
-    c.execute('CREATE INDEX IF NOT EXISTS idx_en_type ON lang_en(type)')
-    c.execute('CREATE INDEX IF NOT EXISTS idx_en_concept ON lang_en(concept_id)')
-    c.execute('CREATE INDEX IF NOT EXISTS idx_decomp_en_word ON decompositions_en(word_id)')
+    # Etymology link indexes - crucial for concept discovery
+    c.execute('CREATE INDEX IF NOT EXISTS idx_etym_source ON etymology_links(source_lang, source_term)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_etym_target ON etymology_links(target_lang, target_term)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_etym_rel ON etymology_links(relationship)')
 
-    # Other indexes
-    c.execute('CREATE INDEX IF NOT EXISTS idx_modal_wrapper ON modals(wrapper)')
+    # Nuance indexes
     c.execute('CREATE INDEX IF NOT EXISTS idx_nuance_concept ON nuance_groups(concept_id)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_nuance_lang ON nuance_groups(lang)')
 
-    # =========================================
-    # DEFAULT DATA
-    # =========================================
-
-    # Default modal wrappers
-    default_modals = [
-        ('text_en', 'text', 'en', None, 'lang_en', 'English text output'),
-        ('text_es', 'text', 'es', None, 'lang_es', 'Spanish text output'),
-        ('text_fr', 'text', 'fr', None, 'lang_fr', 'French text output'),
-        ('text_de', 'text', 'de', None, 'lang_de', 'German text output'),
-        ('text_zh', 'text', 'zh', None, 'lang_zh', 'Chinese text output'),
-        ('code_python', 'code', None, 'python', None, 'Python code'),
-        ('code_js', 'code', None, 'javascript', None, 'JavaScript code'),
-        ('code_sql', 'code', None, 'sql', None, 'SQL queries'),
-        ('thought', 'thought', None, None, None, 'Internal reasoning'),
-        ('physics_body', 'physics', None, 'body', None, 'Body sensation'),
-        ('physics_env', 'physics', None, 'environment', None, 'Environment state'),
-        ('physics_contact', 'physics', None, 'contact', None, 'Contact events'),
-        ('speech_en', 'speech', 'en', None, 'lang_en', 'English speech'),
-        ('tool_call', 'tool', None, None, None, 'Tool invocation'),
-        ('tool_result', 'tool', None, None, None, 'Tool response'),
-    ]
-    c.executemany('''
-        INSERT OR IGNORE INTO modals (wrapper, modal_type, lang, format, target_table, description)
-        VALUES (?, ?, ?, ?, ?, ?)
-    ''', default_modals)
-
-    # Some core system concepts (examples - will be expanded by other specialists)
+    # Seed core concepts
     core_concepts = [
         (1, 'STATE_OF', 'abstract', 'modifier', 'Converts X to "state of being X"', 1, 10, None, None, None, 'modifier'),
         (2, 'QUALITY_OF', 'abstract', 'modifier', 'Converts X to quality/property', 1, 10, None, None, None, 'modifier'),
@@ -236,6 +171,82 @@ def create_schema(conn):
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', core_concepts)
 
+    # Seed some default modals
+    default_modals = [
+        ('code_python', 'code', None, 'python', None, 'Python code'),
+        ('code_js', 'code', None, 'javascript', None, 'JavaScript code'),
+        ('code_sql', 'code', None, 'sql', None, 'SQL queries'),
+        ('thought', 'thought', None, None, None, 'Internal reasoning'),
+        ('physics_body', 'physics', None, 'body', None, 'Body sensation'),
+        ('physics_env', 'physics', None, 'environment', None, 'Environment state'),
+        ('physics_contact', 'physics', None, 'contact', None, 'Contact events'),
+        ('tool_call', 'tool', None, None, None, 'Tool invocation'),
+        ('tool_result', 'tool', None, None, None, 'Tool response'),
+    ]
+    c.executemany('''
+        INSERT OR IGNORE INTO modals (wrapper, modal_type, lang, format, target_table, description)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ''', default_modals)
+
+    conn.commit()
+
+def create_lang_table(conn, lang_name, table_name):
+    """Create a language-specific table"""
+    c = conn.cursor()
+
+    # Each language gets its own expressions table
+    c.execute(f'''
+        CREATE TABLE IF NOT EXISTS "{table_name}" (
+            id INTEGER PRIMARY KEY,
+            text TEXT NOT NULL,
+            type TEXT NOT NULL,
+            concept_id INTEGER,
+            etymology_id TEXT,
+            frequency INTEGER DEFAULT 0,
+            usage_notes TEXT,
+            last_context TEXT,
+            learned_nuance TEXT,
+            preference_weight REAL DEFAULT 0.0,
+            register TEXT,
+            intensity REAL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT,
+            FOREIGN KEY(concept_id) REFERENCES concepts(id),
+            UNIQUE(text, type)
+        )
+    ''')
+
+    # Decompositions table for this language
+    c.execute(f'''
+        CREATE TABLE IF NOT EXISTS "{table_name}_decomp" (
+            word_id INTEGER,
+            morpheme_id INTEGER,
+            position INTEGER,
+            morph_type TEXT,
+            FOREIGN KEY(word_id) REFERENCES "{table_name}"(id),
+            FOREIGN KEY(morpheme_id) REFERENCES "{table_name}"(id),
+            PRIMARY KEY(word_id, position)
+        )
+    ''')
+
+    # Indexes for this language
+    c.execute(f'CREATE INDEX IF NOT EXISTS "idx_{table_name}_text" ON "{table_name}"(text)')
+    c.execute(f'CREATE INDEX IF NOT EXISTS "idx_{table_name}_type" ON "{table_name}"(type)')
+    c.execute(f'CREATE INDEX IF NOT EXISTS "idx_{table_name}_concept" ON "{table_name}"(concept_id)')
+
+    # Register in languages table and create modal
+    c.execute('''
+        INSERT OR IGNORE INTO languages (code, name, table_name)
+        VALUES (?, ?, ?)
+    ''', (lang_name.lower()[:10], lang_name, table_name))
+
+    # Create text modal for this language
+    modal_wrapper = f"text_{lang_name.lower()[:20].replace(' ', '_')}"
+    c.execute('''
+        INSERT OR IGNORE INTO modals (wrapper, modal_type, lang, target_table, description)
+        VALUES (?, 'text', ?, ?, ?)
+    ''', (modal_wrapper, lang_name, table_name, f'{lang_name} text output'))
+
     conn.commit()
 
 def classify_morpheme(text, reltype):
@@ -243,108 +254,137 @@ def classify_morpheme(text, reltype):
     text = text.strip()
 
     if text.endswith('-') or reltype == 'has_prefix':
-        return 'prefix', ID_EN_PREFIXES
-
+        return 'prefix'
     if text.startswith('-') or reltype == 'has_suffix':
-        return 'suffix', ID_EN_SUFFIXES
-
-    if reltype == 'has_root' or 'Proto-Indo-European' in str(reltype):
-        return 'root', ID_EN_ROOTS
-
+        return 'suffix'
+    if reltype == 'has_root' or 'Proto' in str(reltype):
+        return 'root'
     if reltype == 'compound_of':
-        return 'compound', ID_EN_COMPOUNDS
+        return 'compound'
+    return 'word'
 
-    return 'word', ID_EN_WORDS
-
-def extract_english_morphology(csv_path, db_path):
-    """Extract English morphological data from etymology CSV"""
+def extract_all_languages(csv_path, db_path):
+    """Extract ALL languages from etymology CSV"""
 
     conn = sqlite3.connect(db_path)
-    create_schema(conn)
+    create_core_schema(conn)
     c = conn.cursor()
 
-    seen = {}  # (text, type) -> id
-    word_decomps = {}  # word_text -> [(morph_text, position, type)]
+    # Track created tables
+    lang_tables = {}  # lang_name -> table_name
+    lang_seen = {}    # (lang, text, type) -> id
+    lang_decomps = defaultdict(list)  # (lang, word_text) -> [(morph_text, position, type)]
+    lang_counts = defaultdict(int)
 
-    print("Reading etymology data...")
+    print("Pass 1: Reading all etymology data...")
 
     with open(csv_path, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
 
         row_count = 0
-        english_count = 0
+        etym_links = []
 
         for row in reader:
             row_count += 1
-            if row_count % 100000 == 0:
-                print(f"  Processed {row_count:,} rows...")
+            if row_count % 200000 == 0:
+                print(f"  Processed {row_count:,} rows, {len(lang_tables)} languages...")
 
-            if row['lang'] != 'English':
-                continue
-
-            english_count += 1
-
+            lang = row['lang']
             term = row['term']
             reltype = row['reltype']
             related = row['related_term']
+            related_lang = row.get('related_lang', lang)  # Some entries have related_lang
             position = int(row['position']) if row['position'] else 0
             etym_id = row['term_id']
 
-            # Insert word into lang_en
-            word_key = (term, 'word')
-            if word_key not in seen:
-                word_id = stable_id(term, ID_EN_WORDS)
+            # Create table for this language if needed
+            if lang not in lang_tables:
+                table_name = sanitize_table_name(lang)
+                lang_tables[lang] = table_name
+                create_lang_table(conn, lang, table_name)
+
+            table_name = lang_tables[lang]
+
+            # Insert term into language table
+            word_key = (lang, term, 'word')
+            if word_key not in lang_seen:
+                word_id = stable_id(term, lang, 'word')
                 try:
-                    c.execute('''
-                        INSERT OR IGNORE INTO lang_en (id, text, type, etymology_id)
+                    c.execute(f'''
+                        INSERT OR IGNORE INTO "{table_name}" (id, text, type, etymology_id)
                         VALUES (?, ?, 'word', ?)
                     ''', (word_id, term, etym_id))
-                    seen[word_key] = word_id
+                    lang_seen[word_key] = word_id
+                    lang_counts[lang] += 1
                 except sqlite3.IntegrityError:
                     pass
 
-            # Handle morphological relationships
+            # Track cross-language etymology links
+            if related and related_lang:
+                etym_links.append((
+                    lang, term, lang_seen.get(word_key),
+                    related_lang, related, None,
+                    reltype, position
+                ))
+
+            # Handle morphological relationships within same language
             if reltype in ('has_affix', 'has_prefix', 'has_suffix', 'has_prefix_with_root'):
                 if related:
-                    morph_type, id_range = classify_morpheme(related, reltype)
-                    morph_key = (related, morph_type)
+                    morph_type = classify_morpheme(related, reltype)
+                    morph_key = (lang, related, morph_type)
 
-                    if morph_key not in seen:
-                        morph_id = stable_id(related + morph_type, id_range)
+                    if morph_key not in lang_seen:
+                        morph_id = stable_id(related, lang, morph_type)
                         try:
-                            c.execute('''
-                                INSERT OR IGNORE INTO lang_en (id, text, type)
+                            c.execute(f'''
+                                INSERT OR IGNORE INTO "{table_name}" (id, text, type)
                                 VALUES (?, ?, ?)
                             ''', (morph_id, related, morph_type))
-                            seen[morph_key] = morph_id
+                            lang_seen[morph_key] = morph_id
+                            lang_counts[lang] += 1
                         except sqlite3.IntegrityError:
                             pass
 
-                    if term not in word_decomps:
-                        word_decomps[term] = []
-                    word_decomps[term].append((related, position, morph_type))
+                    decomp_key = (lang, term)
+                    lang_decomps[decomp_key].append((related, position, morph_type))
 
-    print(f"Processed {row_count:,} total rows, {english_count:,} English")
-    print(f"Found {len(seen):,} unique entries in lang_en")
+    print(f"\nProcessed {row_count:,} total rows")
+    print(f"Created {len(lang_tables)} language tables")
 
-    # Insert decompositions
-    print("Building decompositions...")
+    # Insert etymology links
+    print(f"\nInserting {len(etym_links):,} etymology links...")
+    link_count = 0
+    for link in etym_links:
+        try:
+            c.execute('''
+                INSERT OR IGNORE INTO etymology_links
+                (source_lang, source_term, source_id, target_lang, target_term, target_id, relationship, position)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', link)
+            link_count += 1
+        except sqlite3.IntegrityError:
+            pass
+    print(f"Inserted {link_count:,} unique etymology links")
+
+    # Build decompositions for each language
+    print("\nBuilding decompositions...")
     decomp_count = 0
-    for word_text, morphs in word_decomps.items():
-        word_key = (word_text, 'word')
-        if word_key not in seen:
+    for (lang, word_text), morphs in lang_decomps.items():
+        word_key = (lang, word_text, 'word')
+        if word_key not in lang_seen:
             continue
 
-        word_id = seen[word_key]
+        word_id = lang_seen[word_key]
+        table_name = lang_tables[lang]
         morphs.sort(key=lambda x: x[1])
 
         for morph_text, pos, morph_type in morphs:
-            morph_key = (morph_text, morph_type)
-            if morph_key in seen:
-                morph_id = seen[morph_key]
+            morph_key = (lang, morph_text, morph_type)
+            if morph_key in lang_seen:
+                morph_id = lang_seen[morph_key]
                 try:
-                    c.execute('''
-                        INSERT OR IGNORE INTO decompositions_en
+                    c.execute(f'''
+                        INSERT OR IGNORE INTO "{table_name}_decomp"
                         (word_id, morpheme_id, position, morph_type)
                         VALUES (?, ?, ?, ?)
                     ''', (word_id, morph_id, pos, morph_type))
@@ -354,19 +394,44 @@ def extract_english_morphology(csv_path, db_path):
 
     print(f"Created {decomp_count:,} decomposition links")
 
+    # Update language entry counts
+    for lang, count in lang_counts.items():
+        c.execute('''
+            UPDATE languages SET entry_count = ? WHERE name = ?
+        ''', (count, lang))
+
     conn.commit()
 
-    # Stats
-    c.execute("SELECT type, COUNT(*) FROM lang_en GROUP BY type")
-    print("\nEnglish entries by type:")
+    # Print stats
+    print("\n=== FINAL STATISTICS ===")
+    c.execute("SELECT COUNT(*) FROM languages")
+    print(f"Languages: {c.fetchone()[0]:,}")
+
+    c.execute("SELECT SUM(entry_count) FROM languages")
+    total = c.fetchone()[0]
+    print(f"Total entries across all languages: {total:,}")
+
+    c.execute("SELECT COUNT(*) FROM etymology_links")
+    print(f"Etymology links: {c.fetchone()[0]:,}")
+
+    c.execute("SELECT COUNT(*) FROM concepts")
+    print(f"Core concepts: {c.fetchone()[0]:,}")
+
+    print("\nTop 20 languages by entry count:")
+    c.execute("SELECT name, entry_count FROM languages ORDER BY entry_count DESC LIMIT 20")
     for row in c.fetchall():
         print(f"  {row[0]}: {row[1]:,}")
 
-    c.execute("SELECT COUNT(*) FROM concepts")
-    print(f"\nCore concepts: {c.fetchone()[0]:,}")
-
-    c.execute("SELECT COUNT(*) FROM decompositions_en")
-    print(f"Decomposition links: {c.fetchone()[0]:,}")
+    # Sample cross-language links
+    print("\nSample etymology links (concept discovery candidates):")
+    c.execute('''
+        SELECT source_lang, source_term, target_lang, target_term, relationship
+        FROM etymology_links
+        WHERE source_lang != target_lang
+        LIMIT 10
+    ''')
+    for row in c.fetchall():
+        print(f"  {row[0]}:{row[1]} --[{row[4]}]--> {row[2]}:{row[3]}")
 
     conn.close()
     print(f"\nDatabase saved to: {db_path}")
@@ -380,4 +445,4 @@ if __name__ == '__main__':
         print("Run: gunzip etymology.csv.gz")
         exit(1)
 
-    extract_english_morphology(csv_path, db_path)
+    extract_all_languages(csv_path, db_path)
