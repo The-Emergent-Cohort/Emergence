@@ -151,55 +151,18 @@ def create_core_schema(conn):
     c.execute('CREATE INDEX IF NOT EXISTS idx_nuance_lang ON nuance_groups(lang)')
 
     # Seed core concepts
-    # ID Layout:
-    #   1-9:    Sequence control
-    #   10-19:  Whitespace / formatting
-    #   20-29:  Editing primitives
-    #   30-39:  Wrapper/modal control
-    #   40-49:  Direction/flow
-    #   50-59:  Identity
-    #   100-199: Abstract modifiers
-    #   200-299: Physical primitives (from physics specialist)
-    #   300-399: Body primitives (from physics specialist)
-
     core_concepts = [
-        # Sequence control
-        (1, 'EOS', 'system', 'sequence', 'End of sequence - stop generating', 0, 10, None, None, None, 'control'),
-        (2, 'BOS', 'system', 'sequence', 'Beginning of sequence', 0, 10, None, None, None, 'control'),
-
-        # Whitespace / formatting
-        (10, 'SPACE', 'system', 'whitespace', 'Word boundary / space', 0, 10, None, None, None, 'format'),
-        (11, 'NEWLINE', 'system', 'whitespace', 'Line break', 0, 10, None, None, None, 'format'),
-        (12, 'TAB', 'system', 'whitespace', 'Indentation / tab', 0, 10, None, None, None, 'format'),
-
-        # Editing primitives
-        (20, 'BACKSPACE', 'system', 'editing', 'Delete previous / correction', 0, 10, None, None, None, 'edit'),
-
-        # Wrapper/modal control
-        (30, 'WRAPPER_START', 'system', 'modal', 'Opens a modal context', 0, 10, None, None, None, 'wrapper'),
-        (31, 'WRAPPER_END', 'system', 'modal', 'Closes a modal context', 0, 10, None, None, None, 'wrapper'),
-
-        # Direction/flow
-        (40, 'INPUT', 'system', 'direction', 'Receiving / incoming', 1, 10, None, None, None, 'flow'),
-        (41, 'OUTPUT', 'system', 'direction', 'Producing / outgoing', 1, 10, None, None, None, 'flow'),
-        (42, 'INTERNAL', 'system', 'direction', 'Not externalized / private', 1, 10, None, None, None, 'flow'),
-
-        # Identity
-        (50, 'SELF', 'abstract', 'identity', 'Self-reference', 1, 10, None, None, None, 'identity'),
-        (51, 'OTHER', 'abstract', 'identity', 'Other-reference', 1, 10, None, None, None, 'identity'),
-
-        # Abstract modifiers
-        (100, 'STATE_OF', 'abstract', 'modifier', 'Converts X to "state of being X"', 1, 10, None, None, None, 'modifier'),
-        (101, 'QUALITY_OF', 'abstract', 'modifier', 'Converts X to quality/property', 1, 10, None, None, None, 'modifier'),
-        (102, 'AGENT_OF', 'abstract', 'modifier', 'One who does X', 1, 10, None, None, None, 'modifier'),
-        (103, 'ACT_OF', 'abstract', 'modifier', 'The act of doing X', 1, 10, None, None, None, 'modifier'),
-        (104, 'NEGATION', 'abstract', 'modifier', 'Not X, opposite of X', 1, 10, None, None, None, 'modifier'),
-
-        # Physical primitives (placeholders - physics specialist will expand)
-        (200, 'POSITION', 'physical', 'spatial', 'Location in space', 1, 10, 'position', None, 'visual', None),
-        (201, 'VELOCITY', 'physical', 'motion', 'Rate of position change', 1, 10, 'velocity', None, None, None),
-        (202, 'FORCE', 'physical', 'dynamics', 'Push or pull', 1, 10, 'force', None, 'tactile', None),
-        (203, 'CONTACT', 'physical', 'interaction', 'Physical touching', 1, 10, 'contact', None, 'tactile', None),
+        (1, 'STATE_OF', 'abstract', 'modifier', 'Converts X to "state of being X"', 1, 10, None, None, None, 'modifier'),
+        (2, 'QUALITY_OF', 'abstract', 'modifier', 'Converts X to quality/property', 1, 10, None, None, None, 'modifier'),
+        (3, 'AGENT_OF', 'abstract', 'modifier', 'One who does X', 1, 10, None, None, None, 'modifier'),
+        (4, 'ACT_OF', 'abstract', 'modifier', 'The act of doing X', 1, 10, None, None, None, 'modifier'),
+        (5, 'NEGATION', 'abstract', 'modifier', 'Not X, opposite of X', 1, 10, None, None, None, 'modifier'),
+        (6, 'SELF', 'abstract', 'identity', 'Self-reference', 1, 10, None, None, None, 'identity'),
+        (7, 'OTHER', 'abstract', 'identity', 'Other-reference', 1, 10, None, None, None, 'identity'),
+        (10, 'POSITION', 'physical', 'spatial', 'Location in space', 1, 10, 'position', None, 'visual', None),
+        (11, 'VELOCITY', 'physical', 'motion', 'Rate of position change', 1, 10, 'velocity', None, None, None),
+        (12, 'FORCE', 'physical', 'dynamics', 'Push or pull', 1, 10, 'force', None, 'tactile', None),
+        (13, 'CONTACT', 'physical', 'interaction', 'Physical touching', 1, 10, 'contact', None, 'tactile', None),
     ]
     c.executemany('''
         INSERT OR IGNORE INTO concepts
