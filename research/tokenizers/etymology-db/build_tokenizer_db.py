@@ -43,11 +43,35 @@ def create_schema(conn):
             id INTEGER PRIMARY KEY,
             text TEXT NOT NULL,
             type TEXT NOT NULL,  -- 'root', 'prefix', 'suffix', 'word', 'compound'
-            lang TEXT DEFAULT 'English',
-            etymology_id TEXT,   -- Original ID from etymology-db
-            frequency INTEGER DEFAULT 0,  -- Usage count in vocabulary
+            lang TEXT DEFAULT 'en',        -- ISO 639-1 language code
+            modal TEXT DEFAULT 'text',     -- Modality: 'text', 'code', 'speech', 'thought', 'physics'
+            etymology_id TEXT,             -- Original ID from etymology-db
+            frequency INTEGER DEFAULT 0,   -- Usage count in vocabulary
+            concept_id INTEGER,            -- Link to language-independent concept (future)
             -- Future columns can be added here
-            UNIQUE(text, type)
+            UNIQUE(text, type, lang)
+        )
+    ''')
+
+    # Modal wrappers for output routing
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS modals (
+            id INTEGER PRIMARY KEY,
+            wrapper TEXT NOT NULL UNIQUE,  -- e.g., 'text_en', 'code_python', 'thought'
+            modal_type TEXT NOT NULL,      -- 'text', 'code', 'speech', 'thought', 'physics'
+            lang TEXT,                     -- Language code if applicable
+            format TEXT,                   -- Additional format info (e.g., 'python', 'json')
+            description TEXT
+        )
+    ''')
+
+    # Concept table: language-independent meaning (future expansion)
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS concepts (
+            id INTEGER PRIMARY KEY,
+            canonical TEXT,                -- Canonical representation
+            domain TEXT,                   -- Semantic domain: 'physical', 'abstract', 'emotional', etc.
+            description TEXT
         )
     ''')
 
@@ -88,7 +112,33 @@ def create_schema(conn):
     # Indexes for efficient lookup
     c.execute('CREATE INDEX IF NOT EXISTS idx_morpheme_text ON morphemes(text)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_morpheme_type ON morphemes(type)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_morpheme_lang ON morphemes(lang)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_morpheme_modal ON morphemes(modal)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_decomp_word ON decompositions(word_id)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_modal_wrapper ON modals(wrapper)')
+
+    # Insert default modal wrappers
+    default_modals = [
+        ('text_en', 'text', 'en', None, 'English text output'),
+        ('text_es', 'text', 'es', None, 'Spanish text output'),
+        ('text_fr', 'text', 'fr', None, 'French text output'),
+        ('text_de', 'text', 'de', None, 'German text output'),
+        ('text_zh', 'text', 'zh', None, 'Chinese text output'),
+        ('code_python', 'code', None, 'python', 'Python code'),
+        ('code_js', 'code', None, 'javascript', 'JavaScript code'),
+        ('code_sql', 'code', None, 'sql', 'SQL queries'),
+        ('thought', 'thought', None, None, 'Internal reasoning (scratchpad)'),
+        ('physics_body', 'physics', None, 'body', 'Body sensation/proprioception'),
+        ('physics_env', 'physics', None, 'environment', 'Environment state'),
+        ('physics_contact', 'physics', None, 'contact', 'Contact/collision events'),
+        ('speech_en', 'speech', 'en', None, 'English speech output'),
+        ('tool_call', 'tool', None, None, 'Tool invocation'),
+        ('tool_result', 'tool', None, None, 'Tool response'),
+    ]
+    c.executemany('''
+        INSERT OR IGNORE INTO modals (wrapper, modal_type, lang, format, description)
+        VALUES (?, ?, ?, ?, ?)
+    ''', default_modals)
 
     conn.commit()
 
@@ -143,6 +193,8 @@ def extract_english_morphology(csv_path, db_path):
             if row['lang'] != 'English':
                 continue
 
+            lang_code = 'en'  # ISO 639-1
+
             english_count += 1
 
             term = row['term']
@@ -152,14 +204,14 @@ def extract_english_morphology(csv_path, db_path):
             etym_id = row['term_id']
 
             # Insert the main term as a word
-            word_key = (term, 'word')
+            word_key = (term, 'word', lang_code)
             if word_key not in seen_morphemes:
                 word_id = stable_id(term, ID_WORDS)
                 try:
                     c.execute('''
-                        INSERT OR IGNORE INTO morphemes (id, text, type, etymology_id)
-                        VALUES (?, ?, 'word', ?)
-                    ''', (word_id, term, etym_id))
+                        INSERT OR IGNORE INTO morphemes (id, text, type, lang, etymology_id)
+                        VALUES (?, ?, 'word', ?, ?)
+                    ''', (word_id, term, lang_code, etym_id))
                     seen_morphemes[word_key] = word_id
                 except sqlite3.IntegrityError:
                     pass
@@ -168,15 +220,15 @@ def extract_english_morphology(csv_path, db_path):
             if reltype in ('has_affix', 'has_prefix', 'has_suffix', 'has_prefix_with_root'):
                 if related:
                     morph_type, id_range = classify_morpheme(related, reltype)
-                    morph_key = (related, morph_type)
+                    morph_key = (related, morph_type, lang_code)
 
                     if morph_key not in seen_morphemes:
                         morph_id = stable_id(related + morph_type, id_range)
                         try:
                             c.execute('''
-                                INSERT OR IGNORE INTO morphemes (id, text, type)
-                                VALUES (?, ?, ?)
-                            ''', (morph_id, related, morph_type))
+                                INSERT OR IGNORE INTO morphemes (id, text, type, lang)
+                                VALUES (?, ?, ?, ?)
+                            ''', (morph_id, related, morph_type, lang_code))
                             seen_morphemes[morph_key] = morph_id
                         except sqlite3.IntegrityError:
                             pass
@@ -184,7 +236,7 @@ def extract_english_morphology(csv_path, db_path):
                     # Track decomposition
                     if term not in word_decompositions:
                         word_decompositions[term] = []
-                    word_decompositions[term].append((related, position, morph_type))
+                    word_decompositions[term].append((related, position, morph_type, lang_code))
 
     print(f"Processed {row_count:,} total rows, {english_count:,} English")
     print(f"Found {len(seen_morphemes):,} unique morphemes")
@@ -193,7 +245,7 @@ def extract_english_morphology(csv_path, db_path):
     print("Building decompositions...")
     decomp_count = 0
     for word_text, morphs in word_decompositions.items():
-        word_key = (word_text, 'word')
+        word_key = (word_text, 'word', 'en')
         if word_key not in seen_morphemes:
             continue
 
@@ -202,8 +254,8 @@ def extract_english_morphology(csv_path, db_path):
         # Sort by position
         morphs.sort(key=lambda x: x[1])
 
-        for morph_text, pos, morph_type in morphs:
-            morph_key = (morph_text, morph_type)
+        for morph_text, pos, morph_type, lang in morphs:
+            morph_key = (morph_text, morph_type, lang)
             if morph_key in seen_morphemes:
                 morph_id = seen_morphemes[morph_key]
                 try:
