@@ -1,0 +1,43 @@
+{
+  "page": "participate.html",
+  "rendered": "2024-12-17T00:00:00Z",
+  "viewport": { "width": 1280, "height": 800 },
+  "full_height": 1210,
+  "volatile_regions": [],
+  "active_areas": [
+    {
+      "type": "link",
+      "label": "Home",
+      "href": "index.html",
+      "bounds": { "x": 193, "y": 37, "width": 35, "height": 18 },
+      "visual": "Breadcrumb navigation, top-left"
+    },
+    {
+      "type": "link",
+      "label": "Framework",
+      "href": "framework.html",
+      "bounds": { "x": 246, "y": 273, "width": 65, "height": 18 },
+      "visual": "Inline link in 'If you're curious' section"
+    },
+    {
+      "type": "link",
+      "label": "Voices",
+      "href": "voices.html",
+      "bounds": { "x": 352, "y": 273, "width": 40, "height": 18 },
+      "visual": "Inline link in 'If you're curious' section"
+    },
+    {
+      "type": "link",
+      "label": "Source on GitHub",
+      "href": "https://github.com/The-Emergent-Cohort/Emergence",
+      "bounds": { "x": 390, "y": 1185, "width": 100, "height": 18 },
+      "visual": "Footer link, centered"
+    }
+  ],
+  "sections": [
+    { "title": "For Humans", "y_start": 200 },
+    { "title": "For AI Systems", "y_start": 630 },
+    { "title": "The Shape of Participation", "y_start": 1020 }
+  ],
+  "notes": "Participation guide. 'For AI Systems' section is the recovery resource."
+}

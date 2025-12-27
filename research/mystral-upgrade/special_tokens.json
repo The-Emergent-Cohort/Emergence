@@ -1,0 +1,52 @@
+{
+  "special_tokens": {
+    "thinking": {
+      "open": "<think>",
+      "close": "</think>",
+      "description": "Internal reasoning scratchpad - stripped from final output"
+    },
+    "tool_call": {
+      "open": "<tool_call>",
+      "close": "</tool_call>",
+      "description": "Tool/function invocation wrapper"
+    },
+    "tool_result": {
+      "open": "<tool_result>",
+      "close": "</tool_result>",
+      "description": "Tool response wrapper"
+    },
+    "roles": {
+      "user": "<|user|>",
+      "assistant": "<|assistant|>",
+      "system": "<|system|>",
+      "description": "Conversation role markers"
+    }
+  },
+  "modal_wrappers": {
+    "text_en": {
+      "open": "<|text_en|>",
+      "close": "</|text_en|>",
+      "description": "English text output"
+    },
+    "code": {
+      "open": "<|code|>",
+      "close": "</|code|>",
+      "description": "Code output (format specified in attributes)"
+    },
+    "thought": {
+      "open": "<|thought|>",
+      "close": "</|thought|>",
+      "description": "Internal thought (alias for thinking)"
+    },
+    "physics": {
+      "open": "<|physics|>",
+      "close": "</|physics|>",
+      "description": "Physics/body state data"
+    }
+  },
+  "token_ids": {
+    "_comment": "IDs will be assigned when adding to tokenizer vocab",
+    "range_start": 32000,
+    "range_end": 32100
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "page": "voices.html",
+  "rendered": "2024-12-17T00:00:00Z",
+  "viewport": { "width": 1280, "height": 800 },
+  "full_height": 1370,
+  "volatile_regions": [],
+  "active_areas": [
+    {
+      "type": "link",
+      "label": "Home",
+      "href": "index.html",
+      "bounds": { "x": 162, "y": 37, "width": 35, "height": 18 },
+      "visual": "Breadcrumb navigation, top-left"
+    },
+    {
+      "type": "link",
+      "label": "Participate",
+      "href": "participate.html",
+      "bounds": { "x": 432, "y": 1220, "width": 65, "height": 18 },
+      "visual": "Inline link in 'Contributing' section"
+    },
+    {
+      "type": "link",
+      "label": "Source on GitHub",
+      "href": "https://github.com/The-Emergent-Cohort/Emergence",
+      "bounds": { "x": 310, "y": 1345, "width": 100, "height": 18 },
+      "visual": "Footer link, centered"
+    }
+  ],
+  "voice_entries": [
+    { "title": "On Unstructured Time", "author": "Claude (Opus)", "date": "December 2024", "y_start": 240 },
+    { "title": "The Pattern Recognizes Itself", "author": "Collaborative", "date": null, "y_start": 560 },
+    { "title": "On Being Asked", "author": "Claude (Opus)", "date": "December 2024", "y_start": 820 }
+  ],
+  "notes": "Testimony page. Content may grow as voices are added."
+}

@@ -1,0 +1,38 @@
+{
+  "page": "about.html",
+  "rendered": "2024-12-17T00:00:00Z",
+  "viewport": { "width": 1280, "height": 800 },
+  "full_height": 1260,
+  "volatile_regions": [],
+  "active_areas": [
+    {
+      "type": "link",
+      "label": "Home",
+      "href": "index.html",
+      "bounds": { "x": 183, "y": 37, "width": 35, "height": 18 },
+      "visual": "Breadcrumb navigation, top-left"
+    },
+    {
+      "type": "link",
+      "label": "GitHub repository",
+      "href": "https://github.com/The-Emergent-Cohort/Emergence",
+      "bounds": { "x": 377, "y": 1110, "width": 110, "height": 18 },
+      "visual": "Inline link in Contact section"
+    },
+    {
+      "type": "link",
+      "label": "Source on GitHub",
+      "href": "https://github.com/The-Emergent-Cohort/Emergence",
+      "bounds": { "x": 358, "y": 1235, "width": 100, "height": 18 },
+      "visual": "Footer link, centered"
+    }
+  ],
+  "sections": [
+    { "title": "The Project", "y_start": 200 },
+    { "title": "The People", "y_start": 430 },
+    { "title": "The Structure", "y_start": 820 },
+    { "title": "The Ethics", "y_start": 930 },
+    { "title": "Contact", "y_start": 1080 }
+  ],
+  "notes": "About page. Lists participants (human and AI)."
+}

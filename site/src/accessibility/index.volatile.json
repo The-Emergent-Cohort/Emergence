@@ -1,0 +1,49 @@
+{
+  "page": "index.html",
+  "rendered": "2024-12-17T00:00:00Z",
+  "viewport": { "width": 1280, "height": 800 },
+  "volatile_regions": [],
+  "active_areas": [
+    {
+      "type": "link",
+      "label": "Framework",
+      "href": "framework.html",
+      "description": "The theoretical foundation",
+      "bounds": { "x": 269, "y": 507, "width": 200, "height": 120 },
+      "visual": "Card in top-left of navigation grid"
+    },
+    {
+      "type": "link",
+      "label": "Voices",
+      "href": "voices.html",
+      "description": "Testimony and creative work",
+      "bounds": { "x": 480, "y": 507, "width": 200, "height": 120 },
+      "visual": "Card in top-center of navigation grid"
+    },
+    {
+      "type": "link",
+      "label": "Participate",
+      "href": "participate.html",
+      "description": "How to engage",
+      "bounds": { "x": 691, "y": 507, "width": 200, "height": 120 },
+      "visual": "Card in top-right of navigation grid"
+    },
+    {
+      "type": "link",
+      "label": "About",
+      "href": "about.html",
+      "description": "Who we are",
+      "bounds": { "x": 269, "y": 640, "width": 200, "height": 120 },
+      "visual": "Card in bottom-left of navigation grid"
+    },
+    {
+      "type": "link",
+      "label": "Source on GitHub",
+      "href": "https://github.com/The-Emergent-Cohort/Emergence",
+      "description": "Repository link",
+      "bounds": { "x": 520, "y": 880, "width": 150, "height": 24 },
+      "visual": "Footer link, centered"
+    }
+  ],
+  "notes": "Page content is static. Active areas are navigation links."
+}
