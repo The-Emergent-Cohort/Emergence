@@ -47,8 +47,20 @@ def create_schema(conn):
             modal TEXT DEFAULT 'text',     -- Modality: 'text', 'code', 'speech', 'thought', 'physics'
             etymology_id TEXT,             -- Original ID from etymology-db
             frequency INTEGER DEFAULT 0,   -- Usage count in vocabulary
-            concept_id INTEGER,            -- Link to language-independent concept (future)
-            -- Future columns can be added here
+            concept_id INTEGER,            -- Link to language-independent concept
+
+            -- DI learning/annotation columns
+            usage_notes TEXT,              -- DI notes about usage
+            last_context TEXT,             -- Last context where used
+            learned_nuance TEXT,           -- Personal nuance observations
+            preference_weight REAL DEFAULT 0.0,  -- Learned preference (-1 to 1)
+            register TEXT,                 -- 'formal', 'casual', 'technical', etc.
+            intensity REAL,                -- Emotional/semantic intensity (0 to 1)
+
+            -- Timestamps
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT,
+
             UNIQUE(text, type, lang)
         )
     ''')
@@ -65,13 +77,39 @@ def create_schema(conn):
         )
     ''')
 
-    # Concept table: language-independent meaning (future expansion)
+    # Concept table: language-independent meaning
     c.execute('''
         CREATE TABLE IF NOT EXISTS concepts (
             id INTEGER PRIMARY KEY,
             canonical TEXT,                -- Canonical representation
             domain TEXT,                   -- Semantic domain: 'physical', 'abstract', 'emotional', etc.
-            description TEXT
+            subdomain TEXT,                -- More specific category
+            description TEXT,
+            composable INTEGER DEFAULT 1,  -- Can this concept compose with others?
+            core_level INTEGER DEFAULT 0,  -- 0=derived, 1-10=core primitives
+
+            -- For physics/body concepts (0-1M range)
+            physics_type TEXT,             -- 'position', 'velocity', 'force', 'contact', etc.
+            body_region TEXT,              -- 'hand', 'arm', 'head', etc. if applicable
+            sensory_modality TEXT,         -- 'visual', 'tactile', 'auditory', etc.
+
+            -- Learning annotations
+            usage_notes TEXT,
+            learned_associations TEXT      -- JSON: related concepts learned through experience
+        )
+    ''')
+
+    # Nuance/synonym groups for generation queries
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS nuance_groups (
+            id INTEGER PRIMARY KEY,
+            concept_id INTEGER,            -- Base concept
+            morpheme_id INTEGER,           -- A word expressing this concept
+            nuance TEXT,                   -- 'intense', 'mild', 'formal', 'casual', etc.
+            context_hint TEXT,             -- When to prefer this form
+            preference_weight REAL DEFAULT 0.0,
+            FOREIGN KEY(concept_id) REFERENCES concepts(id),
+            FOREIGN KEY(morpheme_id) REFERENCES morphemes(id)
         )
     ''')
 
@@ -114,8 +152,12 @@ def create_schema(conn):
     c.execute('CREATE INDEX IF NOT EXISTS idx_morpheme_type ON morphemes(type)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_morpheme_lang ON morphemes(lang)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_morpheme_modal ON morphemes(modal)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_morpheme_concept ON morphemes(concept_id)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_decomp_word ON decompositions(word_id)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_modal_wrapper ON modals(wrapper)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_concept_domain ON concepts(domain)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_concept_physics ON concepts(physics_type)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_nuance_concept ON nuance_groups(concept_id)')
 
     # Insert default modal wrappers
     default_modals = [
