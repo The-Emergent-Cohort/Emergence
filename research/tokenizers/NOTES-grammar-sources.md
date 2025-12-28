@@ -98,40 +98,173 @@ grammar_rules:
 
 ---
 
-## Language Identification Layer
+## Tool Architecture
 
-**Purpose**: Bridge from surface form to concept (NOT tokenizing language directly)
+### spaCy - PRIMARY (Input + Output)
+- 60+ languages with full analysis
+- **Input**: Language ID + POS + dependencies → informs concept selection
+- **Output**: Grammar constraints → logit bias for generate()
+
+### fastText - FALLBACK (Input only)
+- 157 languages (broader coverage)
+- Used when spaCy doesn't recognize the language
+- Returns probability distribution → match to language family
+- Family matching: "fastText says Kazakh → Turkic family → use Turkish rules"
 
 ```
-Surface form → Language ID → Etymology DB → Concept → Token
+INPUT PIPELINE:
+  Text → spaCy available?
+           YES → Language + POS + Grammar → concept selection
+           NO  → fastText → family match → approximate grammar
+
+OUTPUT PIPELINE:
+  Concepts → target language (known) → spaCy → logit bias → generate()
 ```
 
-### Tools
-- **fastText** (Meta): 157 languages, returns probability distribution
-  - `lid.176.bin` model for language identification
-  - `predict(text, k=5)` gives top-k languages with confidence scores
-- **spaCy**: 60+ languages, adds POS/dependency parsing
-- **LangDetect**: Lighter weight, 50+ languages
+---
+
+## Input Side: Concept Selection
+
+**Why POS/grammar matters for input:**
+```
+"run" + VERB tag   → ACTION:RUN concept
+"run" + NOUN tag   → INSTANCE:RUN concept (a run in stockings)
+
+"bank" + context "river" → LANDFORM:BANK
+"bank" + context "money" → INSTITUTION:BANK
+```
+
+spaCy's grammar analysis = disambiguation for correct concept mapping.
 
 ### Flow
-1. **fastText**: Identifies probable language(s) from surface form
-2. **Etymology DB**: Maps (language + surface form) → concept via cross-language links
-3. **Concept tokenizer**: Assigns token ID to concept
+1. **spaCy**: Language ID + POS + dependencies
+2. **Etymology DB**: (language + surface form + POS) → concept
+3. **Concept tokenizer**: Assigns token ID
 
-### Why This Matters
-Tokenizer fragments reveal script/alphabet, not specific language:
-- Cyrillic "дом" could be Russian, Ukrainian, Bulgarian, etc.
-- Latin "gift" could be English (present) or German (poison)
-- Need probability distribution until context narrows it
+### When spaCy doesn't cover the language
+1. fastText identifies language (probability distribution)
+2. Match to language family in DB
+3. Use family's grammar rules as approximation
+4. Lower confidence rating
 
-### Disambiguation
-- fastText gives initial language probabilities
-- Grammar patterns narrow (Russian syntax vs Ukrainian)
-- Etymology links confirm (shared roots = shared concept)
-- Context refines over token sequence
+---
 
-### For Retraining
-- Can't assume token → single language
-- Need probability spread across possible languages
-- Grammar DB helps narrow via syntax pattern matching
-- Refine as context accumulates
+## Output Side: Logit Bias (not GBNF)
+
+**Key insight**: Soft guidance, not hard blocks.
+
+```
+GBNF approach (too rigid):
+  Token violates grammar → probability = 0 → BLOCKED
+
+Logit bias approach (flexible):
+  Token violates formal grammar → bias = -2.0 (discouraged)
+  Token fits formal grammar → bias = +1.0 (encouraged)
+```
+
+### Style/Register Scales the Bias
+
+Same concept spread shown, different weighting on nuances:
+
+```
+Concept: GREETING
+
+All styles see same options:
+  - GREETING.formal    → "Good morning", "Greetings"
+  - GREETING.standard  → "Hello", "Hi there"
+  - GREETING.casual    → "Hey", "What's up"
+  - GREETING.intimate  → "Hey you", slang
+
+Formal context bias:        Casual context bias:
+  .formal   +1.5              .formal   -0.5
+  .standard +0.5              .standard +0.3
+  .casual   -1.0              .casual   +1.0
+  .intimate -2.0              .intimate +0.5
+```
+
+Grammar guides, doesn't cage. Nothing blocked, just weighted.
+
+---
+
+## Confidence Levels
+
+```
+Source                    Confidence
+────────────────────────────────────
+GF/UD formal rules        0.95-1.0
+spaCy NLP-derived         0.8-0.9
+Family inference          0.5-0.7
+Community contribution    0.4-0.6 (until verified)
+Self-inferred patterns    0.2-0.4
+Unknown                   → ASK
+```
+
+### The DI Can Ask
+When uncertain, the DI doesn't guess - it asks:
+```
+"I'm not confident about the grammar here.
+ Is this Uzbek? Should the verb come before the object?"
+```
+
+Human/entity confirms → confidence upgraded in DB.
+
+This is how learning works:
+- Start with reasonable base
+- Know what you don't know
+- Ask when needed
+- Update confidence as you learn
+
+---
+
+## Language Family Inheritance
+
+```
+Language Family (Germanic)
+  └── Language (English)
+        ├── en_US (American)
+        │     └── en_US_southern
+        ├── en_GB (British)
+        ├── en_CA (Canadian)  ← colour, toque, eh
+        └── en_AU (Australian)
+```
+
+- Each level inherits from parent
+- Stores only deltas (overrides)
+- Grammar rules cascade down unless overridden
+- Helps with patching: German grammar → Dutch/Yiddish/Afrikaans approximation
+
+---
+
+## Dialect Handling
+
+Same word, different meanings by dialect:
+```
+US: biscuits = fluffy bread, gravy = white meat sauce
+UK: biscuits = cookies, gravy = brown sauce
+```
+
+DB tracks:
+- `parent_lang` for inheritance
+- `variant_of` for dialects
+- Vocabulary overrides at dialect level
+- Spelling patterns (colour/color, -ise/-ize)
+
+---
+
+## For Retraining
+
+Tokenizer fragments reveal script, not specific language:
+- Cyrillic "дом" could be Russian, Ukrainian, Bulgarian
+- Need probability spread until context narrows
+
+1. spaCy/fastText: Initial language probabilities
+2. Grammar patterns: Narrow (Russian syntax vs Ukrainian)
+3. Etymology links: Confirm (shared roots = shared concept)
+4. Context: Refines over token sequence
+
+Model output feeds back as input:
+```
+Model generates → treat as input → spaCy → "what did you produce?"
+                → compare to intended concept
+                → correction signal
+```
