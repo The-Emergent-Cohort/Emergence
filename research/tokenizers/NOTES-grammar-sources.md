@@ -276,3 +276,124 @@ Model generates → treat as input → spaCy → "what did you produce?"
                 → compare to intended concept
                 → correction signal
 ```
+
+---
+
+## Output Routing Architecture
+
+### Key Discovery: It's Just Linux
+
+The thinking token demonstration proved it - when the token text hits the terminal,
+if the environment recognizes the pattern, it acts. No special routing layer needed.
+
+```
+DI outputs text (concept tokens)
+       ↓
+Terminal/shell pattern-matches
+       ↓
+If pattern recognized → action executes
+       ↓
+Just like any Linux command
+```
+
+### How Other Models Do It
+
+**DeepSeek-R1** - chat_template in tokenizer_config.json:
+- `<think>` auto-injected at generation start
+- `</think>` content stripped from displayed output via template
+- Tool calls: `<｜tool▁calls▁begin｜>`, `<｜tool▁call▁end｜>`, etc.
+
+**Qwen** - added_tokens_decoder + chat_template:
+- Special tokens defined: `<tool_call>` (ID 151657), `</tool_call>` (ID 151658)
+- Chat template (Jinja2) defines when/how tokens get inserted
+
+**Key insight**: The `chat_template` field IS the functional specification.
+Jinja2 template defines token insertion and processing logic.
+
+### Ollama Architecture
+
+```
+[External HTTP client (browser/CLI)]
+       ↓ HTTP
+[Ollama HTTP server]
+       ↓
+[Server-side handler / "internal client"]  ← Interprets request
+       ↓
+[LLM inference]
+       ↓
+[Output stream]
+```
+
+- Ollama doesn't do fd routing - streams JSON via HTTP API
+- "Internal client" is server-side, part of Ollama's process
+- Tool execution (search, code) = internal addons, not external clients
+- Addons via OpenAPI Tool Servers (FastAPI apps)
+
+### OpenAPI Tool Servers (open-webui/openapi-servers)
+
+Pattern for addons:
+```python
+@app.post("/endpoint_name")
+async def endpoint_function(data: RequestType):
+    path = normalize_path(data.path)  # Validate
+    result = operation(path)           # Execute
+    return ResponseModel(...)          # Return
+```
+
+Examples exist: filesystem, git, SQL - all follow same pattern.
+Could create routing addon if needed, but may not be necessary.
+
+### The Simpler Truth
+
+Output routing = lookup table + permissions
+
+```
+Intent (concept token text) → Lookup table → Write point (fd/path)
+```
+
+- DI expresses intent as text
+- Lookup table maps intent to fd/path
+- Unix permissions gate what's allowed
+- Write happens (or doesn't)
+
+The lookup table is just:
+```
+curious_word    → internal lookup pipe
+user_output     → stdout
+file_save       → /allowed/path
+physics_data    → physics pipe fd
+```
+
+Watch script doesn't watch token IDs - watches text strings.
+Text strings ARE the tokens. Same thing.
+
+DB can generate correct API format directly from concept tokens.
+Pure from source - no translation layer.
+
+### Still To Investigate
+
+1. **Ollama's internal client** - what exactly does it do?
+2. **Modelfile adjustments** - can modify via webui portal
+3. **Permissions model** - what account does DI process run under?
+4. **Existing patterns** - what's already in place we can use?
+
+### Architecture Summary
+
+```
+Concept tokenizer (DB)
+       ↓
+DI generates concept tokens (text)
+       ↓
+Text output to terminal/environment
+       ↓
+Environment pattern-matches (already does this)
+       ↓
+Lookup table: intent → write point
+       ↓
+Unix permissions: allowed or not
+       ↓
+Write to fd
+```
+
+No special routing layer. It's all just Linux.
+Chat template stays minimal. Config in external file/DB.
