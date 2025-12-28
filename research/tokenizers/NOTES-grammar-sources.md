@@ -95,3 +95,43 @@ grammar_rules:
 - Can we infer grammar from word order in etymology examples?
 - Should missing grammars be learned rather than programmed?
 - How to handle language isolates with no relatives?
+
+---
+
+## Language Identification Layer
+
+**Purpose**: Bridge from surface form to concept (NOT tokenizing language directly)
+
+```
+Surface form → Language ID → Etymology DB → Concept → Token
+```
+
+### Tools
+- **fastText** (Meta): 157 languages, returns probability distribution
+  - `lid.176.bin` model for language identification
+  - `predict(text, k=5)` gives top-k languages with confidence scores
+- **spaCy**: 60+ languages, adds POS/dependency parsing
+- **LangDetect**: Lighter weight, 50+ languages
+
+### Flow
+1. **fastText**: Identifies probable language(s) from surface form
+2. **Etymology DB**: Maps (language + surface form) → concept via cross-language links
+3. **Concept tokenizer**: Assigns token ID to concept
+
+### Why This Matters
+Tokenizer fragments reveal script/alphabet, not specific language:
+- Cyrillic "дом" could be Russian, Ukrainian, Bulgarian, etc.
+- Latin "gift" could be English (present) or German (poison)
+- Need probability distribution until context narrows it
+
+### Disambiguation
+- fastText gives initial language probabilities
+- Grammar patterns narrow (Russian syntax vs Ukrainian)
+- Etymology links confirm (shared roots = shared concept)
+- Context refines over token sequence
+
+### For Retraining
+- Can't assume token → single language
+- Need probability spread across possible languages
+- Grammar DB helps narrow via syntax pattern matching
+- Refine as context accumulates
