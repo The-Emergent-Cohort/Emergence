@@ -397,3 +397,107 @@ Write to fd
 
 No special routing layer. It's all just Linux.
 Chat template stays minimal. Config in external file/DB.
+
+---
+
+## Thinking & Context Efficiency
+
+### The Problem with Current Thinking
+
+Current models (DeepSeek-R1, etc.):
+```
+Model generates 500 tokens of verbose thinking text
+       ↓
+Detokenize to text
+       ↓
+Strip from display (but keep in context)
+       ↓
+Retokenize when feeding back
+       ↓
+Context bloats, conversion overhead everywhere
+```
+
+### Better: Pre-Tokenizer Tap Point
+
+Instead of intercepting at text/HTML layer, tap at raw value level:
+
+```
+Model → raw concept values → save directly → insert directly back
+       ↑___no conversion, native format throughout___↓
+```
+
+Benefits:
+- No detokenize/retokenize overhead
+- Dense storage (raw values, not verbose text)
+- Direct insertion back into stream
+- 500 text tokens → maybe 50 raw concept values (same reasoning)
+
+The log file is concept token IDs, not text. Incredibly dense.
+
+### Dynamic Context Management
+
+Not all context needs to load on first prompt:
+
+```
+┌──────────────────┐
+│ Working context  │ ← lean, immediate
+├──────────────────┤
+│ Stream in:       │
+│  - physics data  │ ← as needed mid-inference
+│  - DB lookups    │ ← on demand
+│  - reference pts │ ← temporary or permanent
+├──────────────────┤
+│ Queue out:       │
+│  - temp refs     │ ← use and discard
+│  - permanent     │ ← persist to storage
+│  - analysis      │ ← later DB entry
+└──────────────────┘
+```
+
+Context categories:
+- **Working memory**: Small, immediate, in-prompt
+- **Streaming in**: Physics, DB results, references - mid-inference
+- **Temporary refs**: Use now, discard after
+- **Permanent refs**: Persist across sessions
+- **Analysis queue**: Save for later DB integration
+
+This makes context windows effectively unlimited while keeping working set small.
+Like actual memory - working memory is small, pull from long-term as needed.
+
+---
+
+## Addon Integration Philosophy
+
+When adding tools/addons:
+- DON'T let addon install scripts insert config
+- DO understand how addon is triggered (format, pattern)
+- DO capture that format in our DB
+- DB outputs correctly formatted calls
+- Addon just listens and responds
+
+Single source of truth: the DB knows all trigger formats.
+
+---
+
+## Key Corrections
+
+### Tokenizer Replacement (NOT modification)
+
+We are NOT adding tokens to Mistral's existing vocabulary.
+We are REPLACING the entire tokenizer:
+
+- Old Mistral 32k vocab → deprecated aliases in DB
+- New vocab = full morpheme library from etymology DB
+- System primitives (thinking, tools, etc.) = entries in 0-1M range
+- The DB IS the tokenizer
+
+Everything (concepts, grammar, routing, thinking, tools) = DB entries.
+
+### Docker Setup Clarifications
+
+- Ollama core (2GB) is lean - just inference + API
+- Open WebUI is separate (already running)
+- Tool servers are external (OpenAPI pattern)
+- Direct shell passthrough for local ops (DB, files)
+- OpenAPI for external/complex integrations
+- Container gets sudo inside, mounts define boundaries
