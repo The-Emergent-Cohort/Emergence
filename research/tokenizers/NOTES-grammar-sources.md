@@ -111,11 +111,19 @@ grammar_rules:
 - Returns probability distribution → match to language family
 - Family matching: "fastText says Kazakh → Turkic family → use Turkish rules"
 
+### DeepL API - LAST RESORT (Input only)
+- Free tier: 500k characters/month (multiple accounts possible)
+- Used ONLY when spaCy + fastText both fail with confidence
+- Verified external source = higher confidence than self-inference
+- For words/phrases that absolutely cannot be identified locally
+
 ```
 INPUT PIPELINE:
   Text → spaCy available?
            YES → Language + POS + Grammar → concept selection
-           NO  → fastText → family match → approximate grammar
+           NO  → fastText confident?
+                   YES → family match → approximate grammar
+                   NO  → DeepL API → verified identification
 
 OUTPUT PIPELINE:
   Concepts → target language (known) → spaCy → logit bias → generate()
