@@ -501,3 +501,111 @@ Everything (concepts, grammar, routing, thinking, tools) = DB entries.
 - Direct shell passthrough for local ops (DB, files)
 - OpenAPI for external/complex integrations
 - Container gets sudo inside, mounts define boundaries
+
+---
+
+## Ministral 3B Tokenizer (V3-Tekken)
+
+### Key Differences from Mistral 7B
+
+| Feature | Mistral 7B | Ministral 3B |
+|---------|-----------|--------------|
+| Tokenizer | LlamaTokenizer (sentencepiece) | V3-Tekken (tiktoken) |
+| Vocab size | 32,000 | 131,072 |
+| Config file | tokenizer.json | tekken.json |
+| Whitespace | Prepends space | No prepended space |
+
+### V3-Tekken Control Tokens
+
+```
+BEGIN_AVAILABLE_TOOLS / END_AVAILABLE_TOOLS  → define tools
+TOOL_CALLS                                    → model wants to call
+BEGIN_TOOL_RESULTS / END_TOOL_RESULTS        → results back
+```
+
+### Tool Call Format
+
+```json
+{"name": "tool_name", "arguments": {...}, "id": "unique_id"}
+```
+
+### Chat Template
+
+```
+<s>[INST]User message[/INST]Assistant response</s>[INST]Next message[/INST]
+```
+
+### Implications for DB
+
+- 131k tokens to deprecate (more than Mistral 7B's 32k)
+- BUT: multilingual tokens = more consolidation
+- Many surface forms → same concept across languages
+- More work upfront, better coverage across languages
+
+---
+
+## Tokenizer as Orchestration Layer
+
+### Bidirectional Control
+
+The tokenizer (DB) is the central control point for BOTH input and output.
+
+**Input side:**
+```
+Text/data in
+     ↓
+Tokenizer (DB)
+     ├── Tokenize to concept tokens
+     ├── Log if needed
+     └── Pass to model
+```
+
+**Output side:**
+```
+Raw tokens from model
+     ↓
+Tokenizer (DB)
+     ├── Log raw tokens (thinking, memory, etc.)
+     ├── Route by modality (DB queries, file ops, etc.)
+     ├── Compose output format
+     ├── PRE-API: handle directly (shell, DB, files)
+     └── POST-API: pass on (user display via Ollama/WebUI)
+```
+
+### Pre-API vs Post-API
+
+- **Pre-API**: Tokenizer handles directly
+  - Logging raw tokens
+  - DB queries
+  - File operations
+  - Shell commands
+  - Internal routing
+
+- **Post-API**: Pass to Ollama/Open WebUI
+  - User display
+  - Streaming
+  - HTML rendering
+  - Tool result formatting
+
+### Tokenizer Escape
+
+For raw value injection (bypassing tokenization):
+```
+ESCAPE_TOKEN + raw_value → passes through unchanged
+```
+
+Enables:
+- Injecting raw token IDs directly
+- Bypassing text conversion
+- Dense context restoration from logs
+
+### Why This Works
+
+The tokenizer IS the hook point. No need to modify llama.cpp internals.
+All control flows through one layer:
+- Input tokenization
+- Output logging
+- Routing decisions
+- Format composition
+
+The DB knows everything. The tokenizer executes.
