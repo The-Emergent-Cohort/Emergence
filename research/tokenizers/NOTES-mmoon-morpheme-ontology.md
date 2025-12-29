@@ -1,3 +1,41 @@
+# OntoLex-Lemon Morphological Resources
+
+OntoLex-Lemon is the W3C community standard for machine-readable lexical resources as Linked Data. MMoOn and other morphological databases use this format.
+
+---
+
+## Key Resources
+
+### 1. Wikidata Lexemes (LARGEST)
+- **1.3 million+ lexemes** across many languages
+- SPARQL endpoint: https://query.wikidata.org
+- Uses OntoLex-Lemon format natively
+- Forms include morphological features (tense, case, number, etc.)
+- **2024 CSV dump**: https://zenodo.org/records/10819306
+  - Languages: English, German, French, Arabic, Hebrew, Russian, Italian, Turkish, etc.
+
+### 2. MorphoLex-en (ENGLISH)
+- **70,000 English words** with morphological variables
+- Format: Excel (.xlsx)
+- Download: https://github.com/hugomailhot/MorphoLex-en
+- Includes: morpheme segmentation, derivational data
+- Published: Behavioral Research, 2017
+
+### 3. MMorph / MULTEXT
+- English, French, German, Italian, Spanish
+- Being ported to OntoLex-Morph format
+- Paper: https://aclanthology.org/W19-5104/
+
+### 4. LLOD Cloud
+- Aggregator of many OntoLex resources
+- http://linguistic-lod.org/llod-cloud
+
+### 5. OdeNet (German WordNet)
+- German lexical data in OntoLex format
+- Linked to MMORPH
+
+---
+
 # MMoOn - Multilingual Morpheme Ontology
 
 ## Overview
