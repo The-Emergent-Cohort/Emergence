@@ -54,6 +54,12 @@ SOURCES = {
         'description': 'Wikidata lexemes with lemmas and categories (1.3M+ lexemes)',
         'priority': 4,
     },
+    'wordnet': {
+        'name': 'Open English WordNet',
+        'type': 'wordnet',
+        'description': 'Synsets with glosses and semantic relations (~120k concepts)',
+        'priority': 6,
+    },
 }
 
 # Wikidata Lexemes files from Zenodo (March 2024 dump)
@@ -191,6 +197,57 @@ def download_wikidata_lexemes(dest_dir: Path) -> bool:
     return success_count > 0
 
 
+def download_wordnet(dest_dir: Path) -> bool:
+    """Download Open English WordNet SQLite database"""
+    print(f"\n  Downloading Open English WordNet...")
+
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    # Open English WordNet 2024 SQLite from GitHub releases
+    # https://github.com/x-englishwordnet/sqlite/releases
+    url = "https://github.com/x-englishwordnet/sqlite/releases/download/2.3.1/oewn-2024-sqlite-2.3.1.sqlite.zip"
+    zip_path = dest_dir / "oewn.zip"
+    db_path = dest_dir / "oewn.sqlite"
+
+    if db_path.exists():
+        print(f"  WordNet already exists at {db_path}")
+        return True
+
+    try:
+        # Download with redirect following
+        response = requests.get(url, stream=True, timeout=120, allow_redirects=True)
+        response.raise_for_status()
+
+        total_size = int(response.headers.get('content-length', 0))
+
+        with open(zip_path, 'wb') as f:
+            with tqdm(total=total_size, unit='B', unit_scale=True, desc="WordNet") as pbar:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+                    pbar.update(len(chunk))
+
+        # Extract
+        print("  Extracting WordNet database...")
+        with zipfile.ZipFile(zip_path, 'r') as zf:
+            # Find the sqlite file in the archive
+            for name in zf.namelist():
+                if name.endswith('.sqlite'):
+                    # Extract and rename to oewn.sqlite
+                    zf.extract(name, dest_dir)
+                    extracted = dest_dir / name
+                    if extracted != db_path:
+                        extracted.rename(db_path)
+                    break
+
+        zip_path.unlink()
+        print(f"  WordNet database ready at {db_path}")
+        return True
+
+    except Exception as e:
+        print(f"  Error downloading WordNet: {e}")
+        return False
+
+
 def download_unimorph(dest_dir: Path, languages: list) -> bool:
     """Download UniMorph data for specified languages"""
     print(f"\n  Downloading UniMorph for {len(languages)} languages...")
@@ -224,7 +281,7 @@ def main():
     parser = argparse.ArgumentParser(description='Download linguistic data sources')
     parser.add_argument('--base-dir', type=Path, required=True,
                         help='Base directory for reference data')
-    parser.add_argument('--sources', nargs='+', choices=list(SOURCES.keys()) + ['unimorph', 'wikidata', 'all'],
+    parser.add_argument('--sources', nargs='+', choices=list(SOURCES.keys()) + ['unimorph', 'wikidata', 'wordnet', 'all'],
                         default=['all'], help='Sources to download')
     parser.add_argument('--unimorph-langs', nargs='+', default=UNIMORPH_LANGUAGES,
                         help='UniMorph languages to download')
@@ -259,6 +316,10 @@ def main():
             print(f"\n[Wikidata Lexemes] Lemmas and lexical categories...")
             dest_dir = base_dir / 'wikidata'
             results['wikidata'] = download_wikidata_lexemes(dest_dir)
+        elif source_key == 'wordnet':
+            print(f"\n[WordNet] Synsets with glosses and semantic relations...")
+            dest_dir = base_dir / 'wordnet'
+            results['wordnet'] = download_wordnet(dest_dir)
         elif source_key in SOURCES:
             source = SOURCES[source_key]
             print(f"\n[{source['name']}] {source['description']}...")
