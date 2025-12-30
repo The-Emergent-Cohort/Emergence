@@ -118,10 +118,28 @@ def import_wikidata_file(conn, csv_path: Path, lang_code: str, source_id: int, m
     batch_size = 1000
 
     # Build INSERT based on actual schema
+    # Handle both schema variants: 'meaning' or 'category' for lexical category
     has_meaning = 'meaning' in morpheme_cols
+    has_category = 'category' in morpheme_cols
     has_origin = 'origin' in morpheme_cols
     has_pos = 'pos_tendency' in morpheme_cols
     has_type = 'morpheme_type' in morpheme_cols
+
+    # Build column list once
+    cols = ['morpheme']
+    if has_meaning:
+        cols.append('meaning')
+    elif has_category:
+        cols.append('category')
+    if has_type:
+        cols.append('morpheme_type')
+    if has_origin:
+        cols.append('origin')
+    if has_pos:
+        cols.append('pos_tendency')
+
+    placeholders = ', '.join(['?'] * len(cols))
+    col_str = ', '.join(cols)
 
     for rec in parse_wikidata_csv(csv_path):
         # Determine morpheme_type and pos from category
@@ -129,7 +147,7 @@ def import_wikidata_file(conn, csv_path: Path, lang_code: str, source_id: int, m
 
         # Build tuple based on available columns
         row = [rec['lemma']]
-        if has_meaning:
+        if has_meaning or has_category:
             row.append(rec['category'])
         if has_type:
             row.append(morpheme_type)
@@ -141,20 +159,6 @@ def import_wikidata_file(conn, csv_path: Path, lang_code: str, source_id: int, m
         batch_morphemes.append(tuple(row))
 
         if len(batch_morphemes) >= batch_size:
-            # Build column list dynamically
-            cols = ['morpheme']
-            if has_meaning:
-                cols.append('meaning')
-            if has_type:
-                cols.append('morpheme_type')
-            if has_origin:
-                cols.append('origin')
-            if has_pos:
-                cols.append('pos_tendency')
-
-            placeholders = ', '.join(['?'] * len(cols))
-            col_str = ', '.join(cols)
-
             cur.executemany(f"""
                 INSERT OR IGNORE INTO morphemes ({col_str})
                 VALUES ({placeholders})
@@ -165,19 +169,6 @@ def import_wikidata_file(conn, csv_path: Path, lang_code: str, source_id: int, m
 
     # Final morpheme batch
     if batch_morphemes:
-        cols = ['morpheme']
-        if has_meaning:
-            cols.append('meaning')
-        if has_type:
-            cols.append('morpheme_type')
-        if has_origin:
-            cols.append('origin')
-        if has_pos:
-            cols.append('pos_tendency')
-
-        placeholders = ', '.join(['?'] * len(cols))
-        col_str = ', '.join(cols)
-
         cur.executemany(f"""
             INSERT OR IGNORE INTO morphemes ({col_str})
             VALUES ({placeholders})
