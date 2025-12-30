@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Import MorphoLex-en morpheme data into tokenizer database"""
 
+import re
 import sqlite3
 from pathlib import Path
 
@@ -10,7 +11,7 @@ except ImportError:
     print("Missing openpyxl. Run: pip install openpyxl")
     exit(1)
 
-# Paths
+# Paths - adjust these for your setup
 SCRIPT_DIR = Path(__file__).parent
 BASE_DIR = SCRIPT_DIR.parent
 DB_PATH = BASE_DIR / "db" / "tokenizer.db"
@@ -19,9 +20,12 @@ REF_PATH = BASE_DIR / "reference" / "morpholex"
 SOURCE_NAME = "morpholex-en"
 SOURCE_CONFIDENCE = 0.85
 
+# Sheets to skip (presentation and summary sheets)
+SKIP_SHEETS = {'Presentation', 'Prefixes', 'Suffixes', 'Roots'}
+
 # Morpheme mappings - surface form to concept
-# These map common English affixes to our core morpheme concepts
 PREFIX_TO_CONCEPT = {
+    'a': 'NEGATION',  # as in 'amoral'
     'un': 'NEGATION',
     'in': 'NEGATION',
     'im': 'NEGATION',
@@ -29,7 +33,7 @@ PREFIX_TO_CONCEPT = {
     'ir': 'NEGATION',
     'dis': 'NEGATION',
     'non': 'NEGATION',
-    'de': 'NEGATION',
+    'de': 'REVERSAL',
     'anti': 'AGAINST',
     're': 'AGAIN',
     'pre': 'BEFORE',
@@ -42,7 +46,6 @@ PREFIX_TO_CONCEPT = {
     'trans': 'ACROSS',
     'ex': 'OUT',
     'out': 'OUT',
-    'in': 'INTO',
     'en': 'CAUSATIVE',
     'em': 'CAUSATIVE',
     'co': 'TOGETHER',
@@ -100,6 +103,10 @@ SUFFIX_TO_CONCEPT = {
     'ify': 'CAUSATIVE',
     'en': 'CAUSATIVE',
     'ate': 'CAUSATIVE',
+    'ed': 'PAST',
+    'ing': 'CONTINUOUS',
+    's': 'PLURAL',
+    'es': 'PLURAL',
     'ward': 'DIRECTION',
     'wards': 'DIRECTION',
     'wise': 'MANNER',
@@ -127,7 +134,6 @@ def get_english_language_id(cur) -> int:
     if result:
         return result[0]
 
-    # Create English entry if not exists
     cur.execute("""
         INSERT INTO language_families (name, level, iso_639_3, source)
         VALUES ('English', 'language', 'eng', 'morpholex')
@@ -135,127 +141,151 @@ def get_english_language_id(cur) -> int:
     return cur.lastrowid
 
 
-def get_morpheme_id(cur, concept: str) -> int:
-    """Get morpheme ID for a concept, or None if not found"""
-    cur.execute("SELECT id FROM morphemes WHERE morpheme = ?", (concept,))
-    result = cur.fetchone()
-    return result[0] if result else None
+def find_column_indices(headers):
+    """Find column indices for the fields we need"""
+    indices = {'word': None, 'pos': None, 'segm': None}
+
+    for i, h in enumerate(headers):
+        if h is None:
+            continue
+        h_str = str(h).strip()
+        if h_str == 'Word':
+            indices['word'] = i
+        elif h_str == 'POS':
+            indices['pos'] = i
+        elif h_str == 'MorphoLexSegm':
+            indices['segm'] = i
+
+    return indices
+
+
+def parse_segmentation(segm_str):
+    """
+    Parse MorphoLex segmentation notation.
+    Example: {<a<(litera)>ate>} -> prefix 'a', root 'litera', suffix 'ate'
+
+    Notation:
+    - (...) = root
+    - <...> around ( = prefix before root
+    - <...> after ) = suffix after root
+    - {...} = word boundary
+    """
+    if not segm_str:
+        return {'prefixes': [], 'roots': [], 'suffixes': []}
+
+    prefixes = []
+    roots = []
+    suffixes = []
+
+    # Extract roots first - they're in parentheses
+    root_matches = re.findall(r'\(([^)]+)\)', segm_str)
+    roots = [r.strip() for r in root_matches if r.strip()]
+
+    # Remove the root portions to analyze affixes
+    # Pattern: stuff before ( is prefixes, stuff after ) is suffixes
+    # Work through the structure
+
+    # Simple approach: split by roots and analyze
+    # For {<a<(litera)>ate>}:
+    # - Before first ( : {<a<  -> extract 'a'
+    # - After last ) : >ate>} -> extract 'ate'
+
+    # Find content before first root marker
+    first_paren = segm_str.find('(')
+    if first_paren > 0:
+        prefix_part = segm_str[:first_paren]
+        # Extract alphabetic sequences as prefixes
+        prefix_matches = re.findall(r'[a-zA-Z]+', prefix_part)
+        prefixes = [p.lower() for p in prefix_matches if p]
+
+    # Find content after last root marker
+    last_paren = segm_str.rfind(')')
+    if last_paren >= 0 and last_paren < len(segm_str) - 1:
+        suffix_part = segm_str[last_paren + 1:]
+        # Extract alphabetic sequences as suffixes
+        suffix_matches = re.findall(r'[a-zA-Z]+', suffix_part)
+        suffixes = [s.lower() for s in suffix_matches if s]
+
+    return {
+        'prefixes': prefixes,
+        'roots': roots,
+        'suffixes': suffixes
+    }
 
 
 def parse_morpholex(ref_path: Path):
-    """Parse MorphoLex Excel file"""
-    xlsx_file = ref_path / "MorphoLex_en.xlsx"
+    """Parse all data sheets from MorphoLex Excel file"""
+    xlsx_file = None
+    for f in ref_path.glob("*.xlsx"):
+        xlsx_file = f
+        break
 
-    if not xlsx_file.exists():
-        # Try to find any xlsx file
-        xlsx_files = list(ref_path.glob("*.xlsx"))
-        if xlsx_files:
-            xlsx_file = xlsx_files[0]
-        else:
-            raise FileNotFoundError(f"No Excel file found in {ref_path}")
+    if not xlsx_file:
+        raise FileNotFoundError(f"No Excel file found in {ref_path}")
 
     print(f"  Reading {xlsx_file.name}...")
 
-    wb = openpyxl.load_workbook(xlsx_file, read_only=True)
-    ws = wb.active
+    # Don't use read_only mode - it has issues with this file
+    wb = openpyxl.load_workbook(xlsx_file, read_only=False, data_only=True)
 
-    # Get headers from first row
-    headers = []
-    for cell in next(ws.iter_rows(max_row=1)):
-        headers.append(cell.value)
-
-    # Find column indices
-    word_col = None
-    segm_col = None
-    freq_col = None
-    pos_col = None
-
-    for i, h in enumerate(headers):
-        if h and 'Word' in str(h):
-            word_col = i
-        elif h and 'MorphoLexSegm' in str(h):
-            segm_col = i
-        elif h and 'SUBTLEX' in str(h) and 'Freq' in str(h):
-            freq_col = i
-        elif h and h == 'POS':
-            pos_col = i
-
-    if word_col is None:
-        print(f"  WARNING: Could not find Word column. Headers: {headers[:10]}")
-        word_col = 0
-
-    print(f"  Columns - Word: {word_col}, Segm: {segm_col}, Freq: {freq_col}, POS: {pos_col}")
-
+    sheet_count = 0
     row_count = 0
-    for row in ws.iter_rows(min_row=2, values_only=True):
-        row_count += 1
-        word = row[word_col] if word_col is not None and word_col < len(row) else None
-        segm = row[segm_col] if segm_col is not None and segm_col < len(row) else None
-        freq = row[freq_col] if freq_col is not None and freq_col < len(row) else None
-        pos = row[pos_col] if pos_col is not None and pos_col < len(row) else None
 
-        if not word:
+    for sheet_name in wb.sheetnames:
+        # Skip non-data sheets
+        if sheet_name in SKIP_SHEETS:
             continue
 
-        yield {
-            'word': str(word).strip(),
-            'segmentation': str(segm).strip() if segm else '',
-            'frequency': float(freq) if freq else 0,
-            'pos': str(pos).strip() if pos else '',
-        }
+        # Data sheets are named like '0-1-0', '1-1-1', etc.
+        if not re.match(r'^\d+-\d+-\d+$', sheet_name):
+            continue
 
-    print(f"  Read {row_count} rows")
+        sheet_count += 1
+        ws = wb[sheet_name]
+
+        # Get headers from first row
+        headers = [cell.value for cell in ws[1]]
+        indices = find_column_indices(headers)
+
+        if indices['word'] is None:
+            print(f"    Skipping sheet {sheet_name} - no Word column found")
+            continue
+
+        # Process data rows
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if not row or len(row) <= indices['word']:
+                continue
+
+            word = row[indices['word']]
+            if not word:
+                continue
+
+            pos = row[indices['pos']] if indices['pos'] is not None and indices['pos'] < len(row) else None
+            segm = row[indices['segm']] if indices['segm'] is not None and indices['segm'] < len(row) else None
+
+            row_count += 1
+
+            # Parse segmentation
+            morphemes = parse_segmentation(segm) if segm else {'prefixes': [], 'roots': [], 'suffixes': []}
+
+            yield {
+                'word': str(word).strip().lower(),
+                'pos': str(pos).strip() if pos else '',
+                'segmentation': str(segm) if segm else '',
+                'prefixes': morphemes['prefixes'],
+                'roots': morphemes['roots'],
+                'suffixes': morphemes['suffixes'],
+                'prs_signature': sheet_name,
+            }
+
     wb.close()
-
-
-def extract_morpheme_links(segmentation: str, word: str) -> list:
-    """Extract morpheme concepts from segmentation"""
-    if not segmentation or segmentation == word:
-        return []
-
-    # MorphoLex uses various segmentation formats
-    # Common: "un+happy+ness" or "{un}{happy}{ness}"
-    parts = []
-
-    # Try + separator
-    if '+' in segmentation:
-        parts = [p.strip() for p in segmentation.split('+')]
-    # Try {} format
-    elif '{' in segmentation:
-        import re
-        parts = re.findall(r'\{([^}]+)\}', segmentation)
-    # Try - separator
-    elif '-' in segmentation:
-        parts = [p.strip() for p in segmentation.split('-')]
-    else:
-        return []
-
-    links = []
-    for i, part in enumerate(parts):
-        part_lower = part.lower()
-        position = 'prefix' if i == 0 and len(parts) > 1 else ('suffix' if i == len(parts) - 1 and len(parts) > 1 else 'root')
-
-        concept = None
-        if position == 'prefix':
-            concept = PREFIX_TO_CONCEPT.get(part_lower)
-        elif position == 'suffix':
-            concept = SUFFIX_TO_CONCEPT.get(part_lower)
-
-        if concept:
-            links.append({
-                'surface': part,
-                'concept': concept,
-                'position': position,
-            })
-
-    return links
+    print(f"  Processed {sheet_count} sheets, {row_count} words")
 
 
 def import_morpholex(conn, ref_path: Path, source_id: int):
     """Import MorphoLex data"""
     cur = conn.cursor()
 
-    # Get English language ID
     eng_id = get_english_language_id(cur)
     print(f"  English language ID: {eng_id}")
 
@@ -266,25 +296,45 @@ def import_morpholex(conn, ref_path: Path, source_id: int):
 
     insert_count = 0
     link_count = 0
-    batch_size = 1000
     batch = []
+    batch_size = 500
 
     for rec in parse_morpholex(ref_path):
-        # Insert surface form
+        # Determine primary morpheme_id from affixes
+        morpheme_id = None
+
+        # Check prefixes for concept match
+        for prefix in rec['prefixes']:
+            concept = PREFIX_TO_CONCEPT.get(prefix)
+            if concept and concept in concept_to_id:
+                morpheme_id = concept_to_id[concept]
+                link_count += 1
+                break
+
+        # Check suffixes for concept match
+        if not morpheme_id:
+            for suffix in rec['suffixes']:
+                concept = SUFFIX_TO_CONCEPT.get(suffix)
+                if concept and concept in concept_to_id:
+                    morpheme_id = concept_to_id[concept]
+                    link_count += 1
+                    break
+
         batch.append((
-            None,  # morpheme_id - we'll link via separate table if needed
+            morpheme_id,
             eng_id,
             rec['word'],
-            rec['frequency'],
+            0,  # frequency - not in per-word data
             rec['pos'],
+            rec['segmentation'],
             SOURCE_NAME,
         ))
 
         if len(batch) >= batch_size:
             cur.executemany("""
                 INSERT OR IGNORE INTO surface_forms
-                (morpheme_id, language_id, surface_form, frequency, pos_tag, source)
-                VALUES (?, ?, ?, ?, ?, ?)
+                (morpheme_id, language_id, surface_form, frequency, pos_tag, pos_features, source)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             """, batch)
             insert_count += cur.rowcount
             conn.commit()
@@ -293,26 +343,18 @@ def import_morpholex(conn, ref_path: Path, source_id: int):
             if insert_count % 10000 == 0:
                 print(f"    Inserted {insert_count} surface forms...")
 
-        # Extract and link morpheme concepts
-        for link in extract_morpheme_links(rec['segmentation'], rec['word']):
-            morpheme_id = concept_to_id.get(link['concept'])
-            if morpheme_id:
-                # Update the surface form to link to this morpheme
-                # For compound words, this creates multiple links
-                link_count += 1
-
     # Final batch
     if batch:
         cur.executemany("""
             INSERT OR IGNORE INTO surface_forms
-            (morpheme_id, language_id, surface_form, frequency, pos_tag, source)
-            VALUES (?, ?, ?, ?, ?, ?)
+            (morpheme_id, language_id, surface_form, frequency, pos_tag, pos_features, source)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         """, batch)
         insert_count += cur.rowcount
         conn.commit()
 
     print(f"  Inserted {insert_count} surface forms")
-    print(f"  Found {link_count} morpheme concept links")
+    print(f"  Linked {link_count} to morpheme concepts")
 
 
 def main():
@@ -339,6 +381,13 @@ def main():
         """, (SOURCE_NAME,))
         count = cur.fetchone()[0]
         print(f"\n  Total surface forms from MorphoLex: {count}")
+
+        cur.execute("""
+            SELECT COUNT(*) FROM surface_forms
+            WHERE source = ? AND morpheme_id IS NOT NULL
+        """, (SOURCE_NAME,))
+        linked = cur.fetchone()[0]
+        print(f"  Linked to concepts: {linked}")
 
     finally:
         conn.close()
