@@ -48,6 +48,30 @@ SOURCES = {
         'description': 'English morpheme segmentation (70k words)',
         'priority': 5,
     },
+    'wikidata': {
+        'name': 'Wikidata Lexemes',
+        'type': 'wikidata_lexemes',
+        'description': 'Wikidata lexemes with lemmas and categories (1.3M+ lexemes)',
+        'priority': 4,
+    },
+}
+
+# Wikidata Lexemes files from Zenodo (March 2024 dump)
+# https://zenodo.org/records/10819306
+WIKIDATA_LEXEME_FILES = {
+    'DE': 'https://zenodo.org/records/10819306/files/DE_Q188_213917_03_2024.csv',
+    'RU': 'https://zenodo.org/records/10819306/files/RU_Q7737_101962_03_2024.csv',
+    'EN': 'https://zenodo.org/records/10819306/files/EN_Q1860_73752_03_2024.csv',
+    'IT': 'https://zenodo.org/records/10819306/files/IT_Q652_60898_03_2024.csv',
+    'ES': 'https://zenodo.org/records/10819306/files/ES_Q1321_54124_03_2024.csv',
+    'HE': 'https://zenodo.org/records/10819306/files/HE_Q9288_50112_03_2024.csv',
+    'CS': 'https://zenodo.org/records/10819306/files/CS_Q9056_26051_03_2024.csv',
+    'FR': 'https://zenodo.org/records/10819306/files/FR_Q150_19630_03_2024.csv',
+    'SUX': 'https://zenodo.org/records/10819306/files/SUX_Q36790_12341_03_2024.csv',
+    'AKK': 'https://zenodo.org/records/10819306/files/AKK_Q35518_6582_03_2024.csv',
+    'TR': 'https://zenodo.org/records/10819306/files/TR_Q256_3281_03_2024.csv',
+    'AR': 'https://zenodo.org/records/10819306/files/AR_Q13955_1770_03_2024.csv',
+    'HIT': 'https://zenodo.org/records/10819306/files/HIT_Q35668_25_03_2024.csv',
 }
 
 # UniMorph languages to download (start with high-priority ones)
@@ -137,6 +161,36 @@ def download_direct(source: dict, dest_dir: Path) -> bool:
     return download_file(source['url'], dest_path, source['name'])
 
 
+def download_wikidata_lexemes(dest_dir: Path) -> bool:
+    """Download Wikidata Lexeme CSV files from Zenodo"""
+    print(f"\n  Downloading Wikidata Lexemes ({len(WIKIDATA_LEXEME_FILES)} languages)...")
+
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    success_count = 0
+
+    for lang_code, url in tqdm(WIKIDATA_LEXEME_FILES.items(), desc="Wikidata Lexemes"):
+        filename = url.split('/')[-1]
+        dest_path = dest_dir / filename
+
+        if dest_path.exists():
+            success_count += 1
+            continue
+
+        try:
+            response = requests.get(url, stream=True, timeout=60)
+            response.raise_for_status()
+
+            with open(dest_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            success_count += 1
+        except Exception as e:
+            print(f"  Error downloading {lang_code}: {e}")
+
+    print(f"  Downloaded {success_count}/{len(WIKIDATA_LEXEME_FILES)} Wikidata files")
+    return success_count > 0
+
+
 def download_unimorph(dest_dir: Path, languages: list) -> bool:
     """Download UniMorph data for specified languages"""
     print(f"\n  Downloading UniMorph for {len(languages)} languages...")
@@ -170,7 +224,7 @@ def main():
     parser = argparse.ArgumentParser(description='Download linguistic data sources')
     parser.add_argument('--base-dir', type=Path, required=True,
                         help='Base directory for reference data')
-    parser.add_argument('--sources', nargs='+', choices=list(SOURCES.keys()) + ['unimorph', 'all'],
+    parser.add_argument('--sources', nargs='+', choices=list(SOURCES.keys()) + ['unimorph', 'wikidata', 'all'],
                         default=['all'], help='Sources to download')
     parser.add_argument('--unimorph-langs', nargs='+', default=UNIMORPH_LANGUAGES,
                         help='UniMorph languages to download')
@@ -201,6 +255,10 @@ def main():
             print(f"\n[UniMorph] Inflection paradigms...")
             dest_dir = base_dir / 'unimorph'
             results['unimorph'] = download_unimorph(dest_dir, args.unimorph_langs)
+        elif source_key == 'wikidata':
+            print(f"\n[Wikidata Lexemes] Lemmas and lexical categories...")
+            dest_dir = base_dir / 'wikidata'
+            results['wikidata'] = download_wikidata_lexemes(dest_dir)
         elif source_key in SOURCES:
             source = SOURCES[source_key]
             print(f"\n[{source['name']}] {source['description']}...")
