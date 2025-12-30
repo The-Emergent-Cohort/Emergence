@@ -190,6 +190,128 @@ CREATE TABLE IF NOT EXISTS etymology (
 CREATE INDEX IF NOT EXISTS idx_etym_concept ON etymology(concept_id);
 
 -- =============================================================================
+-- LANGUAGES: Language inventory and metadata (from Glottolog)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS languages (
+    lang_code TEXT PRIMARY KEY,              -- ISO 639-3 code (e.g., "eng", "deu", "jpn")
+    glottocode TEXT UNIQUE,                  -- Glottolog code (e.g., "stan1293")
+    name TEXT NOT NULL,                      -- Language name
+    family_id TEXT,                          -- Parent family glottocode
+    level TEXT,                              -- family, language, dialect
+    macroarea TEXT,                          -- Africa, Eurasia, etc.
+    latitude REAL,                           -- Geographic center
+    longitude REAL,
+    status TEXT,                             -- living, extinct, ancient, constructed
+    speaker_count INTEGER,                   -- Estimated speakers (for prioritization)
+    FOREIGN KEY (family_id) REFERENCES language_families(glottocode)
+);
+CREATE INDEX IF NOT EXISTS idx_lang_glottocode ON languages(glottocode);
+CREATE INDEX IF NOT EXISTS idx_lang_family ON languages(family_id);
+CREATE INDEX IF NOT EXISTS idx_lang_level ON languages(level);
+
+-- =============================================================================
+-- LANGUAGE FAMILIES: Genealogical hierarchy (from Glottolog)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS language_families (
+    glottocode TEXT PRIMARY KEY,             -- Glottolog family code
+    name TEXT NOT NULL,                      -- Family name (e.g., "Indo-European")
+    parent_id TEXT,                          -- Parent family (for hierarchy)
+    level INTEGER DEFAULT 0,                 -- Depth in tree (0 = top-level)
+    FOREIGN KEY (parent_id) REFERENCES language_families(glottocode)
+);
+CREATE INDEX IF NOT EXISTS idx_family_parent ON language_families(parent_id);
+
+-- =============================================================================
+-- FEATURE DEFINITIONS: What each typological feature means (WALS + Grambank)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS feature_definitions (
+    feature_id TEXT PRIMARY KEY,             -- e.g., "81A" (WALS) or "GB020" (Grambank)
+    name TEXT NOT NULL,                      -- e.g., "Order of Subject, Object and Verb"
+    description TEXT,                        -- Full description
+    domain TEXT,                             -- word_order, morphology, phonology, etc.
+    source TEXT NOT NULL,                    -- wals, grambank
+    possible_values TEXT                     -- JSON array of valid values
+);
+CREATE INDEX IF NOT EXISTS idx_feature_domain ON feature_definitions(domain);
+CREATE INDEX IF NOT EXISTS idx_feature_source ON feature_definitions(source);
+
+-- =============================================================================
+-- LANGUAGE FEATURES: Typological values per language (WALS + Grambank)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS language_features (
+    id INTEGER PRIMARY KEY,
+    lang_code TEXT NOT NULL,                 -- ISO 639-3 or glottocode
+    feature_id TEXT NOT NULL,                -- Links to feature_definitions
+    value TEXT NOT NULL,                     -- The actual value (e.g., "SVO", "1", "0")
+    value_name TEXT,                         -- Human-readable value (e.g., "Subject-Verb-Object")
+    source TEXT NOT NULL,                    -- wals, grambank
+    confidence REAL DEFAULT 1.0,             -- Data quality
+    FOREIGN KEY (lang_code) REFERENCES languages(lang_code),
+    FOREIGN KEY (feature_id) REFERENCES feature_definitions(feature_id),
+    UNIQUE(lang_code, feature_id, source)
+);
+CREATE INDEX IF NOT EXISTS idx_langfeat_lang ON language_features(lang_code);
+CREATE INDEX IF NOT EXISTS idx_langfeat_feature ON language_features(feature_id);
+
+-- Seed key WALS feature definitions (most relevant for tokenization)
+INSERT OR IGNORE INTO feature_definitions (feature_id, name, domain, source, possible_values) VALUES
+    -- Word Order features
+    ('81A', 'Order of Subject, Object and Verb', 'word_order', 'wals',
+     '["SOV","SVO","VSO","VOS","OVS","OSV","No dominant order"]'),
+    ('82A', 'Order of Subject and Verb', 'word_order', 'wals',
+     '["SV","VS","No dominant order"]'),
+    ('83A', 'Order of Object and Verb', 'word_order', 'wals',
+     '["OV","VO","No dominant order"]'),
+    ('85A', 'Order of Adposition and Noun Phrase', 'word_order', 'wals',
+     '["Postpositions","Prepositions","Inpositions","No dominant order"]'),
+    ('86A', 'Order of Genitive and Noun', 'word_order', 'wals',
+     '["Genitive-Noun","Noun-Genitive","No dominant order"]'),
+    ('87A', 'Order of Adjective and Noun', 'word_order', 'wals',
+     '["Adjective-Noun","Noun-Adjective","No dominant order","Only internally-headed relative clauses"]'),
+
+    -- Morphology features
+    ('20A', 'Fusion of Selected Inflectional Formatives', 'morphology', 'wals',
+     '["Exclusively concatenative","Predominantly concatenative","Predominantly isolating","Exclusively isolating"]'),
+    ('21A', 'Exponence of Selected Inflectional Formatives', 'morphology', 'wals',
+     '["Monoexponential case","Case+number","Case+referentiality","No case"]'),
+    ('22A', 'Inflectional Synthesis of the Verb', 'morphology', 'wals',
+     '["0-1 categories","2-3 categories","4-5 categories","6-7 categories","8-9 categories","10-11 categories","12-13 categories"]'),
+    ('26A', 'Prefixing vs. Suffixing in Inflectional Morphology', 'morphology', 'wals',
+     '["Strongly suffixing","Weakly suffixing","Equal prefixing and suffixing","Weakly prefixing","Strongly prefixing","Little affixation"]'),
+
+    -- Case and Agreement
+    ('28A', 'Case Syncretism', 'case', 'wals',
+     '["No case marking","Core cases only","Core and non-core","Non-core only"]'),
+    ('49A', 'Number of Cases', 'case', 'wals',
+     '["No morphological case-marking","2 cases","3 cases","4 cases","5 cases","6-7 cases","8-9 cases","10 or more cases"]'),
+    ('51A', 'Position of Case Affixes', 'case', 'wals',
+     '["Case suffixes","Case prefixes","Case tone","Mixed"]'),
+
+    -- Nominal features
+    ('30A', 'Number of Genders', 'nominal', 'wals',
+     '["None","Two","Three","Four","Five or more"]'),
+    ('33A', 'Coding of Nominal Plurality', 'nominal', 'wals',
+     '["Plural prefix","Plural suffix","Plural stem change","Plural clitic","Plural word","Mixed morphological plural","No plural"]'),
+    ('34A', 'Occurrence of Nominal Plurality', 'nominal', 'wals',
+     '["All nouns, always optional","All nouns, always obligatory","All nouns, optionality unclear","Obligatory in some, optional in others"]'),
+
+    -- Verbal features
+    ('65A', 'Perfective/Imperfective Aspect', 'verbal', 'wals',
+     '["Grammatical marking","No grammatical marking"]'),
+    ('66A', 'The Past Tense', 'verbal', 'wals',
+     '["Past vs. non-past","No past tense","No tense marking","Present vs. non-present"]'),
+    ('69A', 'Position of Tense-Aspect Affixes', 'verbal', 'wals',
+     '["Tense-aspect suffixes","Tense-aspect prefixes","Tense-aspect tone","Mixed"]'),
+    ('70A', 'The Morphological Imperative', 'verbal', 'wals',
+     '["Second singular and second plural","Second person only","Second singular","Second and third persons","All persons"]'),
+
+    -- Negation
+    ('112A', 'Negative Morphemes', 'negation', 'wals',
+     '["Negative affix","Negative particle","Negative auxiliary verb","Negative word, unclear if verb or particle","Variation between negative word and affix"]'),
+    ('143A', 'Order of Negative Morpheme and Verb', 'negation', 'wals',
+     '["NegV","VNeg","[Neg-V]","[V-Neg]","Negative tone","Mixed"]');
+
+-- =============================================================================
 -- METADATA: Import tracking
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS import_metadata (
@@ -245,3 +367,33 @@ SELECT
 FROM synsets s1
 JOIN synset_relations sr ON s1.synset_id = sr.synset_id
 JOIN synsets s2 ON sr.related_synset_id = s2.synset_id;
+
+-- Language profile (all features for a language)
+-- Usage: SELECT * FROM language_profile WHERE lang_code = 'deu';
+CREATE VIEW IF NOT EXISTS language_profile AS
+SELECT
+    l.lang_code,
+    l.name AS language_name,
+    lf.family_id,
+    f.name AS family_name,
+    fd.feature_id,
+    fd.name AS feature_name,
+    fd.domain,
+    lf2.value,
+    lf2.value_name
+FROM languages l
+LEFT JOIN language_families f ON l.family_id = f.glottocode
+LEFT JOIN language_features lf2 ON l.lang_code = lf2.lang_code
+LEFT JOIN feature_definitions fd ON lf2.feature_id = fd.feature_id;
+
+-- Language family tree (recursive traversal helper)
+-- Usage: WITH RECURSIVE ... to walk the tree
+CREATE VIEW IF NOT EXISTS family_tree AS
+SELECT
+    lf.glottocode,
+    lf.name,
+    lf.parent_id,
+    lf.level,
+    p.name AS parent_name
+FROM language_families lf
+LEFT JOIN language_families p ON lf.parent_id = p.glottocode;

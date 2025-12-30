@@ -13,14 +13,17 @@ Data is in JSONL format (one JSON object per line).
 
 Usage:
     python download_kaikki.py                    # Download English only
-    python download_kaikki.py --lang de fr es    # Download specific languages
-    python download_kaikki.py --all              # Download all available
+    python download_kaikki.py --lang German French Spanish
+    python download_kaikki.py --from-db          # Download all languages in DB
+    python download_kaikki.py --from-db --limit 20  # Download top 20 by speakers
+    python download_kaikki.py --all              # Download all common languages
 """
 
 import argparse
 import hashlib
 import json
 import os
+import sqlite3
 import sys
 import time
 from pathlib import Path
@@ -30,27 +33,111 @@ from urllib.error import URLError, HTTPError
 # Base URL for Kaikki.org data
 KAIKKI_BASE = "https://kaikki.org/dictionary"
 
-# Common languages to download (ISO 639-1 codes used by Kaikki)
-COMMON_LANGUAGES = [
-    "English", "German", "French", "Spanish", "Italian",
-    "Portuguese", "Dutch", "Russian", "Chinese", "Japanese"
-]
-
-# Default output directory (relative to this script)
+# Default paths
 SCRIPT_DIR = Path(__file__).parent.parent
 OUTPUT_DIR = SCRIPT_DIR / "reference" / "kaikki"
+DEFAULT_DB = SCRIPT_DIR / "db" / "language.db"
+
+# ISO 639-3 to Kaikki.org language name mapping
+# Kaikki uses English language names, capitalized
+ISO_TO_KAIKKI = {
+    "eng": "English",
+    "deu": "German",
+    "fra": "French",
+    "spa": "Spanish",
+    "ita": "Italian",
+    "por": "Portuguese",
+    "nld": "Dutch",
+    "rus": "Russian",
+    "zho": "Chinese",
+    "cmn": "Chinese",  # Mandarin -> Chinese
+    "jpn": "Japanese",
+    "kor": "Korean",
+    "ara": "Arabic",
+    "hin": "Hindi",
+    "ben": "Bengali",
+    "pol": "Polish",
+    "ukr": "Ukrainian",
+    "vie": "Vietnamese",
+    "tur": "Turkish",
+    "tha": "Thai",
+    "swe": "Swedish",
+    "nor": "Norwegian",
+    "dan": "Danish",
+    "fin": "Finnish",
+    "ell": "Greek",
+    "ces": "Czech",
+    "ron": "Romanian",
+    "hun": "Hungarian",
+    "heb": "Hebrew",
+    "ind": "Indonesian",
+    "msa": "Malay",
+    "tgl": "Tagalog",
+    "swh": "Swahili",
+    "lat": "Latin",
+    "san": "Sanskrit",
+    "fas": "Persian",
+    "urd": "Urdu",
+    "cat": "Catalan",
+    "eus": "Basque",
+    "glg": "Galician",
+    "slk": "Slovak",
+    "slv": "Slovenian",
+    "hrv": "Croatian",
+    "srp": "Serbian",
+    "bul": "Bulgarian",
+    "lit": "Lithuanian",
+    "lav": "Latvian",
+    "est": "Estonian",
+    "afr": "Afrikaans",
+    "isl": "Icelandic",
+    "gle": "Irish",
+    "cym": "Welsh",
+    "gla": "Scottish Gaelic",
+    "kat": "Georgian",
+    "hye": "Armenian",
+    "tam": "Tamil",
+    "tel": "Telugu",
+    "mal": "Malayalam",
+    "kan": "Kannada",
+    "mar": "Marathi",
+    "guj": "Gujarati",
+    "pan": "Punjabi",
+    "nep": "Nepali",
+    "sin": "Sinhala",
+    "mya": "Burmese",
+    "khm": "Khmer",
+    "lao": "Lao",
+    "amh": "Amharic",
+    "hau": "Hausa",
+    "yor": "Yoruba",
+    "ibo": "Igbo",
+    "zul": "Zulu",
+    "xho": "Xhosa",
+    "sot": "Sotho",
+    "tsn": "Tswana",
+    "mlg": "Malagasy",
+    "fil": "Filipino",
+    "jav": "Javanese",
+    "sun": "Sundanese",
+}
+
+# Common languages to download with --all
+COMMON_LANGUAGES = [
+    "English", "German", "French", "Spanish", "Italian",
+    "Portuguese", "Dutch", "Russian", "Chinese", "Japanese",
+    "Korean", "Arabic", "Hindi", "Polish", "Turkish"
+]
 
 
 def get_download_url(lang_name: str) -> str:
     """Construct download URL for a language."""
-    # Kaikki.org URL pattern: https://kaikki.org/dictionary/{Language}/kaikki.org-dictionary-{Language}.json
-    # For compressed: add .bz2
     return f"{KAIKKI_BASE}/{lang_name}/kaikki.org-dictionary-{lang_name}.json"
 
 
 def download_with_retry(url: str, output_path: Path, retries: int = 4) -> bool:
     """Download a file with exponential backoff retry."""
-    delays = [2, 4, 8, 16]  # Exponential backoff
+    delays = [2, 4, 8, 16]
 
     for attempt in range(retries + 1):
         try:
@@ -80,7 +167,7 @@ def download_with_retry(url: str, output_path: Path, retries: int = 4) -> bool:
                             mb_total = total_size / (1024 * 1024)
                             print(f"\r  Progress: {mb_down:.1f}/{mb_total:.1f} MB ({pct:.1f}%)", end="", flush=True)
 
-                print()  # Newline after progress
+                print()
                 return True
 
         except (URLError, HTTPError) as e:
@@ -112,6 +199,58 @@ def count_entries(filepath: Path) -> int:
             if line.strip():
                 count += 1
     return count
+
+
+def get_languages_from_db(db_path: Path, limit: int = None) -> list:
+    """
+    Get languages from the database that need Kaikki data.
+
+    Returns list of (lang_code, kaikki_name, name) tuples.
+    Prioritizes by speaker count if available.
+    """
+    if not db_path.exists():
+        print(f"Warning: Database not found at {db_path}")
+        return []
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+
+    # Query languages, prioritize by speaker count
+    query = """
+        SELECT lang_code, name, speaker_count
+        FROM languages
+        WHERE level = 'language' OR level IS NULL
+        ORDER BY
+            CASE WHEN speaker_count IS NULL THEN 1 ELSE 0 END,
+            speaker_count DESC
+    """
+    if limit:
+        query += f" LIMIT {limit}"
+
+    cursor = conn.execute(query)
+
+    languages = []
+    for row in cursor:
+        lang_code = row['lang_code']
+        name = row['name']
+
+        # Map to Kaikki name
+        kaikki_name = ISO_TO_KAIKKI.get(lang_code)
+        if not kaikki_name:
+            # Try using the language name directly (capitalized)
+            kaikki_name = name.title() if name else None
+
+        if kaikki_name:
+            languages.append((lang_code, kaikki_name, name))
+
+    conn.close()
+    return languages
+
+
+def check_existing_kaikki(output_dir: Path, kaikki_name: str) -> bool:
+    """Check if Kaikki data already exists for a language."""
+    jsonl_file = output_dir / f"{kaikki_name.lower()}.jsonl"
+    return jsonl_file.exists() and jsonl_file.stat().st_size > 0
 
 
 def download_language(lang_name: str, output_dir: Path, force: bool = False) -> dict:
@@ -161,7 +300,7 @@ def download_language(lang_name: str, output_dir: Path, force: bool = False) -> 
             with bz2.open(output_bz2, "rb") as f_in:
                 with open(output_file, "wb") as f_out:
                     f_out.write(f_in.read())
-            output_bz2.unlink()  # Remove compressed file
+            output_bz2.unlink()
             print(" done")
 
             result["success"] = True
@@ -179,8 +318,30 @@ def main():
     parser.add_argument(
         "--lang", "-l",
         nargs="+",
-        default=["English"],
+        default=None,
         help="Languages to download (e.g., English German French)"
+    )
+    parser.add_argument(
+        "--from-db",
+        action="store_true",
+        help="Download languages found in the language database"
+    )
+    parser.add_argument(
+        "--db",
+        type=Path,
+        default=DEFAULT_DB,
+        help=f"Database path for --from-db (default: {DEFAULT_DB})"
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Limit number of languages when using --from-db"
+    )
+    parser.add_argument(
+        "--missing-only",
+        action="store_true",
+        help="Only download languages that don't have Kaikki data yet"
     )
     parser.add_argument(
         "--all", "-a",
@@ -200,14 +361,40 @@ def main():
     )
 
     args = parser.parse_args()
-
-    languages = COMMON_LANGUAGES if args.all else args.lang
     output_dir = args.output
+
+    # Determine which languages to download
+    if args.from_db:
+        db_languages = get_languages_from_db(args.db, args.limit)
+        if not db_languages:
+            print("No languages found in database. Run import_glottolog.py first.")
+            sys.exit(1)
+
+        if args.missing_only:
+            # Filter to only those missing Kaikki data
+            db_languages = [
+                (code, kaikki, name)
+                for code, kaikki, name in db_languages
+                if not check_existing_kaikki(output_dir, kaikki)
+            ]
+
+        languages = [kaikki for _, kaikki, _ in db_languages]
+        print(f"Languages from database: {len(languages)}")
+    elif args.all:
+        languages = COMMON_LANGUAGES
+    elif args.lang:
+        languages = args.lang
+    else:
+        languages = ["English"]
 
     print(f"Kaikki.org Wiktionary Downloader")
     print(f"================================")
     print(f"Output directory: {output_dir}")
-    print(f"Languages: {', '.join(languages)}")
+    print(f"Languages to process: {len(languages)}")
+    if len(languages) <= 10:
+        print(f"  {', '.join(languages)}")
+    else:
+        print(f"  {', '.join(languages[:5])}... and {len(languages) - 5} more")
     print()
 
     output_dir.mkdir(parents=True, exist_ok=True)
