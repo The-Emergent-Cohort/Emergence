@@ -98,7 +98,13 @@ def parse_wikidata_csv(csv_path: Path):
             }
 
 
-def import_wikidata_file(conn, csv_path: Path, lang_code: str, source_id: int):
+def get_morpheme_columns(cur):
+    """Detect which columns exist in morphemes table"""
+    cur.execute("PRAGMA table_info(morphemes)")
+    return {row[1] for row in cur.fetchall()}
+
+
+def import_wikidata_file(conn, csv_path: Path, lang_code: str, source_id: int, morpheme_cols: set):
     """Import a single Wikidata CSV file"""
     cur = conn.cursor()
 
@@ -111,24 +117,51 @@ def import_wikidata_file(conn, csv_path: Path, lang_code: str, source_id: int):
     batch_surfaces = []
     batch_size = 1000
 
+    # Build INSERT based on actual schema
+    # Handle both schema variants: 'meaning' or 'category' for lexical category
+    has_meaning = 'meaning' in morpheme_cols
+    has_category = 'category' in morpheme_cols
+    has_origin = 'origin' in morpheme_cols
+    has_pos = 'pos_tendency' in morpheme_cols
+    has_type = 'morpheme_type' in morpheme_cols
+
+    # Build column list once
+    cols = ['morpheme']
+    if has_meaning:
+        cols.append('meaning')
+    elif has_category:
+        cols.append('category')
+    if has_type:
+        cols.append('morpheme_type')
+    if has_origin:
+        cols.append('origin')
+    if has_pos:
+        cols.append('pos_tendency')
+
+    placeholders = ', '.join(['?'] * len(cols))
+    col_str = ', '.join(cols)
+
     for rec in parse_wikidata_csv(csv_path):
         # Determine morpheme_type and pos from category
         morpheme_type, pos = CATEGORY_MAP.get(rec['category'], ('word', None))
 
-        # Add to morphemes table (the concept)
-        batch_morphemes.append((
-            rec['lemma'],
-            rec['category'],
-            morpheme_type,
-            None,  # origin - not in Wikidata
-            pos,
-        ))
+        # Build tuple based on available columns
+        row = [rec['lemma']]
+        if has_meaning or has_category:
+            row.append(rec['category'])
+        if has_type:
+            row.append(morpheme_type)
+        if has_origin:
+            row.append(None)
+        if has_pos:
+            row.append(pos)
+
+        batch_morphemes.append(tuple(row))
 
         if len(batch_morphemes) >= batch_size:
-            cur.executemany("""
-                INSERT OR IGNORE INTO morphemes
-                (morpheme, meaning, morpheme_type, origin, pos_tendency)
-                VALUES (?, ?, ?, ?, ?)
+            cur.executemany(f"""
+                INSERT OR IGNORE INTO morphemes ({col_str})
+                VALUES ({placeholders})
             """, batch_morphemes)
             morpheme_count += cur.rowcount
             conn.commit()
@@ -136,10 +169,9 @@ def import_wikidata_file(conn, csv_path: Path, lang_code: str, source_id: int):
 
     # Final morpheme batch
     if batch_morphemes:
-        cur.executemany("""
-            INSERT OR IGNORE INTO morphemes
-            (morpheme, meaning, morpheme_type, origin, pos_tendency)
-            VALUES (?, ?, ?, ?, ?)
+        cur.executemany(f"""
+            INSERT OR IGNORE INTO morphemes ({col_str})
+            VALUES ({placeholders})
         """, batch_morphemes)
         morpheme_count += cur.rowcount
         conn.commit()
@@ -211,6 +243,10 @@ def main():
         source_id = get_or_create_source(cur)
         conn.commit()
 
+        # Detect schema
+        morpheme_cols = get_morpheme_columns(cur)
+        print(f"  Morphemes table columns: {morpheme_cols}")
+
         total_morphemes = 0
         total_surfaces = 0
 
@@ -219,7 +255,7 @@ def main():
             lang_code = csv_path.name.split('_')[0]
             print(f"  Importing {lang_code} from {csv_path.name}...", end=" ")
 
-            morphemes, surfaces = import_wikidata_file(conn, csv_path, lang_code, source_id)
+            morphemes, surfaces = import_wikidata_file(conn, csv_path, lang_code, source_id, morpheme_cols)
             total_morphemes += morphemes
             total_surfaces += surfaces
             print(f"{morphemes} morphemes, {surfaces} surface forms")
