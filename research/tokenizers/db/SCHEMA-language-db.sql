@@ -374,17 +374,17 @@ CREATE VIEW IF NOT EXISTS language_profile AS
 SELECT
     l.lang_code,
     l.name AS language_name,
-    lf.family_id,
+    l.family_id,
     f.name AS family_name,
     fd.feature_id,
     fd.name AS feature_name,
     fd.domain,
-    lf2.value,
-    lf2.value_name
+    lf.value,
+    lf.value_name
 FROM languages l
 LEFT JOIN language_families f ON l.family_id = f.glottocode
-LEFT JOIN language_features lf2 ON l.lang_code = lf2.lang_code
-LEFT JOIN feature_definitions fd ON lf2.feature_id = fd.feature_id;
+LEFT JOIN language_features lf ON l.lang_code = lf.lang_code
+LEFT JOIN feature_definitions fd ON lf.feature_id = fd.feature_id;
 
 -- Language family tree (recursive traversal helper)
 -- Usage: WITH RECURSIVE ... to walk the tree
