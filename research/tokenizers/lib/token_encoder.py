@@ -107,46 +107,52 @@ class TokenCoordinates:
     domain: int             # Domain code (1-99)
     category: int           # Category within domain (1-99)
     language: int           # Language code (0-9999)
-    serial: int             # Primitive fingerprint (0-999999)
+    fingerprint: int        # Primitive composition fingerprint (0-999999)
+    collision: int = 0      # Collision counter within same fingerprint (0-999)
 
     def to_token_id(self) -> int:
         """Encode coordinates as single integer token ID."""
-        # Format: AADDCCLLLLSSSSSS
-        # 16 digits total, fits in 64-bit integer
-        # Positions: abstraction at 10^14, domain at 10^12, category at 10^10, lang at 10^6
+        # Format: AADDCCLLLLFFFFFFCCC
+        # 19 digits total, fits in 64-bit integer (max ~9.2 × 10^18)
+        # Positions: abstraction at 10^17, domain at 10^15, category at 10^13,
+        #            lang at 10^9, fingerprint at 10^3, collision at 10^0
         return (
-            self.abstraction * 100_000_000_000_000 +  # 10^14
-            self.domain * 1_000_000_000_000 +         # 10^12
-            self.category * 10_000_000_000 +          # 10^10
-            self.language * 1_000_000 +               # 10^6
-            self.serial
+            self.abstraction * 100_000_000_000_000_000 +   # 10^17
+            self.domain * 1_000_000_000_000_000 +          # 10^15
+            self.category * 10_000_000_000_000 +           # 10^13
+            self.language * 1_000_000_000 +                # 10^9
+            self.fingerprint * 1_000 +                     # 10^3
+            self.collision                                 # 10^0
         )
 
     @classmethod
     def from_token_id(cls, token_id: int) -> "TokenCoordinates":
         """Decode token ID back to coordinates."""
         # Extract from right to left matching the encoding
-        serial = token_id % 1_000_000          # 6 digits
+        collision = token_id % 1_000              # 3 digits
+        token_id //= 1_000
+        fingerprint = token_id % 1_000_000        # 6 digits
         token_id //= 1_000_000
-        language = token_id % 10_000           # 4 digits
+        language = token_id % 10_000              # 4 digits
         token_id //= 10_000
-        category = token_id % 100              # 2 digits
+        category = token_id % 100                 # 2 digits
         token_id //= 100
-        domain = token_id % 100                # 2 digits
+        domain = token_id % 100                   # 2 digits
         token_id //= 100
-        abstraction = token_id                 # 2 digits remaining
+        abstraction = token_id                    # 2 digits remaining
 
         return cls(
             abstraction=abstraction,
             domain=domain,
             category=category,
             language=language,
-            serial=serial
+            fingerprint=fingerprint,
+            collision=collision
         )
 
     def to_string(self) -> str:
         """Human-readable format."""
-        return f"{self.abstraction:02d}.{self.domain:02d}.{self.category:02d}.{self.language:04d}.{self.serial:06d}"
+        return f"{self.abstraction:02d}.{self.domain:02d}.{self.category:02d}.{self.language:04d}.{self.fingerprint:06d}.{self.collision:03d}"
 
     @classmethod
     def from_string(cls, s: str) -> "TokenCoordinates":
@@ -157,24 +163,29 @@ class TokenCoordinates:
             domain=int(parts[1]),
             category=int(parts[2]),
             language=int(parts[3]),
-            serial=int(parts[4])
+            fingerprint=int(parts[4]),
+            collision=int(parts[5]) if len(parts) > 5 else 0
         )
 
 
-def compute_serial(primitives: List[PrimitiveComponent]) -> int:
+def compute_fingerprint(primitives: List[PrimitiveComponent]) -> int:
     """
-    Compute the serial fingerprint from primitive composition.
+    Compute the fingerprint from primitive composition.
 
-    Serial = Σ(primitive_id × position_weight)
+    Fingerprint = Σ(primitive_id × position_weight) mod 1000000
 
     Position weights ensure order matters:
     - Position 1: weight 1
     - Position 2: weight 2
     - etc.
 
-    This creates unique fingerprints where:
-    - Different primitives = different serial
-    - Same primitives, different order = different serial
+    This creates fingerprints where:
+    - Different primitives = usually different fingerprint
+    - Same primitives, different order = different fingerprint
+    - Collisions rare but handled by collision counter
+
+    6 digits allows for highly abstract compositions like
+    "antidisestablishmentarianism" with many morpheme primitives.
     """
     if not primitives:
         return 0
@@ -183,8 +194,8 @@ def compute_serial(primitives: List[PrimitiveComponent]) -> int:
     for p in primitives:
         total += p.primitive_id * p.position
 
-    # Keep within 6 digits via modulo
-    # Collision is possible but rare given semantic clustering
+    # Keep within 6 digits (0-999999)
+    # Collision counter handles the rare duplicates
     return total % 1_000_000
 
 
@@ -233,6 +244,9 @@ class TokenEncoder:
         # Cache for primitive lookups (would come from DB)
         self._primitive_cache: Dict[str, List[PrimitiveComponent]] = {}
 
+        # Collision tracking: (abs, dom, cat, lang, fingerprint) -> next collision number
+        self._collision_counter: Dict[Tuple[int, int, int, int, int], int] = {}
+
     def encode(
         self,
         lemma: str,
@@ -264,16 +278,22 @@ class TokenEncoder:
         if primitives is None:
             primitives = self._primitive_cache.get(lemma, [])
 
-        # Derive abstraction and serial
+        # Derive abstraction and fingerprint
         abstraction = compute_abstraction_level(primitives)
-        serial = compute_serial(primitives)
+        fingerprint = compute_fingerprint(primitives)
+
+        # Get collision number for this coordinate slot
+        slot_key = (abstraction, domain_code, category_code, lang_code, fingerprint)
+        collision = self._collision_counter.get(slot_key, 0)
+        self._collision_counter[slot_key] = collision + 1
 
         return TokenCoordinates(
             abstraction=abstraction,
             domain=domain_code,
             category=category_code,
             language=lang_code,
-            serial=serial
+            fingerprint=fingerprint,
+            collision=collision
         )
 
     def similarity(self, id1: int, id2: int) -> float:
@@ -281,7 +301,7 @@ class TokenEncoder:
         Compute semantic similarity from token IDs alone.
 
         Tokens in same domain/category are more similar.
-        Tokens with similar serials share primitive composition.
+        Tokens with similar fingerprints share primitive composition.
         """
         c1 = TokenCoordinates.from_token_id(id1)
         c2 = TokenCoordinates.from_token_id(id2)
@@ -299,14 +319,14 @@ class TokenEncoder:
         if abs(c1.abstraction - c2.abstraction) <= 1:
             score += 0.1
 
-        # Serial similarity (shared primitives)
-        # Closer serials = more shared composition
-        serial_diff = abs(c1.serial - c2.serial)
-        if serial_diff < 100:
+        # Fingerprint similarity (shared primitives)
+        # Closer fingerprints = more shared composition
+        fp_diff = abs(c1.fingerprint - c2.fingerprint)
+        if fp_diff < 100:
             score += 0.3
-        elif serial_diff < 1000:
+        elif fp_diff < 1000:
             score += 0.2
-        elif serial_diff < 10000:
+        elif fp_diff < 10000:
             score += 0.1
 
         # Same language: small bonus
@@ -327,12 +347,14 @@ def encode_token(
     domain: str,
     category: str,
     lang: str = "eng",
-    primitives: List[Tuple[int, int]] = None
+    primitives: List[Tuple[int, int]] = None,
+    collision: int = 0
 ) -> int:
     """
     Quick encoding of a concept to token ID.
 
     primitives: List of (primitive_id, position) tuples
+    collision: Collision counter if known (usually from DB)
     """
     encoder = TokenEncoder()
 
@@ -342,6 +364,9 @@ def encode_token(
         prims = None
 
     coords = encoder.encode(lemma, domain, category, lang, prims)
+    # Override collision if explicitly provided
+    if collision > 0:
+        coords.collision = collision
     return coords.to_token_id()
 
 
@@ -349,6 +374,12 @@ def decode_token(token_id: int) -> str:
     """Decode token ID to human-readable coordinates."""
     coords = TokenCoordinates.from_token_id(token_id)
     return coords.to_string()
+
+
+def extract_fingerprint(token_id: int) -> int:
+    """Extract just the fingerprint from a token ID."""
+    coords = TokenCoordinates.from_token_id(token_id)
+    return coords.fingerprint
 
 
 if __name__ == "__main__":
@@ -373,13 +404,14 @@ if __name__ == "__main__":
     )
 
     print(f"\n'comprehend':")
-    print(f"  Coordinates: {coords.to_string()}")
-    print(f"  Token ID:    {coords.to_token_id()}")
-    print(f"  Abstraction: {coords.abstraction} (layers from primitives)")
-    print(f"  Domain:      {coords.domain} (mental)")
-    print(f"  Category:    {coords.category} (understanding)")
-    print(f"  Language:    {coords.language} (English)")
-    print(f"  Serial:      {coords.serial} (primitive fingerprint)")
+    print(f"  Coordinates:  {coords.to_string()}")
+    print(f"  Token ID:     {coords.to_token_id()}")
+    print(f"  Abstraction:  {coords.abstraction} (layers from primitives)")
+    print(f"  Domain:       {coords.domain} (mental)")
+    print(f"  Category:     {coords.category} (understanding)")
+    print(f"  Language:     {coords.language} (English)")
+    print(f"  Fingerprint:  {coords.fingerprint} (primitive composition)")
+    print(f"  Collision:    {coords.collision} (disambiguator)")
 
     # Example: "understand" - similar but different primitives
     primitives2 = [
@@ -396,12 +428,30 @@ if __name__ == "__main__":
     )
 
     print(f"\n'understand':")
-    print(f"  Coordinates: {coords2.to_string()}")
-    print(f"  Token ID:    {coords2.to_token_id()}")
+    print(f"  Coordinates:  {coords2.to_string()}")
+    print(f"  Token ID:     {coords2.to_token_id()}")
+    print(f"  Fingerprint:  {coords2.fingerprint}")
+    print(f"  Collision:    {coords2.collision}")
 
     # Compare similarity
     sim = encoder.similarity(coords.to_token_id(), coords2.to_token_id())
     print(f"\nSimilarity between 'comprehend' and 'understand': {sim:.2f}")
+
+    # Demonstrate collision handling
+    print(f"\n--- Collision Demo ---")
+
+    # Same primitives = same fingerprint = collision increment
+    coords3 = encoder.encode(
+        lemma="grasp",  # Different word
+        domain="mental",
+        category="understanding",
+        lang="eng",
+        primitives=primitives  # Same primitives as "comprehend"
+    )
+    print(f"'grasp' with same primitives as 'comprehend':")
+    print(f"  Coordinates:  {coords3.to_string()}")
+    print(f"  Fingerprint:  {coords3.fingerprint} (same as comprehend)")
+    print(f"  Collision:    {coords3.collision} (incremented!)")
 
     # Decode example
     print(f"\nDecoding {coords.to_token_id()}: {decode_token(coords.to_token_id())}")
