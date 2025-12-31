@@ -129,10 +129,42 @@ COMMON_LANGUAGES = [
     "Korean", "Arabic", "Hindi", "Polish", "Turkish"
 ]
 
+# Reverse mapping for raw data downloads (Kaikki name -> raw extract code)
+# Raw extracts use 2-letter codes or special names
+KAIKKI_TO_RAW = {
+    "English": "en",
+    "German": "de",
+    "French": "fr",
+    "Spanish": "es",
+    "Italian": "it",
+    "Portuguese": "pt",
+    "Dutch": "nl",
+    "Russian": "ru",
+    "Chinese": "zh",
+    "Japanese": "ja",
+    "Korean": "ko",
+    "Polish": "pl",
+    "Turkish": "tr",
+    "Greek": "el",
+    "Czech": "cs",
+    "Vietnamese": "vi",
+    "Thai": "th",
+    "Indonesian": "id",
+    "Malay": "ms",
+    "Kurdish": "ku",
+}
+
 
 def get_download_url(lang_name: str) -> str:
-    """Construct download URL for a language."""
-    return f"{KAIKKI_BASE}/{lang_name}/kaikki.org-dictionary-{lang_name}.json"
+    """Construct download URL for a language (postprocessed JSONL)."""
+    # Note: These files are marked as deprecated but still available
+    return f"{KAIKKI_BASE}/{lang_name}/kaikki.org-dictionary-{lang_name}.jsonl"
+
+
+def get_raw_download_url(lang_code: str) -> str:
+    """Construct download URL for raw extract data (preferred)."""
+    # Raw data is at /downloads/[code]/[code]-extract.jsonl.gz
+    return f"https://kaikki.org/downloads/{lang_code}/{lang_code}-extract.jsonl.gz"
 
 
 def download_with_retry(url: str, output_path: Path, retries: int = 4) -> bool:
@@ -255,12 +287,11 @@ def check_existing_kaikki(output_dir: Path, kaikki_name: str) -> bool:
 
 def download_language(lang_name: str, output_dir: Path, force: bool = False) -> dict:
     """Download Kaikki data for a single language."""
-    url = get_download_url(lang_name)
     output_file = output_dir / f"{lang_name.lower()}.jsonl"
 
     result = {
         "language": lang_name,
-        "url": url,
+        "url": "",
         "output_file": str(output_file),
         "success": False,
         "entries": 0,
@@ -277,36 +308,68 @@ def download_language(lang_name: str, output_dir: Path, force: bool = False) -> 
 
     print(f"\n[{lang_name}]")
 
+    # Try postprocessed JSONL first (direct download)
+    url = get_download_url(lang_name)
+    result["url"] = url
+
     if download_with_retry(url, output_file):
         result["success"] = True
         result["size_mb"] = output_file.stat().st_size / (1024 * 1024)
         result["hash"] = get_file_hash(output_file)
         print(f"  Downloaded: {result['size_mb']:.1f} MB")
 
-        # Count entries
         print("  Counting entries...", end="", flush=True)
         result["entries"] = count_entries(output_file)
         print(f" {result['entries']:,} entries")
-    else:
-        # Try compressed version
-        url_bz2 = url + ".bz2"
-        output_bz2 = output_dir / f"{lang_name.lower()}.jsonl.bz2"
-        print(f"  Trying compressed version...")
+        return result
 
-        if download_with_retry(url_bz2, output_bz2):
-            # Decompress
-            import bz2
+    # Try raw extract (gzipped) if we have a code mapping
+    raw_code = KAIKKI_TO_RAW.get(lang_name)
+    if raw_code:
+        url_raw = get_raw_download_url(raw_code)
+        output_gz = output_dir / f"{lang_name.lower()}.jsonl.gz"
+        print(f"  Trying raw extract...")
+        result["url"] = url_raw
+
+        if download_with_retry(url_raw, output_gz):
+            import gzip
             print("  Decompressing...", end="", flush=True)
-            with bz2.open(output_bz2, "rb") as f_in:
+            with gzip.open(output_gz, "rb") as f_in:
                 with open(output_file, "wb") as f_out:
-                    f_out.write(f_in.read())
-            output_bz2.unlink()
+                    # Stream to avoid loading entire file in memory
+                    while chunk := f_in.read(1024 * 1024):
+                        f_out.write(chunk)
+            output_gz.unlink()
             print(" done")
 
             result["success"] = True
             result["size_mb"] = output_file.stat().st_size / (1024 * 1024)
             result["hash"] = get_file_hash(output_file)
+            print(f"  Extracted: {result['size_mb']:.1f} MB")
+
+            print("  Counting entries...", end="", flush=True)
             result["entries"] = count_entries(output_file)
+            print(f" {result['entries']:,} entries")
+            return result
+
+    # Try compressed bz2 as last resort
+    url_bz2 = get_download_url(lang_name) + ".bz2"
+    output_bz2 = output_dir / f"{lang_name.lower()}.jsonl.bz2"
+    print(f"  Trying bz2 compressed version...")
+
+    if download_with_retry(url_bz2, output_bz2):
+        import bz2
+        print("  Decompressing...", end="", flush=True)
+        with bz2.open(output_bz2, "rb") as f_in:
+            with open(output_file, "wb") as f_out:
+                f_out.write(f_in.read())
+        output_bz2.unlink()
+        print(" done")
+
+        result["success"] = True
+        result["size_mb"] = output_file.stat().st_size / (1024 * 1024)
+        result["hash"] = get_file_hash(output_file)
+        result["entries"] = count_entries(output_file)
 
     return result
 
