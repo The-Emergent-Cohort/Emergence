@@ -397,3 +397,113 @@ SELECT
     p.name AS parent_name
 FROM language_families lf
 LEFT JOIN language_families p ON lf.parent_id = p.glottocode;
+
+-- =============================================================================
+-- TOKEN INDEX: Bootstrap table for fast token → synset lookups
+-- This is the "first query" that provides keys for all subsequent queries
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS token_index (
+    token_id INTEGER PRIMARY KEY,            -- The handle
+    synset_id INTEGER NOT NULL,              -- Family key for weight queries
+    ref_table TEXT NOT NULL,                 -- Source table: 'concepts', 'entities', 'context'
+    ref_id INTEGER NOT NULL,                 -- Row ID in that table
+    created_by TEXT DEFAULT 'import',        -- 'import', 'di', 'user'
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (synset_id) REFERENCES synsets(synset_id)
+);
+CREATE INDEX IF NOT EXISTS idx_token_synset ON token_index(synset_id);
+CREATE INDEX IF NOT EXISTS idx_token_ref ON token_index(ref_table, ref_id);
+
+-- =============================================================================
+-- INPUT NORMALIZATION: Fuzzy matching, misspellings, user patterns
+-- Input-only mappings: resolve noisy input to clean concepts
+-- Never used for output generation (one-way valve)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS input_mappings (
+    id INTEGER PRIMARY KEY,
+    input_form TEXT NOT NULL,                -- The misspelling/variant (e.g., "teh", "definately")
+    canonical_form TEXT NOT NULL,            -- Correct form (e.g., "the", "definitely")
+    concept_id INTEGER,                      -- Resolved concept (if known)
+    confidence REAL DEFAULT 0.5,             -- Confidence in mapping (0-1)
+    source TEXT DEFAULT 'detected',          -- 'common', 'user', 'detected', 'di'
+    user_id TEXT,                            -- NULL = global, otherwise user-specific
+    hit_count INTEGER DEFAULT 0,             -- Times this mapping was used
+    last_hit TEXT,                           -- Last usage timestamp
+    confirmed INTEGER DEFAULT 0,             -- 1 = confirmed by context/user
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (concept_id) REFERENCES concepts(concept_id)
+);
+CREATE INDEX IF NOT EXISTS idx_input_form ON input_mappings(input_form);
+CREATE INDEX IF NOT EXISTS idx_input_user ON input_mappings(user_id);
+CREATE INDEX IF NOT EXISTS idx_input_confidence ON input_mappings(confidence DESC);
+
+-- Ambiguous input candidates (when multiple interpretations possible)
+CREATE TABLE IF NOT EXISTS input_candidates (
+    id INTEGER PRIMARY KEY,
+    input_form TEXT NOT NULL,                -- The ambiguous input
+    candidate_concept_id INTEGER NOT NULL,   -- Possible interpretation
+    probability REAL DEFAULT 0.5,            -- P(this interpretation | input)
+    context_hint TEXT,                       -- What context favors this interpretation
+    FOREIGN KEY (candidate_concept_id) REFERENCES concepts(concept_id)
+);
+CREATE INDEX IF NOT EXISTS idx_candidate_form ON input_candidates(input_form);
+
+-- =============================================================================
+-- CONTEXT TOKENS: DI-created refinements and learned associations
+-- These are tokens/weight-clouds that DI adds through learning
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS context_tokens (
+    context_token_id INTEGER PRIMARY KEY,    -- Unique ID for this context token
+    name TEXT NOT NULL,                      -- Human-readable name
+    description TEXT,                        -- What this context represents
+    parent_synset_id INTEGER,                -- Base synset this refines (if any)
+    token_type TEXT DEFAULT 'refinement',    -- 'refinement', 'composite', 'learned', 'user_defined'
+    created_by TEXT DEFAULT 'di',            -- 'di', 'user', 'system'
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    last_activated TEXT,                     -- Last time this was used
+    activation_count INTEGER DEFAULT 0,      -- Usage frequency
+    active INTEGER DEFAULT 1,                -- 0 = deprecated/disabled
+    FOREIGN KEY (parent_synset_id) REFERENCES synsets(synset_id)
+);
+CREATE INDEX IF NOT EXISTS idx_context_parent ON context_tokens(parent_synset_id);
+CREATE INDEX IF NOT EXISTS idx_context_type ON context_tokens(token_type);
+CREATE INDEX IF NOT EXISTS idx_context_active ON context_tokens(active);
+
+-- Context token composition (for composite tokens built from multiple concepts)
+CREATE TABLE IF NOT EXISTS context_composition (
+    id INTEGER PRIMARY KEY,
+    context_token_id INTEGER NOT NULL,       -- The composite token
+    component_synset_id INTEGER NOT NULL,    -- A component synset
+    weight REAL DEFAULT 1.0,                 -- Weight of this component
+    relation TEXT DEFAULT 'part_of',         -- 'part_of', 'modifies', 'contrasts', etc.
+    FOREIGN KEY (context_token_id) REFERENCES context_tokens(context_token_id),
+    FOREIGN KEY (component_synset_id) REFERENCES synsets(synset_id)
+);
+CREATE INDEX IF NOT EXISTS idx_composition_token ON context_composition(context_token_id);
+CREATE INDEX IF NOT EXISTS idx_composition_component ON context_composition(component_synset_id);
+
+-- =============================================================================
+-- WEIGHT REFERENCES: Pointers to weight storage (organized by synset)
+-- The weights themselves are in a separate DB, this tracks what exists
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS weight_refs (
+    synset_id INTEGER PRIMARY KEY,           -- Which synset these weights are for
+    weight_db TEXT NOT NULL,                 -- Which weight database file
+    layer_count INTEGER,                     -- Number of layers stored
+    total_size INTEGER,                      -- Total bytes for this synset's weights
+    last_updated TEXT,                       -- When weights were last modified
+    checksum TEXT,                           -- For integrity verification
+    FOREIGN KEY (synset_id) REFERENCES synsets(synset_id)
+);
+
+-- Language interpretation weights (combinatorial, by feature family)
+CREATE TABLE IF NOT EXISTS lang_weight_refs (
+    id INTEGER PRIMARY KEY,
+    feature_family TEXT NOT NULL,            -- 'word_order', 'morphology', 'case_system', etc.
+    feature_value TEXT NOT NULL,             -- 'SOV', 'fusional', 'nominative-accusative', etc.
+    weight_db TEXT NOT NULL,                 -- Which weight database file
+    layer_count INTEGER,
+    total_size INTEGER,
+    UNIQUE(feature_family, feature_value)
+);
+CREATE INDEX IF NOT EXISTS idx_lang_weight_family ON lang_weight_refs(feature_family);
