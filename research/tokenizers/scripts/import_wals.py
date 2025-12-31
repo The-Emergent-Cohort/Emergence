@@ -25,9 +25,14 @@ DEFAULT_DB = SCRIPT_DIR / "db" / "language.db"
 
 
 def find_csv_file(directory: Path, patterns: list) -> Path:
-    """Find a CSV file matching one of the patterns."""
+    """Find a CSV file matching one of the patterns, searching recursively."""
     for pattern in patterns:
+        # First try direct match
         matches = list(directory.glob(pattern))
+        if matches:
+            return matches[0]
+        # Then try recursive search
+        matches = list(directory.glob(f"**/{pattern}"))
         if matches:
             return matches[0]
     return None
