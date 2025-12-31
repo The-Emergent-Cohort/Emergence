@@ -249,6 +249,7 @@ def import_to_db(
     entry_count = 0
     sense_count = 0
     form_count = 0
+    proper_noun_count = 0  # Skipped - belong in Identity DB
 
     for raw_entry in stream_jsonl(input_file):
         if limit and entry_count >= limit:
@@ -260,6 +261,12 @@ def import_to_db(
         lang_code = entry["lang_code"]
 
         if not word or not entry["senses"]:
+            continue
+
+        # Skip proper nouns - they belong in Identity DB, not Language DB
+        # Proper nouns are entity references, not composable concepts
+        if pos in ('name', 'proper noun', 'prop'):
+            proper_noun_count += 1
             continue
 
         entry_count += 1
@@ -396,6 +403,7 @@ def import_to_db(
     print(f"{'=' * 50}")
     print(f"  Time:          {elapsed:.1f} seconds")
     print(f"  Entries:       {entry_count:,}")
+    print(f"  Proper nouns:  {proper_noun_count:,} (skipped → Identity DB)")
     print(f"  Synsets:       {len(builder.synsets):,}")
     print(f"  Concepts:      {len(builder.concepts):,}")
     print(f"  Surface forms: {len(surface_forms):,}")
