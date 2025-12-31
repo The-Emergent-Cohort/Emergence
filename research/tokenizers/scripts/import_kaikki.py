@@ -55,10 +55,35 @@ class SynsetBuilder:
         gloss = re.sub(r'\s+', ' ', gloss)
         return gloss
 
-    def get_or_create_synset(self, gloss: str, pos: str = None, domain: str = None) -> int:
+    def get_or_create_synset(self, gloss: str, pos: str = None, domain: str = None, lemma: str = None) -> int:
         """Get existing synset or create new one."""
         norm_gloss = self.normalize_gloss(gloss)
-        gloss_hash = hashlib.md5(norm_gloss.encode()).hexdigest()[:16]
+
+        # For proper nouns (names), include lemma in hash - "Russell" and "Scott"
+        # shouldn't share a synset even if glosses are similar
+        # Detect by POS or by gloss patterns (given name, surname, place name, etc.)
+        is_proper_noun = (
+            pos in ('name', 'proper noun', 'prop', 'noun') and lemma and (
+                lemma[0].isupper() and (
+                    'given name' in norm_gloss or
+                    'surname' in norm_gloss or
+                    'family name' in norm_gloss or
+                    'male name' in norm_gloss or
+                    'female name' in norm_gloss or
+                    'place name' in norm_gloss or
+                    'city in' in norm_gloss or
+                    'country in' in norm_gloss or
+                    'region in' in norm_gloss
+                )
+            )
+        )
+
+        if is_proper_noun:
+            hash_input = f"{lemma}:{norm_gloss}"
+        else:
+            hash_input = norm_gloss
+
+        gloss_hash = hashlib.md5(hash_input.encode()).hexdigest()[:16]
 
         if gloss_hash in self.synset_map:
             return self.synset_map[gloss_hash]
@@ -245,8 +270,8 @@ def import_to_db(
             if not gloss:
                 continue
 
-            # Get or create synset from gloss
-            synset_id = builder.get_or_create_synset(gloss, pos=pos)
+            # Get or create synset from gloss (pass lemma for proper nouns)
+            synset_id = builder.get_or_create_synset(gloss, pos=pos, lemma=word)
 
             # Add concept
             concept_id = builder.add_concept(synset_id, word, gloss, lang_code)
