@@ -87,6 +87,76 @@ CREATE INDEX IF NOT EXISTS idx_surface_lang ON surface_forms(lang);
 CREATE INDEX IF NOT EXISTS idx_surface_freq ON surface_forms(frequency DESC);
 
 -- =============================================================================
+-- PRONUNCIATIONS: Audio/phonetic representations of surface forms
+-- Future-proofs for speech tokens - same query pattern, different modality
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS pronunciations (
+    id INTEGER PRIMARY KEY,
+    surface_form_id INTEGER NOT NULL,        -- Links to surface_forms
+    lang TEXT NOT NULL,                      -- Language code
+    ipa TEXT,                                -- IPA transcription
+    audio_ref TEXT,                          -- Path/key to audio blob/file
+    prosody TEXT,                            -- Stress, tone, intonation markers
+    dialect TEXT,                            -- Regional variant if applicable
+    source TEXT,                             -- Where this came from
+    FOREIGN KEY (surface_form_id) REFERENCES surface_forms(id)
+);
+CREATE INDEX IF NOT EXISTS idx_pron_surface ON pronunciations(surface_form_id);
+CREATE INDEX IF NOT EXISTS idx_pron_lang ON pronunciations(lang);
+
+-- =============================================================================
+-- MORPHEMES: Derivational affixes that compose into words
+-- These are the building blocks for coined terms and novel compositions
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS morphemes (
+    morpheme_id INTEGER PRIMARY KEY,
+    form TEXT NOT NULL,                      -- "un-", "-ify", "-ness", "-ing"
+    position TEXT NOT NULL,                  -- 'prefix', 'suffix', 'infix', 'circumfix'
+    category TEXT,                           -- 'negation', 'causative', 'agent', 'nominalization'
+    lang TEXT,                               -- NULL = cross-linguistic, else language-specific
+    productivity REAL DEFAULT 1.0,           -- How freely it combines (0-1, learnable)
+    root_synset_id INTEGER,                  -- Conceptual primitive it maps to
+    example TEXT,                            -- Example usage
+    FOREIGN KEY (root_synset_id) REFERENCES synsets(synset_id)
+);
+CREATE INDEX IF NOT EXISTS idx_morpheme_form ON morphemes(form);
+CREATE INDEX IF NOT EXISTS idx_morpheme_pos ON morphemes(position);
+CREATE INDEX IF NOT EXISTS idx_morpheme_cat ON morphemes(category);
+CREATE INDEX IF NOT EXISTS idx_morpheme_lang ON morphemes(lang);
+
+-- Seed common English derivational morphemes
+INSERT OR IGNORE INTO morphemes (morpheme_id, form, position, category, productivity, example) VALUES
+    -- Prefixes (2000-2099)
+    (2000, 'un-', 'prefix', 'negation', 0.9, 'unhappy, undo'),
+    (2001, 're-', 'prefix', 'repetition', 0.95, 'redo, rebuild'),
+    (2002, 'pre-', 'prefix', 'temporal', 0.8, 'preview, preorder'),
+    (2003, 'post-', 'prefix', 'temporal', 0.7, 'postwar, postmodern'),
+    (2004, 'dis-', 'prefix', 'negation', 0.85, 'disagree, disconnect'),
+    (2005, 'mis-', 'prefix', 'error', 0.8, 'mistake, misunderstand'),
+    (2006, 'anti-', 'prefix', 'opposition', 0.75, 'antiwar, antivirus'),
+    (2007, 'non-', 'prefix', 'negation', 0.9, 'nonfiction, nonprofit'),
+    (2008, 'over-', 'prefix', 'excess', 0.85, 'overdo, overthink'),
+    (2009, 'under-', 'prefix', 'insufficiency', 0.8, 'underestimate, underpay'),
+
+    -- Suffixes (2100-2199)
+    (2100, '-ify', 'suffix', 'causative', 0.7, 'simplify, clarify'),
+    (2101, '-ize', 'suffix', 'causative', 0.75, 'modernize, realize'),
+    (2102, '-ness', 'suffix', 'nominalization', 0.95, 'happiness, darkness'),
+    (2103, '-ment', 'suffix', 'nominalization', 0.7, 'movement, agreement'),
+    (2104, '-tion', 'suffix', 'nominalization', 0.85, 'action, creation'),
+    (2105, '-er', 'suffix', 'agent', 0.95, 'teacher, worker'),
+    (2106, '-ist', 'suffix', 'agent', 0.8, 'artist, scientist'),
+    (2107, '-able', 'suffix', 'capability', 0.9, 'readable, washable'),
+    (2108, '-ible', 'suffix', 'capability', 0.6, 'visible, possible'),
+    (2109, '-ful', 'suffix', 'quality', 0.85, 'beautiful, helpful'),
+    (2110, '-less', 'suffix', 'absence', 0.9, 'hopeless, careless'),
+    (2111, '-ly', 'suffix', 'adverbial', 0.95, 'quickly, happily'),
+    (2112, '-y', 'suffix', 'adjectival', 0.8, 'sunny, rainy'),
+    (2113, '-ish', 'suffix', 'approximation', 0.85, 'greenish, childish'),
+    (2114, '-ing', 'suffix', 'progressive', 0.99, 'running, thinking'),
+    (2115, '-ed', 'suffix', 'past', 0.99, 'walked, talked');
+
+-- =============================================================================
 -- MODIFIERS: Grammar tokens (occupy token range 1000-2999)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS modifiers (
