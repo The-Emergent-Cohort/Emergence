@@ -78,7 +78,17 @@ class SynsetBuilder:
             )
         )
 
-        if is_proper_noun:
+        # Chemical compounds also need their own synsets - thousands share "a chemical compound"
+        is_chemistry = (
+            'chemical compound' in norm_gloss or
+            'organic compound' in norm_gloss or
+            'inorganic compound' in norm_gloss or
+            'chemical element' in norm_gloss or
+            'pharmaceutical' in norm_gloss or
+            'drug used' in norm_gloss
+        )
+
+        if is_proper_noun or is_chemistry:
             hash_input = f"{lemma}:{norm_gloss}"
         else:
             hash_input = norm_gloss
