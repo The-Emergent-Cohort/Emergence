@@ -1,228 +1,343 @@
 #!/usr/bin/env python3
 """
-Import NSM (Natural Semantic Metalanguage) Primes
+Import NSM (Natural Semantic Metalanguage) semantic primes.
 
-The 65 semantic primes from Anna Wierzbicka's NSM theory.
-These are the irreducible core of meaning - present in all human languages.
+65 universal semantic primes from Wierzbicka's NSM theory.
+These are irreducible meaning atoms found across all languages.
 
-Sources:
-- Goddard & Wierzbicka (2014) "Words and Meanings"
-- NSM Homepage: https://nsm-approach.net/
+Run from: /usr/share/databases/scripts/
+Requires: init_schemas.py to have been run first
 """
 
 import sqlite3
-import json
 from pathlib import Path
-from datetime import datetime
 
-# NSM Semantic Primes organized by category
-# Format: (canonical_name, domain, category, description, example_forms)
+# Path configuration
+SCRIPT_DIR = Path(__file__).parent
+BASE_DIR = SCRIPT_DIR.parent
+DB_DIR = BASE_DIR / "db"
+PRIMITIVES_DB = DB_DIR / "primitives.db"
+
+# NSM Semantic Primes organized by domain and category
+# Format: (name, domain, category, description, examples)
 NSM_PRIMES = [
     # === SUBSTANTIVES ===
-    ("I", 3, 4, "First person singular", {"eng": "I", "fra": "je", "deu": "ich", "spa": "yo", "jpn": "私", "zho": "我"}),
-    ("YOU", 3, 4, "Second person singular", {"eng": "you", "fra": "tu", "deu": "du", "spa": "tú", "jpn": "あなた", "zho": "你"}),
-    ("SOMEONE", 4, 2, "Indefinite person", {"eng": "someone", "fra": "quelqu'un", "deu": "jemand", "spa": "alguien"}),
-    ("SOMETHING", 5, 5, "Indefinite thing", {"eng": "something", "fra": "quelque chose", "deu": "etwas", "spa": "algo"}),
-    ("PEOPLE", 4, 3, "Human collective", {"eng": "people", "fra": "gens", "deu": "Leute", "spa": "gente"}),
-    ("BODY", 6, 2, "Physical body", {"eng": "body", "fra": "corps", "deu": "Körper", "spa": "cuerpo"}),
+    ("I", 3, 14, "First person singular", "I, me"),
+    ("YOU", 3, 14, "Second person", "you"),
+    ("SOMEONE", 3, 14, "Indefinite person", "someone, person"),
+    ("SOMETHING", 5, 33, "Indefinite thing", "something, thing"),
+    ("PEOPLE", 4, 23, "Collective persons", "people"),
+    ("BODY", 6, 5, "Physical body", "body"),
 
     # === RELATIONAL SUBSTANTIVES ===
-    ("KIND", 5, 5, "Type/category", {"eng": "kind", "fra": "sorte", "deu": "Art", "spa": "tipo"}),
-    ("PART", 5, 6, "Part of whole", {"eng": "part", "fra": "partie", "deu": "Teil", "spa": "parte"}),
+    ("KIND", 5, 33, "Type or category", "kind, sort, type"),
+    ("PART", 5, 34, "Component", "part"),
 
     # === DETERMINERS ===
-    ("THIS", 5, 5, "Proximal demonstrative", {"eng": "this", "fra": "ce", "deu": "dies", "spa": "esto"}),
-    ("THE_SAME", 5, 3, "Identity", {"eng": "the same", "fra": "le même", "deu": "derselbe", "spa": "el mismo"}),
-    ("OTHER", 5, 3, "Difference/alterity", {"eng": "other", "fra": "autre", "deu": "andere", "spa": "otro"}),
+    ("THIS", 5, 33, "Proximal demonstrative", "this"),
+    ("THE_SAME", 5, 31, "Identity", "the same"),
+    ("OTHER", 5, 31, "Difference", "other, another, else"),
 
     # === QUANTIFIERS ===
-    ("ONE", 5, 1, "Singular quantity", {"eng": "one", "fra": "un", "deu": "ein", "spa": "uno"}),
-    ("TWO", 5, 1, "Dual quantity", {"eng": "two", "fra": "deux", "deu": "zwei", "spa": "dos"}),
-    ("SOME", 5, 1, "Partial quantity", {"eng": "some", "fra": "quelques", "deu": "einige", "spa": "algunos"}),
-    ("ALL", 5, 1, "Total quantity", {"eng": "all", "fra": "tout", "deu": "alle", "spa": "todo"}),
-    ("MUCH_MANY", 5, 1, "Large quantity", {"eng": "much/many", "fra": "beaucoup", "deu": "viel", "spa": "mucho"}),
+    ("ONE", 5, 29, "Singular quantity", "one"),
+    ("TWO", 5, 29, "Dual quantity", "two"),
+    ("SOME", 5, 29, "Partial quantity", "some"),
+    ("ALL", 5, 29, "Total quantity", "all, every"),
+    ("MUCH_MANY", 5, 29, "Large quantity", "much, many"),
 
     # === EVALUATORS ===
-    ("GOOD", 9, 1, "Positive evaluation", {"eng": "good", "fra": "bon", "deu": "gut", "spa": "bueno"}),
-    ("BAD", 9, 1, "Negative evaluation", {"eng": "bad", "fra": "mauvais", "deu": "schlecht", "spa": "malo"}),
+    ("GOOD", 9, 35, "Positive evaluation", "good"),
+    ("BAD", 9, 35, "Negative evaluation", "bad"),
 
     # === DESCRIPTORS ===
-    ("BIG", 1, 6, "Large size", {"eng": "big", "fra": "grand", "deu": "groß", "spa": "grande"}),
-    ("SMALL", 1, 6, "Small size", {"eng": "small", "fra": "petit", "deu": "klein", "spa": "pequeño"}),
+    ("BIG", 1, 6, "Large size", "big, large"),
+    ("SMALL", 1, 6, "Small size", "small, little"),
 
     # === MENTAL PREDICATES ===
-    ("THINK", 3, 2, "Cognitive process", {"eng": "think", "fra": "penser", "deu": "denken", "spa": "pensar"}),
-    ("KNOW", 3, 2, "Epistemic state", {"eng": "know", "fra": "savoir", "deu": "wissen", "spa": "saber"}),
-    ("WANT", 3, 4, "Volition", {"eng": "want", "fra": "vouloir", "deu": "wollen", "spa": "querer"}),
-    ("DONT_WANT", 3, 4, "Negative volition", {"eng": "don't want", "fra": "ne pas vouloir", "deu": "nicht wollen", "spa": "no querer"}),
-    ("FEEL", 3, 3, "Emotional state", {"eng": "feel", "fra": "sentir", "deu": "fühlen", "spa": "sentir"}),
-    ("SEE", 3, 1, "Visual perception", {"eng": "see", "fra": "voir", "deu": "sehen", "spa": "ver"}),
-    ("HEAR", 3, 1, "Auditory perception", {"eng": "hear", "fra": "entendre", "deu": "hören", "spa": "oír"}),
+    ("THINK", 3, 14, "Cognitive process", "think"),
+    ("KNOW", 3, 19, "Knowledge state", "know"),
+    ("WANT", 3, 16, "Desire", "want"),
+    ("DONT_WANT", 3, 16, "Negative desire", "don't want, refuse"),
+    ("FEEL", 3, 15, "Emotional experience", "feel"),
+    ("SEE", 3, 13, "Visual perception", "see"),
+    ("HEAR", 3, 13, "Auditory perception", "hear"),
 
     # === SPEECH ===
-    ("SAY", 4, 1, "Speech act", {"eng": "say", "fra": "dire", "deu": "sagen", "spa": "decir"}),
-    ("WORDS", 4, 1, "Linguistic units", {"eng": "words", "fra": "mots", "deu": "Wörter", "spa": "palabras"}),
-    ("TRUE", 5, 4, "Truth value", {"eng": "true", "fra": "vrai", "deu": "wahr", "spa": "verdadero"}),
+    ("SAY", 4, 21, "Verbal communication", "say"),
+    ("WORDS", 4, 21, "Linguistic units", "words"),
+    ("TRUE", 5, 32, "Truth value", "true"),
 
     # === ACTIONS, EVENTS, MOVEMENT ===
-    ("DO", 1, 4, "Action/agency", {"eng": "do", "fra": "faire", "deu": "tun", "spa": "hacer"}),
-    ("HAPPEN", 2, 4, "Event occurrence", {"eng": "happen", "fra": "arriver", "deu": "geschehen", "spa": "pasar"}),
-    ("MOVE", 1, 1, "Motion", {"eng": "move", "fra": "bouger", "deu": "bewegen", "spa": "mover"}),
+    ("DO", 1, 4, "Action", "do"),
+    ("HAPPEN", 1, 4, "Event occurrence", "happen"),
+    ("MOVE", 1, 1, "Physical movement", "move"),
+    ("TOUCH", 1, 3, "Physical contact", "touch"),
 
-    # === EXISTENCE, POSSESSION ===
-    ("BE", 1, 5, "Existence/state", {"eng": "be", "fra": "être", "deu": "sein", "spa": "ser/estar"}),
-    ("THERE_IS", 1, 5, "Existential", {"eng": "there is", "fra": "il y a", "deu": "es gibt", "spa": "hay"}),
-    ("BE_SOMEONES", 4, 4, "Possession", {"eng": "be someone's", "fra": "être à", "deu": "gehören", "spa": "ser de"}),
+    # === LOCATION, EXISTENCE, SPECIFICATION ===
+    ("BE_SOMEWHERE", 1, 2, "Location", "be somewhere"),
+    ("THERE_IS", 1, 5, "Existence", "there is, exist"),
+    ("BE_SOMEONE_SOMETHING", 5, 33, "Identity/specification", "be"),
+
+    # === POSSESSION ===
+    ("HAVE", 4, 24, "Possession", "have"),
 
     # === LIFE AND DEATH ===
-    ("LIVE", 6, 1, "Being alive", {"eng": "live", "fra": "vivre", "deu": "leben", "spa": "vivir"}),
-    ("DIE", 6, 1, "Death", {"eng": "die", "fra": "mourir", "deu": "sterben", "spa": "morir"}),
+    ("LIVE", 6, 5, "Being alive", "live, alive"),
+    ("DIE", 6, 5, "Death", "die"),
 
     # === TIME ===
-    ("WHEN", 2, 1, "Temporal question", {"eng": "when", "fra": "quand", "deu": "wann", "spa": "cuándo"}),
-    ("NOW", 2, 1, "Present time", {"eng": "now", "fra": "maintenant", "deu": "jetzt", "spa": "ahora"}),
-    ("BEFORE", 2, 1, "Prior time", {"eng": "before", "fra": "avant", "deu": "vorher", "spa": "antes"}),
-    ("AFTER", 2, 1, "Posterior time", {"eng": "after", "fra": "après", "deu": "nachher", "spa": "después"}),
-    ("A_LONG_TIME", 2, 2, "Extended duration", {"eng": "a long time", "fra": "longtemps", "deu": "lange", "spa": "mucho tiempo"}),
-    ("A_SHORT_TIME", 2, 2, "Brief duration", {"eng": "a short time", "fra": "peu de temps", "deu": "kurz", "spa": "poco tiempo"}),
-    ("FOR_SOME_TIME", 2, 2, "Indefinite duration", {"eng": "for some time", "fra": "pendant quelque temps", "deu": "eine Weile", "spa": "por un tiempo"}),
-    ("MOMENT", 2, 2, "Instant", {"eng": "moment", "fra": "moment", "deu": "Moment", "spa": "momento"}),
+    ("WHEN", 2, 12, "Temporal reference", "when, time"),
+    ("NOW", 2, 12, "Present time", "now"),
+    ("BEFORE", 2, 9, "Temporal precedence", "before"),
+    ("AFTER", 2, 9, "Temporal succession", "after"),
+    ("A_LONG_TIME", 2, 10, "Extended duration", "a long time"),
+    ("A_SHORT_TIME", 2, 10, "Brief duration", "a short time"),
+    ("FOR_SOME_TIME", 2, 10, "Duration", "for some time"),
+    ("MOMENT", 2, 10, "Instant", "moment"),
 
     # === SPACE ===
-    ("WHERE", 1, 2, "Spatial question", {"eng": "where", "fra": "où", "deu": "wo", "spa": "dónde"}),
-    ("HERE", 1, 2, "Proximal location", {"eng": "here", "fra": "ici", "deu": "hier", "spa": "aquí"}),
-    ("ABOVE", 1, 2, "Superior position", {"eng": "above", "fra": "au-dessus", "deu": "über", "spa": "arriba"}),
-    ("BELOW", 1, 2, "Inferior position", {"eng": "below", "fra": "en-dessous", "deu": "unter", "spa": "abajo"}),
-    ("FAR", 1, 2, "Distant", {"eng": "far", "fra": "loin", "deu": "weit", "spa": "lejos"}),
-    ("NEAR", 1, 2, "Proximate", {"eng": "near", "fra": "près", "deu": "nah", "spa": "cerca"}),
-    ("SIDE", 1, 2, "Lateral position", {"eng": "side", "fra": "côté", "deu": "Seite", "spa": "lado"}),
-    ("INSIDE", 1, 2, "Interior", {"eng": "inside", "fra": "dedans", "deu": "innen", "spa": "dentro"}),
-    ("TOUCH", 1, 3, "Physical contact", {"eng": "touch", "fra": "toucher", "deu": "berühren", "spa": "tocar"}),
+    ("WHERE", 1, 2, "Spatial reference", "where, place"),
+    ("HERE", 1, 2, "Proximal location", "here"),
+    ("ABOVE", 1, 2, "Vertical superior", "above"),
+    ("BELOW", 1, 2, "Vertical inferior", "below"),
+    ("FAR", 1, 2, "Distant", "far"),
+    ("NEAR", 1, 2, "Proximate", "near"),
+    ("SIDE", 1, 2, "Lateral", "side"),
+    ("INSIDE", 1, 2, "Interior", "inside"),
 
     # === LOGICAL CONCEPTS ===
-    ("NOT", 5, 4, "Negation", {"eng": "not", "fra": "ne...pas", "deu": "nicht", "spa": "no"}),
-    ("MAYBE", 5, 4, "Possibility", {"eng": "maybe", "fra": "peut-être", "deu": "vielleicht", "spa": "quizás"}),
-    ("CAN", 5, 4, "Ability/possibility", {"eng": "can", "fra": "pouvoir", "deu": "können", "spa": "poder"}),
-    ("BECAUSE", 5, 4, "Causation", {"eng": "because", "fra": "parce que", "deu": "weil", "spa": "porque"}),
-    ("IF", 5, 4, "Conditional", {"eng": "if", "fra": "si", "deu": "wenn", "spa": "si"}),
+    ("NOT", 5, 32, "Negation", "not"),
+    ("MAYBE", 5, 32, "Possibility", "maybe, perhaps"),
+    ("CAN", 5, 32, "Ability/possibility", "can"),
+    ("BECAUSE", 5, 32, "Causation", "because"),
+    ("IF", 5, 32, "Condition", "if"),
 
-    # === INTENSIFIER, AUGMENTOR ===
-    ("VERY", 5, 2, "Intensifier", {"eng": "very", "fra": "très", "deu": "sehr", "spa": "muy"}),
-    ("MORE", 5, 3, "Comparative", {"eng": "more", "fra": "plus", "deu": "mehr", "spa": "más"}),
+    # === AUGMENTOR ===
+    ("VERY", 5, 30, "Intensifier", "very"),
+    ("MORE", 5, 30, "Comparative", "more"),
 
     # === SIMILARITY ===
-    ("LIKE", 5, 3, "Similarity", {"eng": "like", "fra": "comme", "deu": "wie", "spa": "como"}),
+    ("LIKE", 5, 31, "Similarity", "like, as"),
 ]
 
-# Language code mapping (matching language_registry)
-LANG_CODES = {
-    "eng": 100,
-    "fra": 450,
-    "deu": 400,
-    "spa": 200,
-    "jpn": 350,
-    "zho": 150,
-    "ara": 250,
-    "hin": 300,
-    "por": 500,
-    "rus": 550,
-}
+# Cross-linguistic forms for major languages
+# Format: (prime_name, lang_genomic, surface_form)
+# Lang genomic codes: FF.SS.LLL.DD
+#   1.8.127.0 = Indo-European.Germanic.English.core
+#   1.8.200.0 = Indo-European.Germanic.German.core
+#   1.12.100.0 = Indo-European.Romance.French.core
+#   1.12.150.0 = Indo-European.Romance.Spanish.core
+#   9.0.100.0 = Japonic.-.Japanese.core
+#   2.1.100.0 = Sino-Tibetan.Sinitic.Mandarin.core
+
+PRIME_FORMS = [
+    # English (1.8.127.0) - generate from canonical names
+    *[(p[0], "1.8.127.0", p[0].lower().replace("_", " ")) for p in NSM_PRIMES],
+
+    # German (1.8.200.0)
+    ("I", "1.8.200.0", "ich"),
+    ("YOU", "1.8.200.0", "du"),
+    ("SOMEONE", "1.8.200.0", "jemand"),
+    ("SOMETHING", "1.8.200.0", "etwas"),
+    ("PEOPLE", "1.8.200.0", "Leute"),
+    ("THINK", "1.8.200.0", "denken"),
+    ("KNOW", "1.8.200.0", "wissen"),
+    ("WANT", "1.8.200.0", "wollen"),
+    ("FEEL", "1.8.200.0", "fühlen"),
+    ("SEE", "1.8.200.0", "sehen"),
+    ("HEAR", "1.8.200.0", "hören"),
+    ("SAY", "1.8.200.0", "sagen"),
+    ("DO", "1.8.200.0", "tun"),
+    ("GOOD", "1.8.200.0", "gut"),
+    ("BAD", "1.8.200.0", "schlecht"),
+    ("BIG", "1.8.200.0", "groß"),
+    ("SMALL", "1.8.200.0", "klein"),
+    ("NOT", "1.8.200.0", "nicht"),
+    ("NOW", "1.8.200.0", "jetzt"),
+    ("HERE", "1.8.200.0", "hier"),
+    ("MOVE", "1.8.200.0", "bewegen"),
+    ("LIVE", "1.8.200.0", "leben"),
+    ("DIE", "1.8.200.0", "sterben"),
+    ("TRUE", "1.8.200.0", "wahr"),
+
+    # French (1.12.100.0)
+    ("I", "1.12.100.0", "je"),
+    ("YOU", "1.12.100.0", "tu"),
+    ("SOMEONE", "1.12.100.0", "quelqu'un"),
+    ("SOMETHING", "1.12.100.0", "quelque chose"),
+    ("PEOPLE", "1.12.100.0", "gens"),
+    ("THINK", "1.12.100.0", "penser"),
+    ("KNOW", "1.12.100.0", "savoir"),
+    ("WANT", "1.12.100.0", "vouloir"),
+    ("FEEL", "1.12.100.0", "sentir"),
+    ("SEE", "1.12.100.0", "voir"),
+    ("HEAR", "1.12.100.0", "entendre"),
+    ("SAY", "1.12.100.0", "dire"),
+    ("DO", "1.12.100.0", "faire"),
+    ("GOOD", "1.12.100.0", "bon"),
+    ("BAD", "1.12.100.0", "mauvais"),
+    ("BIG", "1.12.100.0", "grand"),
+    ("SMALL", "1.12.100.0", "petit"),
+    ("NOT", "1.12.100.0", "ne pas"),
+    ("NOW", "1.12.100.0", "maintenant"),
+    ("HERE", "1.12.100.0", "ici"),
+    ("MOVE", "1.12.100.0", "bouger"),
+    ("LIVE", "1.12.100.0", "vivre"),
+    ("DIE", "1.12.100.0", "mourir"),
+    ("TRUE", "1.12.100.0", "vrai"),
+
+    # Spanish (1.12.150.0)
+    ("I", "1.12.150.0", "yo"),
+    ("YOU", "1.12.150.0", "tú"),
+    ("SOMEONE", "1.12.150.0", "alguien"),
+    ("SOMETHING", "1.12.150.0", "algo"),
+    ("PEOPLE", "1.12.150.0", "gente"),
+    ("THINK", "1.12.150.0", "pensar"),
+    ("KNOW", "1.12.150.0", "saber"),
+    ("WANT", "1.12.150.0", "querer"),
+    ("FEEL", "1.12.150.0", "sentir"),
+    ("SEE", "1.12.150.0", "ver"),
+    ("HEAR", "1.12.150.0", "oír"),
+    ("SAY", "1.12.150.0", "decir"),
+    ("DO", "1.12.150.0", "hacer"),
+    ("GOOD", "1.12.150.0", "bueno"),
+    ("BAD", "1.12.150.0", "malo"),
+    ("BIG", "1.12.150.0", "grande"),
+    ("SMALL", "1.12.150.0", "pequeño"),
+    ("NOT", "1.12.150.0", "no"),
+    ("NOW", "1.12.150.0", "ahora"),
+    ("HERE", "1.12.150.0", "aquí"),
+    ("MOVE", "1.12.150.0", "mover"),
+    ("LIVE", "1.12.150.0", "vivir"),
+    ("DIE", "1.12.150.0", "morir"),
+    ("TRUE", "1.12.150.0", "verdadero"),
+
+    # Japanese (9.0.100.0)
+    ("I", "9.0.100.0", "私"),
+    ("YOU", "9.0.100.0", "あなた"),
+    ("SOMEONE", "9.0.100.0", "誰か"),
+    ("SOMETHING", "9.0.100.0", "何か"),
+    ("PEOPLE", "9.0.100.0", "人々"),
+    ("THINK", "9.0.100.0", "思う"),
+    ("KNOW", "9.0.100.0", "知る"),
+    ("WANT", "9.0.100.0", "欲しい"),
+    ("SEE", "9.0.100.0", "見る"),
+    ("HEAR", "9.0.100.0", "聞く"),
+    ("SAY", "9.0.100.0", "言う"),
+    ("DO", "9.0.100.0", "する"),
+    ("GOOD", "9.0.100.0", "良い"),
+    ("BAD", "9.0.100.0", "悪い"),
+    ("BIG", "9.0.100.0", "大きい"),
+    ("SMALL", "9.0.100.0", "小さい"),
+    ("NOT", "9.0.100.0", "ない"),
+    ("NOW", "9.0.100.0", "今"),
+    ("HERE", "9.0.100.0", "ここ"),
+
+    # Mandarin (2.1.100.0)
+    ("I", "2.1.100.0", "我"),
+    ("YOU", "2.1.100.0", "你"),
+    ("SOMEONE", "2.1.100.0", "有人"),
+    ("SOMETHING", "2.1.100.0", "东西"),
+    ("PEOPLE", "2.1.100.0", "人"),
+    ("THINK", "2.1.100.0", "想"),
+    ("KNOW", "2.1.100.0", "知道"),
+    ("WANT", "2.1.100.0", "要"),
+    ("SEE", "2.1.100.0", "看"),
+    ("HEAR", "2.1.100.0", "听"),
+    ("SAY", "2.1.100.0", "说"),
+    ("DO", "2.1.100.0", "做"),
+    ("GOOD", "2.1.100.0", "好"),
+    ("BAD", "2.1.100.0", "坏"),
+    ("BIG", "2.1.100.0", "大"),
+    ("SMALL", "2.1.100.0", "小"),
+    ("NOT", "2.1.100.0", "不"),
+    ("NOW", "2.1.100.0", "现在"),
+    ("HERE", "2.1.100.0", "这里"),
+]
 
 
-def create_database(db_path: Path) -> sqlite3.Connection:
-    """Create primitives database with schema."""
-    conn = sqlite3.connect(db_path)
+def generate_token_id(primitive_id: int, domain: int, category: int) -> str:
+    """
+    Generate genomic token ID for a primitive.
 
-    # Read and execute schema
-    schema_path = db_path.parent / "SCHEMA-primitives.sql"
-    if schema_path.exists():
-        with open(schema_path) as f:
-            conn.executescript(f.read())
+    Format: A.D.C.FF.SS.LLL.DD.FP.COL
 
-    return conn
-
-
-def import_nsm_primes(conn: sqlite3.Connection) -> int:
-    """Import NSM primes into the primitives table."""
-    cursor = conn.cursor()
-
-    primes_added = 0
-    forms_added = 0
-
-    for i, (name, domain, category, description, forms) in enumerate(NSM_PRIMES, start=1):
-        # Insert primitive
-        cursor.execute("""
-            INSERT OR IGNORE INTO primitives
-            (primitive_id, canonical_name, source, domain, category, description)
-            VALUES (?, ?, 'nsm', ?, ?, ?)
-        """, (i, name, domain, category, description))
-
-        if cursor.rowcount > 0:
-            primes_added += 1
-
-        # Insert language forms
-        for lang_iso, surface_form in forms.items():
-            lang_code = LANG_CODES.get(lang_iso, 9999)
-            cursor.execute("""
-                INSERT OR IGNORE INTO primitive_forms
-                (primitive_id, lang_code, surface_form, source)
-                VALUES (?, ?, ?, 'nsm_research')
-            """, (i, lang_code, surface_form))
-
-            if cursor.rowcount > 0:
-                forms_added += 1
-
-    # Record import metadata
-    cursor.execute("""
-        INSERT INTO import_metadata (source, record_count, notes)
-        VALUES ('nsm_primes', ?, ?)
-    """, (primes_added, f"65 NSM semantic primes, {forms_added} language forms"))
-
-    conn.commit()
-    return primes_added
+    For primitives:
+    - A = 1 (abstraction level 1 = primitive)
+    - D = domain
+    - C = category
+    - FF.SS.LLL.DD = 0.0.0.0 (universal)
+    - FP = primitive_id (unique identifier)
+    - COL = 0 (no collision for primitives)
+    """
+    return f"1.{domain}.{category}.0.0.0.0.{primitive_id}.0"
 
 
 def main():
-    import argparse
-    parser = argparse.ArgumentParser(description="Import NSM semantic primes")
-    parser.add_argument("--db", type=Path,
-                       default=Path(__file__).parent.parent / "db" / "primitives.db",
-                       help="Database path")
-    parser.add_argument("--schema", type=Path,
-                       default=Path(__file__).parent.parent / "db" / "SCHEMA-primitives.sql",
-                       help="Schema file path")
-    args = parser.parse_args()
+    print("=" * 60)
+    print("Importing NSM Semantic Primes")
+    print("=" * 60)
 
-    # Ensure db directory exists
-    args.db.parent.mkdir(parents=True, exist_ok=True)
+    if not PRIMITIVES_DB.exists():
+        print(f"ERROR: {PRIMITIVES_DB} not found.")
+        print("Run init_schemas.py first.")
+        return 1
 
-    # Create database with schema
-    conn = sqlite3.connect(args.db)
-
-    if args.schema.exists():
-        print(f"Applying schema from {args.schema}")
-        with open(args.schema) as f:
-            conn.executescript(f.read())
-
-    # Import primes
-    print("Importing NSM semantic primes...")
-    count = import_nsm_primes(conn)
-
-    # Summary
+    conn = sqlite3.connect(PRIMITIVES_DB)
     cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM primitives WHERE source = 'nsm'")
-    total_primes = cursor.fetchone()[0]
 
-    cursor.execute("SELECT COUNT(*) FROM primitive_forms")
-    total_forms = cursor.fetchone()[0]
+    # Clear existing NSM primes
+    cursor.execute("DELETE FROM primitive_forms WHERE primitive_id IN (SELECT primitive_id FROM primitives WHERE source = 'nsm')")
+    cursor.execute("DELETE FROM primitives WHERE source = 'nsm'")
+    cursor.execute("DELETE FROM token_index WHERE location = 'primitives' AND token_id LIKE '1.%'")
 
-    print(f"\nImport complete:")
-    print(f"  Primitives: {total_primes}")
-    print(f"  Language forms: {total_forms}")
-    print(f"  Database: {args.db}")
+    print(f"\nInserting {len(NSM_PRIMES)} NSM primes...")
 
+    # Insert primes
+    for i, (name, domain, category, description, examples) in enumerate(NSM_PRIMES, 1):
+        cursor.execute("""
+            INSERT INTO primitives (primitive_id, canonical_name, source, domain, category, description, examples)
+            VALUES (?, ?, 'nsm', ?, ?, ?, ?)
+        """, (i, name, domain, category, description, examples))
+
+        # Generate and insert token_id
+        token_id = generate_token_id(i, domain, category)
+        cursor.execute("""
+            INSERT INTO token_index (token_id, description, location)
+            VALUES (?, ?, 'primitives')
+        """, (token_id, f"NSM:{name}"))
+
+    print(f"  ✓ Inserted {len(NSM_PRIMES)} primitives")
+
+    # Build name->id mapping
+    cursor.execute("SELECT canonical_name, primitive_id FROM primitives WHERE source = 'nsm'")
+    name_to_id = {row[0]: row[1] for row in cursor.fetchall()}
+
+    # Insert forms
+    print(f"\nInserting {len(PRIME_FORMS)} surface forms...")
+    forms_inserted = 0
+    for prime_name, lang_genomic, surface_form in PRIME_FORMS:
+        if prime_name in name_to_id:
+            cursor.execute("""
+                INSERT INTO primitive_forms (primitive_id, lang_genomic, surface_form, source)
+                VALUES (?, ?, ?, 'nsm')
+            """, (name_to_id[prime_name], lang_genomic, surface_form))
+            forms_inserted += 1
+
+    print(f"  ✓ Inserted {forms_inserted} surface forms")
+
+    conn.commit()
     conn.close()
+
+    print("\n" + "=" * 60)
+    print("NSM import complete!")
+    print("=" * 60)
+    print(f"\nPrimitives: {len(NSM_PRIMES)}")
+    print(f"Surface forms: {forms_inserted}")
+    print(f"\nDatabase: {PRIMITIVES_DB}")
+
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    exit(main())

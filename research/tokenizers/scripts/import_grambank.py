@@ -2,129 +2,100 @@
 """
 Import Grambank CLDF data.
 
-Grambank provides 195 binary grammatical features for 2400+ languages.
-Features are coded as 0/1/? for presence/absence/unknown.
+Populates language_features in language_registry.db with grammatical features.
 
-Populates:
-- feature_definitions: What each feature means
-- language_features: Feature values per language
-
-Usage:
-    python import_grambank.py                           # Default paths
-    python import_grambank.py --input reference/grambank
+Run from: /usr/share/databases/scripts/
+Requires: init_schemas.py and import_glottolog.py to have been run first
 """
 
-import argparse
 import csv
-import json
 import sqlite3
-import sys
 from pathlib import Path
 
-# Paths
-SCRIPT_DIR = Path(__file__).parent.parent
-DEFAULT_INPUT = SCRIPT_DIR / "reference" / "grambank"
-DEFAULT_DB = SCRIPT_DIR / "db" / "language.db"
+# Path configuration
+SCRIPT_DIR = Path(__file__).parent
+BASE_DIR = SCRIPT_DIR.parent
+DB_DIR = BASE_DIR / "db"
+REF_DIR = BASE_DIR / "reference"
+LANGUAGE_REGISTRY_DB = DB_DIR / "language_registry.db"
 
 
 def find_csv_file(directory: Path, patterns: list) -> Path:
-    """Find a CSV file matching one of the patterns, searching recursively."""
+    """Find a CSV file matching one of the patterns."""
     for pattern in patterns:
-        # First try direct match
-        matches = list(directory.glob(pattern))
+        matches = list(directory.rglob(pattern))
         if matches:
-            return matches[0]
-        # Then try recursive search
-        matches = list(directory.glob(f"**/{pattern}"))
-        if matches:
-            return matches[0]
+            return max(matches, key=lambda p: p.stat().st_mtime)
     return None
 
 
-def import_grambank(input_dir: Path, db_path: Path):
-    """Import Grambank data into SQLite."""
+def main():
+    print("=" * 60)
+    print("Importing Grambank Grammatical Features")
+    print("=" * 60)
 
-    print(f"Importing Grambank data")
-    print(f"  Input:  {input_dir}")
-    print(f"  Output: {db_path}")
-    print()
+    if not LANGUAGE_REGISTRY_DB.exists():
+        print(f"ERROR: {LANGUAGE_REGISTRY_DB} not found.")
+        print("Run init_schemas.py and import_glottolog.py first.")
+        return 1
 
-    # Find files
-    params_file = find_csv_file(input_dir, ["parameters.csv", "*parameter*.csv"])
-    values_file = find_csv_file(input_dir, ["values.csv", "*value*.csv"])
+    # Find Grambank data
+    grambank_dir = REF_DIR / "grambank"
+    if not grambank_dir.exists():
+        print(f"ERROR: {grambank_dir} not found.")
+        return 1
+
+    values_file = find_csv_file(grambank_dir, ["values.csv", "*value*.csv"])
+    codes_file = find_csv_file(grambank_dir, ["codes.csv", "*code*.csv"])
+    params_file = find_csv_file(grambank_dir, ["parameters.csv", "*parameter*.csv"])
 
     if not values_file:
-        print(f"Error: No values.csv found in {input_dir}")
-        sys.exit(1)
+        print(f"ERROR: No values.csv found in {grambank_dir}")
+        return 1
 
-    print(f"Found: {values_file.name}")
+    print(f"\nFound: {values_file}")
+
+    conn = sqlite3.connect(LANGUAGE_REGISTRY_DB)
+    cursor = conn.cursor()
+
+    # Build glottocode -> lang_id mapping
+    cursor.execute("SELECT id, glottocode FROM language_codes WHERE glottocode IS NOT NULL")
+    glotto_to_id = {row[1]: row[0] for row in cursor.fetchall()}
+    print(f"Loaded {len(glotto_to_id)} language mappings")
+
+    # Load parameter names if available
+    param_names = {}
     if params_file:
-        print(f"Found: {params_file.name}")
-
-    conn = sqlite3.connect(db_path)
-    conn.execute("PRAGMA foreign_keys = OFF")
-
-    # Load feature definitions
-    features = {}
-    if params_file:
-        print("\nReading feature definitions...", end="", flush=True)
+        print("Reading parameter definitions...")
         with open(params_file, "r", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
-                feature_id = row.get("ID", row.get("id", ""))
+                param_id = row.get("ID", row.get("id", ""))
                 name = row.get("Name", row.get("name", ""))
-                desc = row.get("Description", row.get("description", ""))
+                if param_id and name:
+                    param_names[param_id] = name
+        print(f"  Loaded {len(param_names)} parameters")
 
-                if feature_id:
-                    # Grambank features are GB### format
-                    # Infer domain from feature description
-                    domain = "grammar"
-                    name_lower = name.lower() if name else ""
-                    desc_lower = desc.lower() if desc else ""
-                    combined = name_lower + " " + desc_lower
+    # Load code values if available
+    value_names = {}
+    if codes_file:
+        print("Reading value codes...")
+        with open(codes_file, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                code_id = row.get("ID", row.get("id", ""))
+                name = row.get("Name", row.get("name", ""))
+                if code_id and name:
+                    value_names[code_id] = name
+        print(f"  Loaded {len(value_names)} codes")
 
-                    if any(x in combined for x in ["order", "position", "preverb", "postverb"]):
-                        domain = "word_order"
-                    elif any(x in combined for x in ["case", "ergative", "accusative", "nominative"]):
-                        domain = "case"
-                    elif any(x in combined for x in ["gender", "noun class", "classifier"]):
-                        domain = "nominal"
-                    elif any(x in combined for x in ["tense", "aspect", "mood", "verb"]):
-                        domain = "verbal"
-                    elif any(x in combined for x in ["negat"]):
-                        domain = "negation"
-                    elif any(x in combined for x in ["affix", "prefix", "suffix", "inflect"]):
-                        domain = "morphology"
-                    elif any(x in combined for x in ["plural", "number", "dual"]):
-                        domain = "number"
-                    elif any(x in combined for x in ["definite", "article", "demonstrat"]):
-                        domain = "definiteness"
+    # Clear existing Grambank features
+    cursor.execute("DELETE FROM language_features WHERE source = 'grambank'")
 
-                    features[feature_id] = {
-                        "feature_id": feature_id,
-                        "name": name,
-                        "description": desc,
-                        "domain": domain,
-                        "source": "grambank",
-                        "possible_values": json.dumps(["0", "1", "?"])  # Binary + unknown
-                    }
-        print(f" {len(features)} features")
-
-    # Insert feature definitions
-    if features:
-        print("Inserting feature definitions...", end="", flush=True)
-        conn.executemany(
-            """INSERT OR REPLACE INTO feature_definitions
-               (feature_id, name, description, domain, source, possible_values)
-               VALUES (:feature_id, :name, :description, :domain, :source, :possible_values)""",
-            list(features.values())
-        )
-        conn.commit()
-        print(" done")
-
-    # Load language feature values
-    print("Reading language feature values...", end="", flush=True)
-    values = []
+    # Load and insert values
+    print("Reading Grambank values...")
+    inserted = 0
+    skipped = 0
     skipped_unknown = 0
 
     with open(values_file, "r", encoding="utf-8") as f:
@@ -134,108 +105,76 @@ def import_grambank(input_dir: Path, db_path: Path):
         lang_col = next((c for c in fieldnames if 'language' in c.lower() and 'id' in c.lower()), None)
         param_col = next((c for c in fieldnames if 'parameter' in c.lower() and 'id' in c.lower()), None)
         value_col = next((c for c in fieldnames if c.lower() == 'value'), None)
+        code_col = next((c for c in fieldnames if 'code' in c.lower() and 'id' in c.lower()), None)
 
+        batch = []
         for row in reader:
-            lang_code = row.get(lang_col, "") if lang_col else ""
+            lang_glotto = row.get(lang_col, "") if lang_col else ""
             feature_id = row.get(param_col, "") if param_col else ""
             value = row.get(value_col, "") if value_col else ""
+            code_id = row.get(code_col, "") if code_col else ""
 
-            if not lang_code or not feature_id:
+            if not lang_glotto or not feature_id:
                 continue
 
-            # Skip unknown values (?) to save space - they don't add info
-            if value == "?":
+            # Skip question marks and empty values
+            if value in ["?", ""]:
                 skipped_unknown += 1
                 continue
 
-            # Map binary to human-readable
-            value_name = "Present" if value == "1" else "Absent" if value == "0" else value
+            # Map glottocode to lang_id
+            lang_id = glotto_to_id.get(lang_glotto)
+            if not lang_id:
+                skipped += 1
+                continue
 
-            values.append({
-                "lang_code": lang_code,
-                "feature_id": feature_id,
+            # Get value name - for Grambank binary features
+            if code_id and code_id in value_names:
+                value_name = value_names[code_id]
+            elif value == "1":
+                value_name = "Present"
+            elif value == "0":
+                value_name = "Absent"
+            else:
+                value_name = value
+
+            batch.append({
+                "lang_id": lang_id,
+                "feature_id": f"GB_{feature_id}",
                 "value": value,
                 "value_name": value_name,
                 "source": "grambank",
-                "confidence": 1.0
             })
 
-    print(f" {len(values)} values (skipped {skipped_unknown} unknown)")
+            if len(batch) >= 10000:
+                cursor.executemany("""
+                    INSERT INTO language_features (lang_id, feature_id, value, value_name, source)
+                    VALUES (:lang_id, :feature_id, :value, :value_name, :source)
+                """, batch)
+                inserted += len(batch)
+                print(f"  Inserted {inserted}...")
+                batch = []
 
-    print("Inserting language features...", end="", flush=True)
-    batch_size = 10000
-    for i in range(0, len(values), batch_size):
-        batch = values[i:i + batch_size]
-        conn.executemany(
-            """INSERT OR REPLACE INTO language_features
-               (lang_code, feature_id, value, value_name, source, confidence)
-               VALUES (:lang_code, :feature_id, :value, :value_name, :source, :confidence)""",
-            batch
-        )
-        conn.commit()
-        print(".", end="", flush=True)
-    print(" done")
+        if batch:
+            cursor.executemany("""
+                INSERT INTO language_features (lang_id, feature_id, value, value_name, source)
+                VALUES (:lang_id, :feature_id, :value, :value_name, :source)
+            """, batch)
+            inserted += len(batch)
 
-    # Record import
-    conn.execute(
-        """INSERT INTO import_metadata (source, record_count, notes)
-           VALUES (?, ?, ?)""",
-        ("grambank", len(values), f"features={len(features)}, skipped_unknown={skipped_unknown}")
-    )
     conn.commit()
 
-    # Summary
-    print(f"\n{'=' * 40}")
-    print(f"IMPORT COMPLETE")
-    print(f"{'=' * 40}")
-    print(f"  Features:       {len(features):,}")
-    print(f"  Feature values: {len(values):,}")
-    print(f"  Skipped (?):    {skipped_unknown:,}")
-
-    # Show domain breakdown
-    cursor = conn.execute(
-        "SELECT domain, COUNT(*) FROM feature_definitions WHERE source='grambank' GROUP BY domain ORDER BY COUNT(*) DESC"
-    )
-    print(f"\n  Features by domain:")
-    for row in cursor:
-        print(f"    {row[0]}: {row[1]}")
-
-    # Show coverage
-    cursor = conn.execute(
-        "SELECT COUNT(DISTINCT lang_code) FROM language_features WHERE source='grambank'"
-    )
-    lang_count = cursor.fetchone()[0]
-    print(f"\n  Languages with Grambank data: {lang_count}")
+    print("\n" + "=" * 60)
+    print("Grambank import complete!")
+    print("=" * 60)
+    print(f"\nFeatures inserted: {inserted}")
+    print(f"Skipped (no language match): {skipped}")
+    print(f"Skipped (unknown values): {skipped_unknown}")
+    print(f"\nDatabase: {LANGUAGE_REGISTRY_DB}")
 
     conn.close()
-
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="Import Grambank CLDF data"
-    )
-    parser.add_argument(
-        "--input", "-i",
-        type=Path,
-        default=DEFAULT_INPUT,
-        help=f"Input directory (default: {DEFAULT_INPUT})"
-    )
-    parser.add_argument(
-        "--db", "-d",
-        type=Path,
-        default=DEFAULT_DB,
-        help=f"Output database (default: {DEFAULT_DB})"
-    )
-
-    args = parser.parse_args()
-
-    if not args.input.exists():
-        print(f"Error: Input directory not found: {args.input}")
-        print(f"\nRun download_typology.py first.")
-        sys.exit(1)
-
-    import_grambank(args.input, args.db)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    exit(main())
