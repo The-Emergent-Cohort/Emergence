@@ -3,48 +3,82 @@
 
 **Date:** 2026-01-01
 **Status:** Active
+**Location:** frankenputer `/usr/share/databases/`
 
 ---
 
-## 1. Data Directory Structure
-
-Unpack your downloads into these paths:
+## 1. Data Directory Structure (frankenputer)
 
 ```
-research/tokenizers/data/
-├── verbnet/                    # Unpack verbnet-3.4.tar.gz here
-│   └── verbnet3.4/
-│       ├── accept-77.xml
-│       ├── accompany-51.7.xml
-│       └── ... (~270 XML files)
+/usr/share/databases/
+├── db/                         # Output databases go here
+│   ├── primitives.db           # Core primitives (always loaded)
+│   ├── language_registry.db    # Language codes (always loaded)
+│   ├── lang/                   # Per-language DBs
+│   │   ├── eng.db
+│   │   ├── deu.db
+│   │   └── ...
+│   └── families/               # Minor language family DBs
 │
-├── wordnet/                    # Unpack wn3.1.dict.tar.gz here
-│   └── dict/
-│       ├── data.noun
-│       ├── data.verb
-│       ├── data.adj
-│       ├── data.adv
-│       ├── index.noun
-│       └── ...
+├── reference/                  # Source data (read-only)
+│   ├── glottolog/              # ✓ Already present
+│   │   └── glottolog-glottolog-cldf-4dbf078/
+│   │       └── cldf/
+│   │
+│   ├── grambank/               # ✓ Already present
+│   │   └── grambank-grambank-9e0f341/
+│   │       └── cldf/
+│   │
+│   ├── wals/                   # ✓ Already present
+│   │   └── cldf-datasets-wals-0f5cd82/
+│   │       └── cldf/
+│   │
+│   ├── kaikki/                 # ✓ Directory exists
+│   │   ├── en/                 # Add: kaikki.org-dictionary-English.jsonl
+│   │   ├── de/                 # Add more languages as needed
+│   │   └── ...
+│   │
+│   ├── verbnet/                # ← ADD: Unpack verbnet-3.4.tar.gz
+│   │   └── verbnet3.4/
+│   │       ├── accept-77.xml
+│   │       └── ... (~270 XML files)
+│   │
+│   ├── wordnet/                # ← ADD: Unpack wn3.1.dict.tar.gz
+│   │   └── dict/
+│   │       ├── data.noun
+│   │       ├── data.verb
+│   │       └── ...
+│   │
+│   └── omw/                    # ← ADD: Unpack omw-1.4.tar.xz
+│       └── omw-1.4/
+│           ├── als/            # Albanian
+│           ├── arb/            # Arabic
+│           └── ... (~31 languages)
 │
-├── omw/                        # Unpack omw-1.4.tar.xz here
-│   └── omw-1.4/
-│       ├── als/                # Albanian
-│       ├── arb/                # Arabic
-│       ├── eng/                # English
-│       └── ... (~31 languages)
+├── scripts -> /mnt/project/tokenizers/scripts  # Symlink to project
 │
-├── kaikki/                     # Kaikki extracts (per language)
-│   ├── en/
-│   │   └── kaikki.org-dictionary-English.jsonl
-│   ├── de/
-│   ├── fr/
-│   └── ...
-│
-└── primitives/                 # Generated/curated primitive lists
-    ├── nsm-primes.json         # 65 NSM semantic primes
-    ├── image-schemas.json      # ~27 image schemas
-    └── verbnet-frames.json     # Extracted from VerbNet
+└── venv/                       # Python environment
+```
+
+### Unpack Commands
+
+```bash
+cd /usr/share/databases/reference
+
+# VerbNet
+mkdir -p verbnet && cd verbnet
+tar -xzf ~/Downloads/verbnet-3.4.tar.gz
+cd ..
+
+# WordNet
+mkdir -p wordnet && cd wordnet
+tar -xzf ~/Downloads/wn3.1.dict.tar.gz
+cd ..
+
+# OMW
+mkdir -p omw && cd omw
+tar -xJf ~/Downloads/omw-1.4.tar.xz
+cd ..
 ```
 
 ---
@@ -353,52 +387,67 @@ CCC    = Collision counter (000-999)
 
 ---
 
-## 7. Execution Commands
+## 7. Execution Commands (on frankenputer)
 
 ```bash
+cd /usr/share/databases
+source venv/bin/activate
+
 # Phase 1: Foundation
-python scripts/import_nsm_primes.py
-python scripts/import_image_schemas.py
-python scripts/import_language_codes.py
+python scripts/import_nsm_primes.py --db db/primitives.db
+python scripts/import_image_schemas.py --db db/primitives.db
+python scripts/import_glottolog.py --source reference/glottolog/ --db db/language_registry.db
+python scripts/import_wals.py --source reference/wals/ --db db/language_registry.db
+python scripts/import_grambank.py --source reference/grambank/ --db db/language_registry.db
 
 # Phase 2: VerbNet
-python scripts/import_verbnet.py --source data/verbnet/verbnet3.4/
+python scripts/import_verbnet.py --source reference/verbnet/verbnet3.4/ --db db/primitives.db
 
 # Phase 3: WordNet
-python scripts/import_wordnet.py --source data/wordnet/dict/
+python scripts/import_wordnet.py --source reference/wordnet/dict/ --db db/primitives.db
 
 # Phase 4: OMW
-python scripts/import_omw.py --source data/omw/omw-1.4/
+python scripts/import_omw.py --source reference/omw/omw-1.4/ --db db/primitives.db
 
 # Phase 5: Kaikki (per language)
-python scripts/import_kaikki_lang.py --lang en --source data/kaikki/en/
-python scripts/import_kaikki_lang.py --lang de --source data/kaikki/de/
+python scripts/import_kaikki_lang.py --lang en --source reference/kaikki/ --db db/lang/eng.db
+python scripts/import_kaikki_lang.py --lang de --source reference/kaikki/ --db db/lang/deu.db
 # ... repeat for other languages
 
 # Phase 6: Composition analysis
-python scripts/compute_compositions.py --all
+python scripts/compute_compositions.py --primitives db/primitives.db --lang-dir db/lang/
 ```
 
 ---
 
-## 8. Files to Create
+## 8. Script Status
 
 ```
 scripts/
-├── import_nsm_primes.py        # Phase 1.1
-├── import_image_schemas.py     # Phase 1.2
-├── import_language_codes.py    # Phase 1.3
-├── import_verbnet.py           # Phase 2.1
-├── import_wordnet.py           # Phase 3.1
-├── import_omw.py               # Phase 4.1
-├── import_kaikki_lang.py       # Phase 5.x
-├── compute_compositions.py     # Phase 6.1
-└── build_all.py                # Orchestrates full pipeline
+├── download_kaikki.py          # ✓ EXISTS - Download Kaikki data
+├── download_typology.py        # ✓ EXISTS - Download WALS/Grambank
+├── import_glottolog.py         # ✓ EXISTS - Language metadata
+├── import_grambank.py          # ✓ EXISTS - Typological features
+├── import_wals.py              # ✓ EXISTS - Typological features
+├── import_kaikki.py            # ✓ EXISTS - Dictionary import
+├── import_nsm_primes.py        # ✓ EXISTS - NSM semantic primes
+│
+├── import_image_schemas.py     # ○ TO CREATE - Embodied image schemas
+├── import_verbnet.py           # ○ TO CREATE - Verb frames
+├── import_wordnet.py           # ○ TO CREATE - Synset structure
+├── import_omw.py               # ○ TO CREATE - Multilingual forms
+├── import_language_codes.py    # ○ TO CREATE - 4-digit code assignments
+├── compute_compositions.py     # ○ TO CREATE - Primitive decomposition
+└── build_all.py                # ○ TO CREATE - Full pipeline orchestrator
 
 db/
-├── SCHEMA-primitives.sql       # Schema for primitives.db
-├── SCHEMA-language-registry.sql # Schema for language_registry.db
-└── SCHEMA-language-template.sql # Template for per-language DBs
+├── SCHEMA-primitives.sql       # ✓ EXISTS
+├── SCHEMA-language-registry.sql # ✓ EXISTS
+├── SCHEMA-language-template.sql # ✓ EXISTS
+└── primitives.db               # ✓ EXISTS (seeded with NSM primes)
+
+lib/
+└── token_encoder.py            # ✓ EXISTS - Token ID encoding/decoding
 ```
 
 ---
