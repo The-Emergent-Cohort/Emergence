@@ -36,23 +36,9 @@ KAIKKI_DIR = BASE_DIR / "reference" / "kaikki"
 sys.path.insert(0, str(BASE_DIR / "lib"))
 from token_encoder import LanguageCoord
 
-# EXCLUSION patterns - capitalized common nouns that are NOT proper names
-# These are concepts that happen to be capitalized in English
-COMMON_NOUN_EXCLUSIONS = [
-    # Temporal
-    r'^(January|February|March|April|May|June|July|August|September|October|November|December)$',
-    r'^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)$',
-    # Languages (these go in language families, not proper names)
-    r'^(English|French|German|Spanish|Chinese|Japanese|Arabic|Russian|Hindi)$',
-    # Nationalities (adjectives, not proper names)
-    r'^(American|British|French|German|Italian|Chinese|Japanese)$',
-    # Celestial bodies used as common nouns (the sun, the moon)
-    r'^(Sun|Moon|Earth)$',  # When used generically
-    # Religious terms that are concepts, not names
-    r'^(God|Heaven|Hell|Paradise)$',  # Generic religious concepts
-    # Directions
-    r'^(North|South|East|West)$',
-]
+# NOTE: Capitalized common nouns (January, Monday, English, etc.) are NOT excluded.
+# They stay in the main concept DB with capitalize_output=1 flag.
+# Only extract actual proper names (people, places, named things) here.
 
 # Category detection patterns
 PERSON_PATTERNS = [
@@ -197,22 +183,9 @@ def detect_category(word: str, senses: list, pos: str) -> tuple[int, int, str]:
     return 3, 3, "thing"
 
 
-def is_excluded_common_noun(word: str) -> bool:
-    """Check if word is a capitalized common noun (not a proper name)."""
-    for pattern in COMMON_NOUN_EXCLUSIONS:
-        if re.match(pattern, word):
-            return True
-    return False
-
-
 def is_proper_noun(entry: dict) -> bool:
-    """Check if entry is a proper noun (not a capitalized common noun)."""
+    """Check if entry is a proper noun (named entity)."""
     word = entry.get("word", "")
-
-    # First check exclusions - these are NOT proper names
-    if is_excluded_common_noun(word):
-        return False
-
     pos = entry.get("pos", "").lower()
 
     # Direct POS check
@@ -307,7 +280,6 @@ def process_kaikki_file(filepath: Path, conn: sqlite3.Connection, lang: str) -> 
     stats = {
         "total_entries": 0,
         "proper_nouns": 0,
-        "excluded_common": 0,
         "inserted": 0,
         "duplicates": 0,
         "by_category": {},
@@ -335,11 +307,6 @@ def process_kaikki_file(filepath: Path, conn: sqlite3.Connection, lang: str) -> 
 
             word = entry.get("word", "")
             if not word:
-                continue
-
-            # Check exclusions first
-            if is_excluded_common_noun(word):
-                stats["excluded_common"] += 1
                 continue
 
             if not is_proper_noun(entry):

@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS concepts (
     pos TEXT,
     abstraction INTEGER NOT NULL DEFAULT 99,
     fingerprint INTEGER,
+    capitalize_output INTEGER DEFAULT 0,
     source TEXT
 );
 
@@ -96,6 +97,119 @@ POS_DOMAIN = {
     "num": 5,       # abstract/quantity
     "name": 4,      # social (proper nouns)
 }
+
+# Domain jargon genomic coordinates (non-human symbol systems)
+# Maps Kaikki category tags to full genomic coordinates: (family, subfamily, lang, dialect)
+# Family 51 = Math, 52 = Chemistry, 53 = Physics, 54 = Computing, 55 = Music
+#
+# Structure: category -> (family, subfamily, lang, dialect)
+# Subfamily = major branch, Lang = specialization, Dialect = sub-specialization
+JARGON_GENOMIC = {
+    # Math (family 51)
+    "mathematics":    (51, 0, 0, 0),   # General mathematics
+    "arithmetic":     (51, 1, 0, 0),   # Basic number operations
+    "algebra":        (51, 2, 0, 0),   # Algebra branch
+    "linear algebra": (51, 2, 1, 0),   # ... linear specialization
+    "calculus":       (51, 3, 0, 0),   # Calculus branch
+    "geometry":       (51, 4, 0, 0),   # Geometry branch
+    "trigonometry":   (51, 4, 1, 0),   # ... trig specialization
+    "topology":       (51, 4, 2, 0),   # ... topology specialization
+    "number theory":  (51, 5, 0, 0),   # Number theory branch
+    "set theory":     (51, 6, 0, 0),   # Set theory branch
+    "logic":          (51, 6, 1, 0),   # ... logic specialization
+    "combinatorics":  (51, 7, 0, 0),   # Combinatorics branch
+    "statistics":     (51, 8, 0, 0),   # Statistics branch
+    "probability":    (51, 8, 1, 0),   # ... probability specialization
+
+    # Chemistry (family 52)
+    "chemistry":          (52, 0, 0, 0),   # General chemistry
+    "organic chemistry":  (52, 1, 0, 0),   # Organic branch
+    "inorganic chemistry": (52, 2, 0, 0),  # Inorganic branch
+    "biochemistry":       (52, 3, 0, 0),   # Biochemistry branch
+    "analytical chemistry": (52, 4, 0, 0), # Analytical branch
+    "electrochemistry":   (52, 5, 0, 0),   # Electrochemistry branch
+    "chemical element":   (52, 0, 1, 0),   # Elements (general subcategory)
+    "chemical compound":  (52, 0, 2, 0),   # Compounds (general subcategory)
+    "pharmacology":       (52, 3, 1, 0),   # Pharmacology (biochem adjacent)
+
+    # Physics (family 53)
+    "physics":            (53, 0, 0, 0),   # General physics
+    "mechanics":          (53, 1, 0, 0),   # Classical mechanics
+    "thermodynamics":     (53, 2, 0, 0),   # Thermodynamics
+    "electromagnetism":   (53, 3, 0, 0),   # E&M
+    "optics":             (53, 3, 1, 0),   # ... optics specialization
+    "acoustics":          (53, 4, 0, 0),   # Acoustics
+    "quantum mechanics":  (53, 5, 0, 0),   # Quantum branch
+    "quantum physics":    (53, 5, 0, 0),   # Alias
+    "nuclear physics":    (53, 5, 1, 0),   # ... nuclear specialization
+    "particle physics":   (53, 5, 2, 0),   # ... particle specialization
+    "relativity":         (53, 6, 0, 0),   # Relativity
+    "astrophysics":       (53, 7, 0, 0),   # Astrophysics
+
+    # Computing (family 54)
+    "computing":          (54, 0, 0, 0),   # General computing
+    "computer science":   (54, 0, 0, 0),   # Alias
+    "programming":        (54, 1, 0, 0),   # Programming branch
+    "software":           (54, 1, 1, 0),   # ... software specialization
+    "computer hardware":  (54, 2, 0, 0),   # Hardware branch
+    "networking":         (54, 3, 0, 0),   # Networking branch
+    "internet":           (54, 3, 1, 0),   # ... internet specialization
+    "databases":          (54, 4, 0, 0),   # Databases branch
+    "cryptography":       (54, 5, 0, 0),   # Cryptography branch
+
+    # Music (family 55)
+    "music":              (55, 0, 0, 0),   # General music
+    "music theory":       (55, 1, 0, 0),   # Theory branch
+    "musical instruments": (55, 2, 0, 0),  # Instruments branch
+}
+
+# Capitalized common nouns - stay in main DB with capitalize_output=1
+CAPITALIZE_PATTERNS = [
+    # Days and months
+    r'^(January|February|March|April|May|June|July|August|September|October|November|December)$',
+    r'^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)$',
+    # Languages (when used as noun, not adjective)
+    r'^(English|French|German|Spanish|Italian|Portuguese|Chinese|Japanese|Korean|Arabic|Russian|Hindi)$',
+]
+
+import re
+
+def detect_jargon_genomic(entry: dict) -> tuple | None:
+    """
+    Detect if entry is domain jargon using Kaikki's category tags.
+
+    Returns (family, subfamily, lang, dialect) genomic coordinates or None.
+    """
+    # Check categories in senses
+    for sense in entry.get("senses", []):
+        if isinstance(sense, dict):
+            # Check raw_tags, tags, and topics for category info
+            for tag_field in ["raw_tags", "tags", "topics"]:
+                tags = sense.get(tag_field, [])
+                for tag in tags:
+                    tag_lower = str(tag).lower()
+                    if tag_lower in JARGON_GENOMIC:
+                        return JARGON_GENOMIC[tag_lower]
+
+            # Check categories field directly
+            categories = sense.get("categories", [])
+            for cat in categories:
+                if isinstance(cat, dict):
+                    cat_name = cat.get("name", "").lower()
+                else:
+                    cat_name = str(cat).lower()
+                if cat_name in JARGON_GENOMIC:
+                    return JARGON_GENOMIC[cat_name]
+
+    return None
+
+
+def is_capitalized_common_noun(word: str) -> bool:
+    """Check if word is a capitalized common noun (January, Monday, etc.)."""
+    for pattern in CAPITALIZE_PATTERNS:
+        if re.match(pattern, word):
+            return True
+    return False
 
 
 def get_lang_genomic(iso_code: str) -> str:
@@ -167,6 +281,24 @@ def tags_to_features(tags: list) -> str:
     return ";".join(features) if features else None
 
 
+def get_or_create_jargon_db(family: int) -> sqlite3.Connection:
+    """Get or create a jargon domain database."""
+    # Map family to name
+    family_names = {51: "math", 52: "chemistry", 53: "physics", 54: "computing", 55: "music"}
+    name = family_names.get(family, f"domain_{family}")
+
+    jargon_dir = DB_DIR / "jargon"
+    jargon_dir.mkdir(parents=True, exist_ok=True)
+    jargon_db = jargon_dir / f"{name}.db"
+
+    conn = sqlite3.connect(jargon_db)
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA synchronous = NORMAL")
+    conn.executescript(LANGUAGE_DB_SCHEMA)
+
+    return conn
+
+
 def import_kaikki(input_file: Path, lang_code: str, limit: int = None):
     """Import Kaikki data for a single language."""
     print(f"\nImporting {lang_code} from {input_file.name}...")
@@ -191,16 +323,23 @@ def import_kaikki(input_file: Path, lang_code: str, limit: int = None):
     cursor.execute("SELECT fingerprint FROM concepts WHERE source = 'kaikki'")
     existing_fps = {row[0] for row in cursor.fetchall()}
 
+    # Track jargon DB connections (lazy open)
+    jargon_conns = {}  # family -> (conn, cursor, existing_fps)
+
     start_time = time.time()
     entry_count = 0
     concept_count = 0
     form_count = 0
     trans_count = 0
     skipped_proper = 0
+    jargon_count = 0
 
     batch_concepts = []
     batch_forms = []
     batch_trans = []
+
+    # Jargon batches: family -> {"concepts": [], "forms": [], "trans": []}
+    jargon_batches = {}
 
     for entry in stream_jsonl(input_file):
         if limit and entry_count >= limit:
@@ -220,6 +359,12 @@ def import_kaikki(input_file: Path, lang_code: str, limit: int = None):
 
         entry_count += 1
 
+        # Check for domain jargon - route to separate DB
+        jargon_genomic = detect_jargon_genomic(entry)
+
+        # Check for capitalized common nouns
+        capitalize = 1 if is_capitalized_common_noun(word) else 0
+
         # Process each sense
         for sense in senses:
             glosses = sense.get("glosses", [])
@@ -229,7 +374,41 @@ def import_kaikki(input_file: Path, lang_code: str, limit: int = None):
             gloss = glosses[0]
             fingerprint = generate_fingerprint(word, gloss)
 
-            # Skip if we already have this concept
+            if jargon_genomic:
+                # Route to jargon DB
+                family = jargon_genomic[0]
+                if family not in jargon_conns:
+                    jc = get_or_create_jargon_db(family)
+                    jcursor = jc.cursor()
+                    jcursor.execute("SELECT fingerprint FROM concepts WHERE source = 'kaikki'")
+                    jfps = {row[0] for row in jcursor.fetchall()}
+                    jargon_conns[family] = (jc, jcursor, jfps)
+                    jargon_batches[family] = {"concepts": [], "forms": [], "trans": []}
+
+                _, _, jfps = jargon_conns[family]
+                if fingerprint in jfps:
+                    continue
+
+                # Build genomic token ID using jargon coordinates
+                fam, sub, lng, dial = jargon_genomic
+                domain = POS_DOMAIN.get(pos, 5)
+                token_id = f"2.{domain}.1.{fam}.{sub}.{lng}.{dial}.{fingerprint}.0"
+
+                jargon_batches[family]["concepts"].append({
+                    "token_id": token_id,
+                    "lemma": word,
+                    "gloss": gloss[:500] if gloss else None,
+                    "pos": pos,
+                    "abstraction": 2,
+                    "fingerprint": fingerprint,
+                    "capitalize_output": 0,
+                    "source": "kaikki",
+                })
+                jfps.add(fingerprint)
+                jargon_count += 1
+                continue
+
+            # Regular language DB
             if fingerprint in existing_fps:
                 continue
 
@@ -242,6 +421,7 @@ def import_kaikki(input_file: Path, lang_code: str, limit: int = None):
                 "pos": pos,
                 "abstraction": 2,
                 "fingerprint": fingerprint,
+                "capitalize_output": capitalize,
                 "source": "kaikki",
             })
             existing_fps.add(fingerprint)
@@ -277,14 +457,32 @@ def import_kaikki(input_file: Path, lang_code: str, limit: int = None):
             batch_forms = []
             batch_trans = []
             conn.commit()
+
+            # Flush jargon batches too
+            for family, batches in jargon_batches.items():
+                if len(batches["concepts"]) >= 1000:
+                    jc, jcursor, _ = jargon_conns[family]
+                    _flush_batch(jcursor, batches["concepts"], batches["forms"], batches["trans"])
+                    jc.commit()
+                    batches["concepts"] = []
+                    batches["forms"] = []
+                    batches["trans"] = []
+
             elapsed = time.time() - start_time
             rate = entry_count / elapsed if elapsed > 0 else 0
-            print(f"  Processed {entry_count:,} entries, {concept_count:,} concepts ({rate:.0f}/sec)...")
+            print(f"  Processed {entry_count:,} entries, {concept_count:,} concepts, {jargon_count:,} jargon ({rate:.0f}/sec)...")
 
-    # Final flush
+    # Final flush - main DB
     if batch_concepts:
         _flush_batch(cursor, batch_concepts, batch_forms, batch_trans)
         conn.commit()
+
+    # Final flush - jargon DBs
+    for family, batches in jargon_batches.items():
+        if batches["concepts"]:
+            jc, jcursor, _ = jargon_conns[family]
+            _flush_batch(jcursor, batches["concepts"], batches["forms"], batches["trans"])
+            jc.commit()
 
     elapsed = time.time() - start_time
 
@@ -292,10 +490,18 @@ def import_kaikki(input_file: Path, lang_code: str, limit: int = None):
     print(f"    Time: {elapsed:.1f}s")
     print(f"    Entries: {entry_count:,}")
     print(f"    Concepts: {concept_count:,}")
+    print(f"    Jargon terms: {jargon_count:,}")
     print(f"    Forms: {form_count:,}")
     print(f"    Translations: {trans_count:,}")
     print(f"    Skipped (proper nouns): {skipped_proper:,}")
     print(f"    Database: {lang_db}")
+
+    # Report jargon DBs
+    for family, (jc, _, _) in jargon_conns.items():
+        family_names = {51: "math", 52: "chemistry", 53: "physics", 54: "computing", 55: "music"}
+        name = family_names.get(family, f"domain_{family}")
+        print(f"    Jargon DB ({name}): db/jargon/{name}.db")
+        jc.close()
 
     conn.close()
     return concept_count
@@ -307,8 +513,8 @@ def _flush_batch(cursor, concepts, forms, trans):
     for c in concepts:
         cursor.execute("""
             INSERT OR IGNORE INTO concepts
-            (token_id, lemma, gloss, pos, abstraction, fingerprint, source)
-            VALUES (:token_id, :lemma, :gloss, :pos, :abstraction, :fingerprint, :source)
+            (token_id, lemma, gloss, pos, abstraction, fingerprint, capitalize_output, source)
+            VALUES (:token_id, :lemma, :gloss, :pos, :abstraction, :fingerprint, :capitalize_output, :source)
         """, c)
 
     # Build fingerprint -> concept_id map
