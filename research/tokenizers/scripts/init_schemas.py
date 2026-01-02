@@ -163,11 +163,11 @@ CREATE TABLE IF NOT EXISTS surface_forms (
     FOREIGN KEY (concept_id) REFERENCES concepts(concept_id)
 );
 
--- Primitive compositions for each concept
+-- Compositions for each concept (links to primitives or other concepts)
 CREATE TABLE IF NOT EXISTS compositions (
     id INTEGER PRIMARY KEY,
     concept_id INTEGER NOT NULL,
-    primitive_id INTEGER NOT NULL,
+    component_id INTEGER NOT NULL,
     position INTEGER NOT NULL,
     relation TEXT DEFAULT 'part',
     FOREIGN KEY (concept_id) REFERENCES concepts(concept_id)

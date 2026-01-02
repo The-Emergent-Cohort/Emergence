@@ -66,16 +66,16 @@ JOIN concepts c ON sf.concept_id = c.concept_id;
 CREATE TABLE IF NOT EXISTS compositions (
     id INTEGER PRIMARY KEY,
     concept_id INTEGER NOT NULL,
-    primitive_id INTEGER NOT NULL,          -- References primitives.db
+    component_id INTEGER NOT NULL,          -- Primitive (negative ID) or concept (positive ID)
     position INTEGER NOT NULL,              -- Order in composition (1-indexed)
     weight REAL DEFAULT 1.0,                -- Contribution weight
     relation TEXT DEFAULT 'component',      -- 'component', 'modifier', 'frame'
     FOREIGN KEY (concept_id) REFERENCES concepts(concept_id),
-    UNIQUE(concept_id, primitive_id, position)
+    UNIQUE(concept_id, component_id, position)
 );
 
 CREATE INDEX IF NOT EXISTS idx_comp_concept ON compositions(concept_id);
-CREATE INDEX IF NOT EXISTS idx_comp_primitive ON compositions(primitive_id);
+CREATE INDEX IF NOT EXISTS idx_comp_component ON compositions(component_id);
 
 -- View: concept with its primitive breakdown
 CREATE VIEW IF NOT EXISTS concept_primitives AS

@@ -143,7 +143,7 @@ def compute_for_language(lang_db: Path, primitives: dict):
 
             if component_id and component_id not in components_added:
                 cursor.execute("""
-                    INSERT INTO compositions (concept_id, primitive_id, position, relation)
+                    INSERT INTO compositions (concept_id, component_id, position, relation)
                     VALUES (?, ?, ?, ?)
                 """, (concept_id, component_id, position, relation))
                 components_added.add(component_id)
