@@ -433,11 +433,11 @@ All scripts go in `/home/user/Emergence/research/tokenizers/scripts/` (symlinked
 | `import_glottolog.py` | Language tree → FF.SS.LLL codes | DONE |
 | `import_wals.py` | Typological features | DONE |
 | `import_grambank.py` | Grammar features | DONE |
-| `unpack_tarballs.py` | Extract VerbNet, WordNet, OMW | TODO |
-| `import_verbnet.py` | Verb semantic classes | TODO |
-| `import_wordnet.py` | Synset structure | TODO |
-| `import_omw.py` | Multilingual forms | TODO |
-| `import_kaikki.py` | Wiktionary vocabulary | TODO |
-| `compute_compositions.py` | Primitive decomposition | TODO |
-| `build_master_index.py` | Aggregate token_index | TODO |
+| `unpack_tarballs.py` | Extract VerbNet, WordNet, OMW | DONE |
+| `import_verbnet.py` | Verb semantic classes | DONE |
+| `import_wordnet.py` | Synset structure | DONE |
+| `import_omw.py` | Multilingual forms | DONE |
+| `import_kaikki.py` | Wiktionary vocabulary | DONE |
+| `compute_compositions.py` | Primitive decomposition | DONE |
+| `build_master_index.py` | Aggregate token_index | DONE |
 | `setup.sh` | Full pipeline orchestrator | DONE |
