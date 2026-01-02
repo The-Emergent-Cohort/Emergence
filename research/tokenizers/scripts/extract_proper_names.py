@@ -26,8 +26,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-# Path configuration
-SCRIPT_DIR = Path(__file__).parent
+# Path configuration - resolve symlinks to find real lib path
+SCRIPT_DIR = Path(__file__).resolve().parent
 BASE_DIR = SCRIPT_DIR.parent
 DB_DIR = BASE_DIR / "db"
 KAIKKI_DIR = BASE_DIR / "reference" / "kaikki"

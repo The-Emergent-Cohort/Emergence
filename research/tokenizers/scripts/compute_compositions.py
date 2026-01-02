@@ -21,8 +21,8 @@ import re
 import sqlite3
 from pathlib import Path
 
-# Path configuration
-SCRIPT_DIR = Path(__file__).parent
+# Path configuration - resolve symlinks to find real paths
+SCRIPT_DIR = Path(__file__).resolve().parent
 BASE_DIR = SCRIPT_DIR.parent
 DB_DIR = BASE_DIR / "db"
 LANG_DIR = DB_DIR / "lang"

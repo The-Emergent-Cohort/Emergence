@@ -20,8 +20,8 @@ import time
 from pathlib import Path
 from typing import Iterator
 
-# Path configuration
-SCRIPT_DIR = Path(__file__).parent
+# Path configuration - resolve symlinks to find real paths
+SCRIPT_DIR = Path(__file__).resolve().parent
 BASE_DIR = SCRIPT_DIR.parent
 DB_DIR = BASE_DIR / "db"
 REF_DIR = BASE_DIR / "reference"
