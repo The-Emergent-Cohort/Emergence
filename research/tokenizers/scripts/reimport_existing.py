@@ -15,9 +15,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Resolve symlinks to find real paths
-SCRIPT_DIR = Path(__file__).resolve().parent
-BASE_DIR = SCRIPT_DIR.parent
+# Hardcoded paths - data lives at /usr/share/databases
+BASE_DIR = Path("/usr/share/databases")
+SCRIPT_DIR = BASE_DIR / "scripts"
 KAIKKI_DIR = BASE_DIR / "reference" / "kaikki"
 LANG_DIR = BASE_DIR / "db" / "lang"
 
