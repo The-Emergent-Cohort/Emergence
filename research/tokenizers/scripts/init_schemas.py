@@ -304,9 +304,17 @@ def init_language_registry():
     db_path = DB_DIR / "language_registry.db"
     init_db(db_path, LANGUAGE_REGISTRY_SCHEMA, "language_registry.db")
 
-    # Seed major language families
+    # Seed language families
+    # 0: Universal primitives
+    # 1-30: Documented human language families
+    # 31-40: Reserved for undocumented/historical (Native American, etc.)
+    # 41-49: Isolates, creoles, constructed
+    # 50+: Non-human symbol systems
     families = [
+        # Universal
         (0, "universal", None, "Cross-linguistic primitives"),
+
+        # Major documented families (1-30)
         (1, "indo-european", "indo1319", "Indo-European languages"),
         (2, "sino-tibetan", "sino1245", "Sino-Tibetan languages"),
         (3, "afro-asiatic", "afro1255", "Afro-Asiatic languages"),
@@ -320,6 +328,43 @@ def init_language_registry():
         (11, "austroasiatic", "aust1305", "Austroasiatic languages"),
         (12, "tai-kadai", "taik1256", "Tai-Kadai languages"),
         (13, "nilo-saharan", "nilo1247", "Nilo-Saharan languages"),
+        (14, "trans-new-guinea", "nucl1709", "Trans-New Guinea languages"),
+        (15, "pama-nyungan", "pama1250", "Pama-Nyungan (Australian)"),
+        (16, "oto-manguean", "otom1299", "Oto-Manguean languages"),
+        (17, "mayan", "maya1287", "Mayan languages"),
+        (18, "quechuan", "quec1387", "Quechuan languages"),
+        (19, "arawakan", "araw1281", "Arawakan languages"),
+        (20, "tupian", "tupi1275", "Tupian languages"),
+        # 21-30 reserved for additional documented families
+
+        # Reserved for undocumented/historical (31-40)
+        (31, "north-american-reserved", None, "Reserved: North American indigenous"),
+        (32, "south-american-reserved", None, "Reserved: South American indigenous"),
+        (33, "australian-reserved", None, "Reserved: Australian indigenous"),
+        (34, "african-reserved", None, "Reserved: African undocumented"),
+        (35, "asian-reserved", None, "Reserved: Asian undocumented"),
+        (36, "historical-reserved", None, "Reserved: Historical/reconstructed"),
+        # 37-40 reserved
+
+        # Isolates, creoles, constructed (41-49)
+        (41, "isolates", None, "Language isolates"),
+        (42, "creoles", None, "Creole and pidgin languages"),
+        (43, "constructed", None, "Constructed languages (Esperanto, etc.)"),
+        (44, "sign-languages", None, "Sign languages"),
+        # 45-49 reserved
+
+        # Non-human symbol systems (50+)
+        (50, "di-native", None, "DI native conceptual language"),
+        (51, "mathematics", None, "Mathematical notation and expressions"),
+        (52, "chemistry", None, "Chemical notation (IUPAC, molecular)"),
+        (53, "physics", None, "Physics notation (units, formulas)"),
+        (54, "computing", None, "Programming languages and protocols"),
+        (55, "music", None, "Musical notation and theory"),
+        (56, "logic", None, "Formal logic systems"),
+        (57, "biology", None, "Biological nomenclature (taxonomy, genetics)"),
+        (58, "engineering", None, "Engineering notation and standards"),
+        (59, "finance", None, "Financial instruments and notation"),
+        # 60+ reserved for future domains
     ]
 
     conn = sqlite3.connect(db_path)
