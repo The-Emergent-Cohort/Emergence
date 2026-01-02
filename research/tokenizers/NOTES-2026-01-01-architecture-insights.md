@@ -183,6 +183,12 @@ Token record layout:
 [Token ID: ~16 bytes][metadata: variable][padding to 32-byte boundary]
 ```
 
+Why 32 bytes:
+- L2 cache line size is typically 32 bytes (some architectures 64)
+- Aligned record = 1 cache fetch
+- Misaligned = 2 fetches, wasted bandwidth
+- This is what makes VRAM work efficiently vs wasting half the cycles patching data
+
 Key rules:
 - Total record size must be multiple of 32 bytes (32, 64, 96, 128...)
 - Records stored contiguously
