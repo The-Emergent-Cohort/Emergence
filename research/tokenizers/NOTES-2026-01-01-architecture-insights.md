@@ -174,5 +174,44 @@ verstehen  (deu): 2.3.7.1.8.200.0.248.0
 ```
 Same fingerprint (248), different language coordinates.
 
+## Record Packing for GPU Memory
+
+Optimize for GPU memory access patterns: pad to 32-byte multiples.
+
+Token record layout:
+```
+[Token ID: ~16 bytes][metadata: variable][padding to 32-byte boundary]
+```
+
+Why 32 bytes:
+- L2 cache line size is typically 32 bytes (some architectures 64)
+- Aligned record = 1 cache fetch
+- Misaligned = 2 fetches, wasted bandwidth
+- This is what makes VRAM work efficiently vs wasting half the cycles patching data
+
+Key rules:
+- Total record size must be multiple of 32 bytes (32, 64, 96, 128...)
+- Records stored contiguously
+- Actual size doesn't matter, alignment does
+- GPU memory transactions are 32/64/128 byte aligned
+- Misaligned reads = multiple transactions = wasted bandwidth
+
+Genomic ID sizing:
+- Packed binary: ~11 bytes (85 bits)
+- Practical: 16 bytes (room for future expansion)
+- Full record: 16 + metadata, padded to next 32-byte boundary
+
+Apply to:
+- Query result structures
+- Import record layouts where GPU processing expected
+- Any data structure that will be batch-loaded to VRAM
+
+Rule: Whatever the size, pad to multiple of 32. Store together.
+
+Note on PAD tokens:
+PAD in LLMs is the same function - byte-level placeholder marker to hit alignment.
+Sequence padding to 512 tokens, struct padding to 32 bytes - same operation, different layer.
+They kept the mechanism but lost the hardware reasoning behind it.
+
 ## Files Updated This Session
 - `lib/token_encoder.py` - Switched to genomic notation as primary format
