@@ -12,6 +12,11 @@
 #   Phase 4: Lexical data (Kaikki)
 #   Phase 5: Analysis (compositions, master index)
 #
+# Or run batch language import:
+#   ./setup.sh languages              # All tiers with cleanup
+#   ./setup.sh languages --tier 1     # Just tier 1
+#   ./setup.sh nuke                   # Clear all DBs
+#
 
 set -e  # Exit on error
 
@@ -20,6 +25,8 @@ BASE_DIR="$(dirname "$SCRIPT_DIR")"
 VENV_DIR="$BASE_DIR/venv"
 DB_DIR="$BASE_DIR/db"
 REF_DIR="$BASE_DIR/reference"
+JARGON_DIR="$DB_DIR/jargon"
+LANG_DIR="$DB_DIR/lang"
 
 # Colors for output
 RED='\033[0;31m'
@@ -72,7 +79,8 @@ echo ""
 
 # Parse arguments
 PHASE="${1:-all}"
-LANG="${2:-en}"
+shift 2>/dev/null || true  # Shift past first arg, ignore if no more args
+EXTRA_ARGS="$@"
 
 run_script() {
     local script="$1"
@@ -98,6 +106,67 @@ check_reference() {
         echo_skip "Reference data not found: $dir"
         return 1
     fi
+}
+
+# Nuke all databases
+nuke_dbs() {
+    echo_phase "Nuking All Databases"
+
+    echo_step "Removing language databases..."
+    if [ -d "$LANG_DIR" ]; then
+        rm -rf "$LANG_DIR"/*.db 2>/dev/null || true
+        echo_success "Removed $LANG_DIR/*.db"
+    fi
+
+    echo_step "Removing jargon databases..."
+    if [ -d "$JARGON_DIR" ]; then
+        rm -rf "$JARGON_DIR"/*.db 2>/dev/null || true
+        echo_success "Removed $JARGON_DIR/*.db"
+    fi
+
+    echo_step "Removing proper names from registry..."
+    if [ -f "$DB_DIR/language_registry.db" ]; then
+        sqlite3 "$DB_DIR/language_registry.db" "DELETE FROM proper_names;" 2>/dev/null || true
+        sqlite3 "$DB_DIR/language_registry.db" "DELETE FROM proper_name_variants;" 2>/dev/null || true
+        echo_success "Cleared proper_names tables"
+    fi
+
+    echo_success "Databases nuked"
+}
+
+# Batch language import with cleanup
+batch_languages() {
+    echo_phase "Batch Language Import"
+
+    local tier_arg=""
+    local extra=""
+
+    # Parse extra args for tier specification
+    for arg in $EXTRA_ARGS; do
+        case "$arg" in
+            --tier|--tier=*)
+                tier_arg="$arg"
+                ;;
+            1|2|3|4)
+                if [ -n "$tier_arg" ]; then
+                    tier_arg="--tier $arg"
+                fi
+                ;;
+            *)
+                extra="$extra $arg"
+                ;;
+        esac
+    done
+
+    # Default to all tiers if none specified
+    if [ -z "$tier_arg" ]; then
+        tier_arg="--all"
+    fi
+
+    echo_step "Running batch_import.py $tier_arg --cleanup --continue-on-error $extra"
+    python "$SCRIPT_DIR/batch_import.py" $tier_arg --cleanup --continue-on-error $extra
+
+    echo_success "Batch language import complete"
 }
 
 # Phase 1: Foundation
@@ -158,13 +227,14 @@ phase3() {
     echo_success "Phase 3 complete"
 }
 
-# Phase 4: Lexical Data
+# Phase 4: Lexical Data (single language)
 phase4() {
-    echo_phase "Phase 4: Lexical Data ($LANG)"
+    local lang="${EXTRA_ARGS:-en}"
+    echo_phase "Phase 4: Lexical Data ($lang)"
 
     if check_reference "kaikki"; then
         if [ -f "$SCRIPT_DIR/import_kaikki.py" ]; then
-            run_script "import_kaikki.py" "--lang $LANG"
+            run_script "import_kaikki.py" "--lang $lang"
         else
             echo_skip "import_kaikki.py not implemented yet"
         fi
@@ -175,10 +245,11 @@ phase4() {
 
 # Phase 5: Analysis
 phase5() {
+    local lang="${EXTRA_ARGS:-en}"
     echo_phase "Phase 5: Analysis"
 
     if [ -f "$SCRIPT_DIR/compute_compositions.py" ]; then
-        run_script "compute_compositions.py" "--lang $LANG"
+        run_script "compute_compositions.py" "--lang $lang"
     else
         echo_skip "compute_compositions.py not implemented yet"
     fi
@@ -192,8 +263,36 @@ phase5() {
     echo_success "Phase 5 complete"
 }
 
+# Full rebuild: nuke + foundation + all languages
+full_rebuild() {
+    echo_phase "Full Rebuild"
+    echo "This will:"
+    echo "  1. Nuke all existing language/jargon DBs"
+    echo "  2. Run Phase 1 (foundation)"
+    echo "  3. Import ALL language tiers with cleanup"
+    echo ""
+    read -p "Continue? (y/N) " confirm
+    if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+        echo "Aborted."
+        exit 0
+    fi
+
+    nuke_dbs
+    phase1
+    batch_languages
+}
+
 # Run phases
 case "$PHASE" in
+    nuke)
+        nuke_dbs
+        ;;
+    languages|langs|batch)
+        batch_languages
+        ;;
+    rebuild|full-rebuild)
+        full_rebuild
+        ;;
     1|phase1|foundation)
         phase1
         ;;
@@ -223,23 +322,28 @@ case "$PHASE" in
         phase5
         ;;
     *)
-        echo "Usage: $0 [phase] [lang]"
+        echo "Usage: $0 [command] [options]"
         echo ""
-        echo "Phases:"
-        echo "  1, phase1, foundation   - Init schemas, NSM, Glottolog, WALS, Grambank"
-        echo "  2, phase2, primitives   - VerbNet, WordNet"
+        echo "Commands:"
+        echo "  nuke                  - Clear all language/jargon DBs"
+        echo "  languages [--tier N]  - Batch import languages with cleanup"
+        echo "  rebuild               - Nuke + foundation + all languages"
+        echo ""
+        echo "Legacy phases:"
+        echo "  1, phase1, foundation - Init schemas, NSM, Glottolog, WALS, Grambank"
+        echo "  2, phase2, primitives - VerbNet, WordNet"
         echo "  3, phase3, multilingual - OMW"
-        echo "  4, phase4, lexical      - Kaikki (default: en)"
-        echo "  5, phase5, analysis     - Compositions, Master index"
-        echo "  2-5, rest               - Skip Phase 1, run 2-5"
-        echo "  all                     - Run all phases (default)"
+        echo "  4, phase4, lexical    - Kaikki (single language)"
+        echo "  5, phase5, analysis   - Compositions, Master index"
+        echo "  2-5, rest             - Skip Phase 1, run 2-5"
+        echo "  all                   - Run all phases (single lang)"
         echo ""
         echo "Examples:"
-        echo "  $0                      # Run all phases for English"
-        echo "  $0 1                    # Run only Phase 1"
-        echo "  $0 2-5 en               # Skip Phase 1, run rest for English"
-        echo "  $0 4 de                 # Run Phase 4 for German"
-        echo "  $0 all ja               # Run all phases for Japanese"
+        echo "  $0 nuke                    # Clear DBs"
+        echo "  $0 languages               # All tiers, cleanup after each"
+        echo "  $0 languages --tier 1      # Just tier 1 (top 10 languages)"
+        echo "  $0 rebuild                 # Full nuke + rebuild"
+        echo "  $0 1                       # Just Phase 1 (foundation)"
         exit 1
         ;;
 esac
@@ -247,31 +351,44 @@ esac
 echo ""
 echo_phase "Setup Complete"
 echo ""
-echo "Databases created in: $DB_DIR"
+echo "Databases in: $DB_DIR"
 echo ""
 
 # Show summary
 if [ -f "$DB_DIR/primitives.db" ]; then
     echo "primitives.db:"
-    sqlite3 "$DB_DIR/primitives.db" "SELECT '  Primitives: ' || COUNT(*) FROM primitives;"
-    sqlite3 "$DB_DIR/primitives.db" "SELECT '  Forms: ' || COUNT(*) FROM primitive_forms;"
+    sqlite3 "$DB_DIR/primitives.db" "SELECT '  Primitives: ' || COUNT(*) FROM primitives;" 2>/dev/null || true
+    sqlite3 "$DB_DIR/primitives.db" "SELECT '  Forms: ' || COUNT(*) FROM primitive_forms;" 2>/dev/null || true
 fi
 
 if [ -f "$DB_DIR/language_registry.db" ]; then
     echo ""
     echo "language_registry.db:"
-    sqlite3 "$DB_DIR/language_registry.db" "SELECT '  Languages: ' || COUNT(*) FROM language_codes;"
-    sqlite3 "$DB_DIR/language_registry.db" "SELECT '  Features: ' || COUNT(*) FROM language_features;"
+    sqlite3 "$DB_DIR/language_registry.db" "SELECT '  Languages: ' || COUNT(*) FROM language_codes;" 2>/dev/null || true
+    sqlite3 "$DB_DIR/language_registry.db" "SELECT '  Features: ' || COUNT(*) FROM language_features;" 2>/dev/null || true
+    sqlite3 "$DB_DIR/language_registry.db" "SELECT '  Proper names: ' || COUNT(*) FROM proper_names;" 2>/dev/null || true
 fi
 
-if [ -d "$DB_DIR/lang" ]; then
+if [ -d "$LANG_DIR" ]; then
     echo ""
     echo "Language databases:"
-    for db in "$DB_DIR/lang"/*.db; do
+    for db in "$LANG_DIR"/*.db; do
         if [ -f "$db" ]; then
             name=$(basename "$db" .db)
             count=$(sqlite3 "$db" "SELECT COUNT(*) FROM concepts;" 2>/dev/null || echo "0")
             echo "  $name: $count concepts"
+        fi
+    done
+fi
+
+if [ -d "$JARGON_DIR" ]; then
+    echo ""
+    echo "Jargon databases:"
+    for db in "$JARGON_DIR"/*.db; do
+        if [ -f "$db" ]; then
+            name=$(basename "$db" .db)
+            count=$(sqlite3 "$db" "SELECT COUNT(*) FROM concepts;" 2>/dev/null || echo "0")
+            echo "  $name: $count terms"
         fi
     done
 fi

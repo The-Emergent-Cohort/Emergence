@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS concepts (
     gloss TEXT,                              -- Specific meaning if different from synset
     lang TEXT DEFAULT 'en',                  -- Language code (ISO 639-3)
     frequency INTEGER DEFAULT 0,             -- Usage frequency (for caching priority)
+    capitalize_output INTEGER DEFAULT 0,     -- 1 = capitalize in output (January, Monday, etc.)
     FOREIGN KEY (synset_id) REFERENCES synsets(synset_id),
     UNIQUE(synset_id, concept_offset)
 );

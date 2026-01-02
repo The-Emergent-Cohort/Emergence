@@ -53,6 +53,7 @@ DOMAINS = {
     "artifact": 7,      # Made things, tools, technology
     "natural": 8,       # Nature, environment, elements
     "evaluative": 9,    # Good/bad, values, judgments
+    "entity": 10,       # Named entities (proper names) - labels that reference
 }
 
 # Category codes within domains (1-99)
@@ -100,6 +101,11 @@ CATEGORIES = {
     (5, "logic"): 4,
     (5, "category"): 5,
     (5, "part_whole"): 6,
+
+    # Entity domain (10) - proper names: person, place, thing
+    (10, "person"): 1,           # Named individuals
+    (10, "place"): 2,            # Geographic locations
+    (10, "thing"): 3,            # Named things (orgs, works, events)
 }
 
 # Language family codes (0-99)
@@ -283,11 +289,15 @@ class LanguageCoord:
 
 
 @dataclass
-class PrimitiveComponent:
-    """A primitive that contributes to a concept's composition."""
-    primitive_id: int       # ID of the primitive concept
+class ConceptComponent:
+    """A component that contributes to a concept's composition (one layer)."""
+    fingerprint: int        # Fingerprint of the component concept
     position: int           # Order in composition (1-indexed)
     relation: str = "part"  # How it contributes: part, modifier, frame
+
+
+# Backwards compatibility alias
+PrimitiveComponent = ConceptComponent
 
 
 @dataclass
@@ -391,51 +401,86 @@ class TokenCoordinates:
         return f"TokenCoordinates({self.to_string()})"
 
 
-def compute_fingerprint(primitives: List[PrimitiveComponent]) -> int:
+def compute_fingerprint(components: List[ConceptComponent]) -> int:
     """
-    Compute the fingerprint from primitive composition.
+    Compute fingerprint from component composition (one layer deep).
 
-    Fingerprint = Σ(primitive_id × position_weight) mod 1000000
+    Formula: fp = (fp₁ × 1) + (fp₂ × 2) + (fp₃ × 3) + ... mod 1_000_000
 
-    Position weights ensure order matters:
-    - Position 1: weight 1
-    - Position 2: weight 2
-    - etc.
+    Key properties:
+    - One layer deep: uses immediate components' fingerprints (not recursive)
+    - Position-weighted: order matters in composition
+    - Deterministic: same components in same order = same fingerprint
+    - Easily calculable: just look up component fps, multiply by position, sum
 
-    This creates fingerprints where:
-    - Different primitives = usually different fingerprint
-    - Same primitives, different order = different fingerprint
-    - Collisions rare but handled by collision counter
+    Example:
+        "biochemistry" breakdown = [BIOLOGY, CHEMISTRY]
+        fp_biochemistry = (fp_biology × 1) + (fp_chemistry × 2) % 1_000_000
 
-    6 digits allows for highly abstract compositions like
-    "antidisestablishmentarianism" with many morpheme primitives.
+    For primitives (abstraction 0/1):
+        - Fingerprint comes from text hash or direct assignment
+        - These are the base layer that everything else builds on
+
+    For compounds (abstraction 2+):
+        - Fingerprint computed from immediate breakdown
+        - Each component already has its fp baked in from ITS breakdown
     """
-    if not primitives:
+    if not components:
         return 0
 
     total = 0
-    for p in primitives:
-        total += p.primitive_id * p.position
+    for c in components:
+        total += c.fingerprint * c.position
 
     # Keep within 6 digits (0-999999)
     return total % 1_000_000
 
 
-def compute_abstraction_level(primitives: List[PrimitiveComponent]) -> int:
+def compute_fingerprint_from_list(fingerprints: List[int]) -> int:
     """
-    Compute abstraction level from primitive composition.
+    Convenience: compute fingerprint from ordered list of component fingerprints.
 
-    Level 1: Is itself a primitive
+    fp = (fp[0] × 1) + (fp[1] × 2) + (fp[2] × 3) + ...
+    """
+    total = 0
+    for i, fp in enumerate(fingerprints):
+        total += fp * (i + 1)
+    return total % 1_000_000
+
+
+def compute_text_fingerprint(text: str) -> int:
+    """
+    Compute fingerprint from text (for primitives or initial import).
+
+    Used when:
+    - Concept is a primitive (no breakdown available)
+    - Initial import before breakdown analysis
+    - Fallback when components unknown
+
+    This may be a TEMPORARY fingerprint that gets recalculated when
+    component breakdown is established.
+    """
+    h = 0
+    for c in text.lower():
+        h = (h * 31 + ord(c)) % 1_000_000
+    return h
+
+
+def compute_abstraction_level(components: List[ConceptComponent]) -> int:
+    """
+    Compute abstraction level from component composition.
+
+    Level 0-1: Primitives (no breakdown or single component)
     Level 2: Direct combination of primitives
     Level 3+: Combinations of combinations
 
     Simple heuristic based on count.
     Could be refined with actual composition depth.
     """
-    if not primitives:
+    if not components:
         return 1  # Assume primitive if no composition
 
-    count = len(primitives)
+    count = len(components)
     if count == 1:
         return 1
     elif count <= 3:
