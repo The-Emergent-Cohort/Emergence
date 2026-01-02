@@ -194,6 +194,15 @@ def compute_compositions(iso_code: str) -> bool:
     return success
 
 
+def extract_proper_names(iso_code: str) -> bool:
+    """Extract proper names before cleanup."""
+    success, error = run_script("extract_proper_names.py", ["--lang", iso_code])
+    if not success:
+        log(f"Proper name extraction failed for {iso_code}: {error}", "WARN")
+        # Don't fail the whole pipeline - proper names are optional
+    return success
+
+
 def cleanup_source(kaikki_name: str) -> bool:
     """Delete source JSONL file after successful import."""
     jsonl_file = KAIKKI_DIR / f"{kaikki_name.lower()}.jsonl"
@@ -257,8 +266,11 @@ def process_language(lang_info: tuple, skip_download: bool = False,
 
     result["success"] = True
 
-    # Cleanup source file if requested
+    # Extract proper names BEFORE cleanup (they're in the source JSONL)
     if cleanup and result["success"]:
+        if extract_proper_names(iso_code):
+            log(f"  Extracted proper names for {kaikki_name}")
+        # Cleanup even if proper names extraction fails (it's optional)
         cleanup_source(kaikki_name)
 
     return result

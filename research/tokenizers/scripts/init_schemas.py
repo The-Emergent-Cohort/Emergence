@@ -391,6 +391,24 @@ def create_language_db(iso_code: str):
     return db_path
 
 
+def init_proper_names():
+    """Initialize proper names tables in language_registry.db."""
+    db_path = DB_DIR / "language_registry.db"
+    schema_path = DB_DIR / "SCHEMA-proper-names.sql"
+
+    if not schema_path.exists():
+        print(f"  Warning: {schema_path} not found, skipping proper names")
+        return
+
+    print(f"  Loading proper names schema...")
+    conn = sqlite3.connect(db_path)
+    with open(schema_path) as f:
+        conn.executescript(f.read())
+    conn.commit()
+    conn.close()
+    print(f"  ✓ Proper names tables initialized")
+
+
 def main():
     print("=" * 60)
     print("Initializing Tokenizer Database System")
@@ -411,7 +429,11 @@ def main():
     init_language_registry()
     print()
 
-    print("3. Creating lang/ directory...")
+    print("3. Initializing proper names extension...")
+    init_proper_names()
+    print()
+
+    print("4. Creating lang/ directory...")
     init_lang_directory()
     print()
 
@@ -420,7 +442,7 @@ def main():
     print("=" * 60)
     print("\nCreated:")
     print(f"  - {DB_DIR / 'primitives.db'}")
-    print(f"  - {DB_DIR / 'language_registry.db'}")
+    print(f"  - {DB_DIR / 'language_registry.db'} (includes proper names)")
     print(f"  - {DB_DIR / 'lang/'}")
     print("\nNext: Run import_nsm_primes.py to populate primitives")
 
