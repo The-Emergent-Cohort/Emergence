@@ -20,9 +20,9 @@ import time
 from pathlib import Path
 from typing import Iterator
 
-# Path configuration - resolve symlinks to find real paths
-SCRIPT_DIR = Path(__file__).resolve().parent
-BASE_DIR = SCRIPT_DIR.parent
+# Hardcoded paths - data lives at /usr/share/databases
+BASE_DIR = Path("/usr/share/databases")
+SCRIPT_DIR = BASE_DIR / "scripts"
 DB_DIR = BASE_DIR / "db"
 REF_DIR = BASE_DIR / "reference"
 LANG_DIR = DB_DIR / "lang"

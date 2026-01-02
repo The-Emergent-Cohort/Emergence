@@ -21,9 +21,9 @@ import re
 import sqlite3
 from pathlib import Path
 
-# Path configuration - resolve symlinks to find real paths
-SCRIPT_DIR = Path(__file__).resolve().parent
-BASE_DIR = SCRIPT_DIR.parent
+# Hardcoded paths - data lives at /usr/share/databases
+BASE_DIR = Path("/usr/share/databases")
+SCRIPT_DIR = BASE_DIR / "scripts"
 DB_DIR = BASE_DIR / "db"
 LANG_DIR = DB_DIR / "lang"
 PRIMITIVES_DB = DB_DIR / "primitives.db"
