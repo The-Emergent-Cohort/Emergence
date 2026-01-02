@@ -53,6 +53,7 @@ DOMAINS = {
     "artifact": 7,      # Made things, tools, technology
     "natural": 8,       # Nature, environment, elements
     "evaluative": 9,    # Good/bad, values, judgments
+    "entity": 10,       # Named entities (proper names) - labels that reference
 }
 
 # Category codes within domains (1-99)
@@ -100,6 +101,11 @@ CATEGORIES = {
     (5, "logic"): 4,
     (5, "category"): 5,
     (5, "part_whole"): 6,
+
+    # Entity domain (10) - proper names: person, place, thing
+    (10, "person"): 1,           # Named individuals
+    (10, "place"): 2,            # Geographic locations
+    (10, "thing"): 3,            # Named things (orgs, works, events)
 }
 
 # Language family codes (0-99)

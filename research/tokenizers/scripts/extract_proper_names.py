@@ -32,6 +32,28 @@ BASE_DIR = SCRIPT_DIR.parent
 DB_DIR = BASE_DIR / "db"
 KAIKKI_DIR = BASE_DIR / "reference" / "kaikki"
 
+# Add lib to path for token_encoder
+sys.path.insert(0, str(BASE_DIR / "lib"))
+from token_encoder import LanguageCoord
+
+# EXCLUSION patterns - capitalized common nouns that are NOT proper names
+# These are concepts that happen to be capitalized in English
+COMMON_NOUN_EXCLUSIONS = [
+    # Temporal
+    r'^(January|February|March|April|May|June|July|August|September|October|November|December)$',
+    r'^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)$',
+    # Languages (these go in language families, not proper names)
+    r'^(English|French|German|Spanish|Chinese|Japanese|Arabic|Russian|Hindi)$',
+    # Nationalities (adjectives, not proper names)
+    r'^(American|British|French|German|Italian|Chinese|Japanese)$',
+    # Celestial bodies used as common nouns (the sun, the moon)
+    r'^(Sun|Moon|Earth)$',  # When used generically
+    # Religious terms that are concepts, not names
+    r'^(God|Heaven|Hell|Paradise)$',  # Generic religious concepts
+    # Directions
+    r'^(North|South|East|West)$',
+]
+
 # Category detection patterns
 PERSON_PATTERNS = [
     r'\bperson\b', r'\bpeople\b', r'\bman\b', r'\bwoman\b',
@@ -75,6 +97,22 @@ EVENT_PATTERNS = [
     r'\bfestival\b', r'\bholiday\b', r'\bcelebration\b',
 ]
 
+# Language coordinates mapping (ISO 639-1 -> genomic coordinates)
+LANG_COORDS = {
+    "en": (1, 8, 127, 0),    # Indo-European.Germanic.English
+    "de": (1, 8, 200, 0),    # German
+    "nl": (1, 8, 210, 0),    # Dutch
+    "fr": (1, 12, 100, 0),   # Romance.French
+    "es": (1, 12, 150, 0),   # Spanish
+    "it": (1, 12, 170, 0),   # Italian
+    "pt": (1, 12, 160, 0),   # Portuguese
+    "ru": (1, 15, 100, 0),   # Slavic.Russian
+    "ja": (9, 0, 100, 0),    # Japonic.Japanese
+    "zh": (2, 1, 100, 0),    # Sino-Tibetan.Sinitic.Mandarin
+    "ko": (10, 0, 100, 0),   # Koreanic.Korean
+    "ar": (3, 1, 100, 0),    # Afro-Asiatic.Semitic.Arabic
+}
+
 
 def log(msg: str, level: str = "INFO"):
     """Log with timestamp."""
@@ -100,11 +138,12 @@ def init_db(db_path: Path):
     return conn
 
 
-def detect_category(word: str, senses: list, pos: str) -> tuple[int, str]:
+def detect_category(word: str, senses: list, pos: str) -> tuple[int, int, str]:
     """
     Detect proper name category from word, senses, and POS.
 
-    Returns (category_id, reasoning)
+    Returns (category_id, domain_category, reasoning)
+    Domain categories: 1=person, 2=place, 3=thing
     """
     # Combine all text for pattern matching
     all_text = word.lower() + " "
@@ -115,50 +154,65 @@ def detect_category(word: str, senses: list, pos: str) -> tuple[int, str]:
             tags = sense.get("tags", [])
             all_text += " ".join(str(t) for t in tags).lower() + " "
 
-    # Check patterns in order of specificity
+    # Person (domain_category = 1)
     for pattern in PERSON_PATTERNS:
         if re.search(pattern, all_text, re.IGNORECASE):
-            # Sub-categorize persons
             if re.search(r'mytholog|god|goddess|deity', all_text, re.I):
-                return 103, "mythological"
+                return 13, 1, "person_mythological"
             elif re.search(r'fictional|character|novel|story', all_text, re.I):
-                return 102, "fictional"
+                return 12, 1, "person_fictional"
             elif re.search(r'historical|ancient|medieval|\d{3,4}', all_text, re.I):
-                return 101, "historical"
-            return 104, "person"
+                return 11, 1, "person_historical"
+            return 1, 1, "person"
 
+    # Place (domain_category = 2)
     for pattern in PLACE_PATTERNS:
         if re.search(pattern, all_text, re.IGNORECASE):
             if re.search(r'country|nation|republic|kingdom', all_text, re.I):
-                return 201, "country"
+                return 21, 2, "place_country"
             elif re.search(r'city|town|village|capital', all_text, re.I):
-                return 202, "city"
+                return 22, 2, "place_city"
             elif re.search(r'state|province|region|county', all_text, re.I):
-                return 203, "region"
+                return 23, 2, "place_region"
             elif re.search(r'planet|star|moon|asteroid|galaxy', all_text, re.I):
-                return 205, "celestial"
+                return 25, 2, "place_celestial"
             elif re.search(r'mountain|river|lake|ocean|sea|island', all_text, re.I):
-                return 204, "geographic"
-            return 2, "place"
+                return 24, 2, "place_geographic"
+            return 2, 2, "place"
 
+    # Thing (domain_category = 3) - orgs, works, events
     for pattern in ORG_PATTERNS:
         if re.search(pattern, all_text, re.IGNORECASE):
-            return 3, "organization"
+            return 31, 3, "thing_organization"
 
     for pattern in WORK_PATTERNS:
         if re.search(pattern, all_text, re.IGNORECASE):
-            return 4, "work"
+            return 32, 3, "thing_work"
 
     for pattern in EVENT_PATTERNS:
         if re.search(pattern, all_text, re.IGNORECASE):
-            return 5, "event"
+            return 33, 3, "thing_event"
 
-    # Default to OTHER
-    return 6, "other"
+    # Default to thing (catch-all for named entities)
+    return 3, 3, "thing"
+
+
+def is_excluded_common_noun(word: str) -> bool:
+    """Check if word is a capitalized common noun (not a proper name)."""
+    for pattern in COMMON_NOUN_EXCLUSIONS:
+        if re.match(pattern, word):
+            return True
+    return False
 
 
 def is_proper_noun(entry: dict) -> bool:
-    """Check if entry is a proper noun."""
+    """Check if entry is a proper noun (not a capitalized common noun)."""
+    word = entry.get("word", "")
+
+    # First check exclusions - these are NOT proper names
+    if is_excluded_common_noun(word):
+        return False
+
     pos = entry.get("pos", "").lower()
 
     # Direct POS check
@@ -172,15 +226,12 @@ def is_proper_noun(entry: dict) -> bool:
             if any("proper" in str(t).lower() for t in tags):
                 return True
 
-    # Check if word starts with capital (weak signal)
-    word = entry.get("word", "")
+    # Capitalized word with person/place/org signals in gloss
     if word and word[0].isupper():
-        # Need additional signals - capitalization alone isn't enough
         senses = entry.get("senses", [])
         for sense in senses:
             if isinstance(sense, dict):
                 gloss = sense.get("glosses", [""])[0] if sense.get("glosses") else ""
-                # Person/place/org indicators in gloss
                 if any(re.search(p, gloss, re.I) for p in PERSON_PATTERNS + PLACE_PATTERNS + ORG_PATTERNS):
                     return True
 
@@ -227,17 +278,48 @@ def extract_translations(entry: dict) -> list[tuple[str, str, str]]:
     return translations
 
 
+def build_genomic_token(domain_category: int, lang_coords: tuple, fingerprint: int, collision: int) -> str:
+    """Build genomic token for proper name: 99.10.{category}.{lang}.{fp}.{col}"""
+    fam, sub, lng, dial = lang_coords
+    return f"99.10.{domain_category}.{fam}.{sub}.{lng}.{dial}.{fingerprint}.{collision}"
+
+
+def compute_name_fingerprint(name: str, gloss: str = "") -> int:
+    """
+    Compute fingerprint for proper name.
+
+    Proper fingerprint = sum of descriptor concept fingerprints
+    (PERSON + SCIENTIST + GERMAN + ... for "Einstein")
+
+    TODO: When concept DB is available, look up descriptor fingerprints.
+    For now, hash gloss text as approximation of descriptors.
+    """
+    # Use gloss as proxy for descriptors until concept DB lookup available
+    text = f"{name} {gloss}".lower()
+    h = 0
+    for c in text:
+        h = (h * 31 + ord(c)) % 1_000_000
+    return h
+
+
 def process_kaikki_file(filepath: Path, conn: sqlite3.Connection, lang: str) -> dict:
     """Process a single Kaikki JSONL file and extract proper names."""
     stats = {
         "total_entries": 0,
         "proper_nouns": 0,
+        "excluded_common": 0,
         "inserted": 0,
         "duplicates": 0,
         "by_category": {},
     }
 
     cursor = conn.cursor()
+
+    # Get language coordinates
+    lang_coords = LANG_COORDS.get(lang, (0, 0, 0, 0))
+
+    # Track collisions per genomic prefix
+    collision_tracker = {}
 
     with open(filepath, "r", encoding="utf-8") as f:
         for line in f:
@@ -251,26 +333,48 @@ def process_kaikki_file(filepath: Path, conn: sqlite3.Connection, lang: str) -> 
             except json.JSONDecodeError:
                 continue
 
+            word = entry.get("word", "")
+            if not word:
+                continue
+
+            # Check exclusions first
+            if is_excluded_common_noun(word):
+                stats["excluded_common"] += 1
+                continue
+
             if not is_proper_noun(entry):
                 continue
 
             stats["proper_nouns"] += 1
 
-            word = entry.get("word", "")
-            if not word:
-                continue
-
             senses = entry.get("senses", [])
             pos = entry.get("pos", "")
 
-            # Detect category
-            category_id, category_reason = detect_category(word, senses, pos)
+            # Detect category (returns category_id, domain_category, reason)
+            category_id, domain_category, category_reason = detect_category(word, senses, pos)
 
             # Track category stats
             cat_key = f"{category_id}:{category_reason}"
             stats["by_category"][cat_key] = stats["by_category"].get(cat_key, 0) + 1
 
-            # Check for duplicate
+            # Get gloss for fingerprint computation
+            gloss = ""
+            if senses:
+                for sense in senses:
+                    if isinstance(sense, dict) and sense.get("glosses"):
+                        gloss = sense["glosses"][0]
+                        break
+
+            # Compute fingerprint (from gloss descriptors) and collision
+            fingerprint = compute_name_fingerprint(word, gloss)
+            prefix = f"99.10.{domain_category}.{'.'.join(map(str, lang_coords))}.{fingerprint}"
+            collision = collision_tracker.get(prefix, 0)
+            collision_tracker[prefix] = collision + 1
+
+            # Build genomic token
+            token_genomic = build_genomic_token(domain_category, lang_coords, fingerprint, collision)
+
+            # Check for duplicate by canonical name and category
             cursor.execute(
                 "SELECT name_id FROM proper_names WHERE canonical_name = ? AND category_id = ?",
                 (word, category_id)
@@ -280,35 +384,52 @@ def process_kaikki_file(filepath: Path, conn: sqlite3.Connection, lang: str) -> 
                 stats["duplicates"] += 1
                 name_id = existing[0]
             else:
-                # Insert new proper name
+                # Insert new proper name with genomic notation
                 etymology = extract_etymology(entry)
+                fam, sub, lng, dial = lang_coords
 
                 cursor.execute("""
-                    INSERT INTO proper_names (canonical_name, category_id, lang, etymology, source)
-                    VALUES (?, ?, ?, ?, ?)
-                """, (word, category_id, lang, etymology, "kaikki"))
+                    INSERT INTO proper_names (
+                        token_genomic, canonical_name, category_id,
+                        lang_family, lang_subfamily, lang_code, lang_dialect,
+                        fingerprint, collision, etymology, source
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (token_genomic, word, category_id, fam, sub, lng, dial,
+                      fingerprint, collision, etymology, "kaikki"))
 
                 name_id = cursor.lastrowid
                 stats["inserted"] += 1
 
-                # Add canonical variant
+                # Add canonical variant with language coordinates
                 cursor.execute("""
-                    INSERT INTO proper_name_variants (name_id, variant, lang, variant_type, is_primary)
-                    VALUES (?, ?, ?, 'canonical', 1)
-                """, (name_id, word, lang))
+                    INSERT INTO proper_name_variants (
+                        name_id, variant, lang_family, lang_subfamily, lang_code, lang_dialect,
+                        variant_type, is_primary
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, 'canonical', 1)
+                """, (name_id, word, fam, sub, lng, dial))
 
             # Add translations as variants
             for trans_lang, trans_word, var_type in extract_translations(entry):
+                # Get language coordinates for translation (default to universal if unknown)
+                trans_coords = LANG_COORDS.get(trans_lang.lower()[:2], (0, 0, 0, 0))
+                tfam, tsub, tlng, tdial = trans_coords
+
                 # Check if variant exists
-                cursor.execute(
-                    "SELECT id FROM proper_name_variants WHERE name_id = ? AND variant = ? AND lang = ?",
-                    (name_id, trans_word, trans_lang)
-                )
+                cursor.execute("""
+                    SELECT id FROM proper_name_variants
+                    WHERE name_id = ? AND variant = ? AND lang_family = ? AND lang_code = ?
+                """, (name_id, trans_word, tfam, tlng))
+
                 if not cursor.fetchone():
                     cursor.execute("""
-                        INSERT INTO proper_name_variants (name_id, variant, lang, variant_type)
-                        VALUES (?, ?, ?, ?)
-                    """, (name_id, trans_word, trans_lang, var_type))
+                        INSERT INTO proper_name_variants (
+                            name_id, variant, lang_family, lang_subfamily, lang_code, lang_dialect,
+                            variant_type
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (name_id, trans_word, tfam, tsub, tlng, tdial, var_type))
 
             # Commit periodically
             if stats["proper_nouns"] % 1000 == 0:
