@@ -550,6 +550,7 @@ def main():
 
     parser = argparse.ArgumentParser(description="Import Kaikki.org data")
     parser.add_argument("--lang", "-l", default="en", help="Language code (default: en)")
+    parser.add_argument("--name", "-n", help="Language name for file lookup (e.g., German)")
     parser.add_argument("--input", "-i", type=Path, help="Input JSONL file")
     parser.add_argument("--limit", type=int, help="Limit entries (for testing)")
     args = parser.parse_args()
@@ -563,8 +564,11 @@ def main():
         patterns = [
             f"kaikki.org-dictionary-{args.lang}*.jsonl",
             f"{args.lang}*.jsonl",
-            f"*{args.lang}*.jsonl",
         ]
+        # Add language name patterns if provided
+        if args.name:
+            patterns.insert(0, f"{args.name.lower()}.jsonl")
+            patterns.append(f"*{args.name.lower()}*.jsonl")
         input_file = None
         for pattern in patterns:
             matches = list(kaikki_dir.glob(pattern)) if kaikki_dir.exists() else []

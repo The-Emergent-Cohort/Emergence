@@ -178,9 +178,12 @@ def download_language(kaikki_name: str) -> bool:
     return success
 
 
-def import_language(iso_code: str) -> bool:
+def import_language(iso_code: str, lang_name: str = None) -> bool:
     """Import language data into database."""
-    success, error = run_script("import_kaikki.py", ["--lang", iso_code])
+    args = ["--lang", iso_code]
+    if lang_name:
+        args.extend(["--name", lang_name])
+    success, error = run_script("import_kaikki.py", args)
     if not success:
         log(f"Import failed for {iso_code}: {error}", "ERROR")
     return success
@@ -246,7 +249,7 @@ def process_language(lang_info: tuple, skip_download: bool = False,
 
     # Import
     if not skip_import:
-        if import_language(iso_code):
+        if import_language(iso_code, kaikki_name):
             result["imported"] = True
             log(f"  Imported {kaikki_name}")
         else:
