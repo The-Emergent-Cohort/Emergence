@@ -1,0 +1,676 @@
+{
+  "timestamp": "2026-01-02T02:49:10.187115",
+  "elapsed_seconds": 10807.633252382278,
+  "results": [
+    {
+      "language": "English",
+      "iso": "en",
+      "family": "germanic",
+      "speakers_millions": 1500,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "German",
+      "iso": "de",
+      "family": "germanic",
+      "speakers_millions": 135,
+      "downloaded": true,
+      "imported": false,
+      "compositions": false,
+      "success": false
+    },
+    {
+      "language": "French",
+      "iso": "fr",
+      "family": "romance",
+      "speakers_millions": 310,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "Spanish",
+      "iso": "es",
+      "family": "romance",
+      "speakers_millions": 550,
+      "downloaded": true,
+      "imported": false,
+      "compositions": false,
+      "success": false
+    },
+    {
+      "language": "Italian",
+      "iso": "it",
+      "family": "romance",
+      "speakers_millions": 68,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "Portuguese",
+      "iso": "pt",
+      "family": "romance",
+      "speakers_millions": 260,
+      "downloaded": true,
+      "imported": false,
+      "compositions": false,
+      "success": false
+    },
+    {
+      "language": "Dutch",
+      "iso": "nl",
+      "family": "germanic",
+      "speakers_millions": 25,
+      "downloaded": true,
+      "imported": false,
+      "compositions": false,
+      "success": false
+    },
+    {
+      "language": "Russian",
+      "iso": "ru",
+      "family": "slavic",
+      "speakers_millions": 255,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "Polish",
+      "iso": "pl",
+      "family": "slavic",
+      "speakers_millions": 45,
+      "downloaded": true,
+      "imported": false,
+      "compositions": false,
+      "success": false
+    },
+    {
+      "language": "Swedish",
+      "iso": "sv",
+      "family": "germanic",
+      "speakers_millions": 13,
+      "downloaded": true,
+      "imported": false,
+      "compositions": false,
+      "success": false
+    },
+    {
+      "language": "Japanese",
+      "iso": "ja",
+      "family": "japonic",
+      "speakers_millions": 125,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "Korean",
+      "iso": "ko",
+      "family": "koreanic",
+      "speakers_millions": 80,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "Chinese",
+      "iso": "zh",
+      "family": "sino-tibetan",
+      "speakers_millions": 1100,
+      "downloaded": true,
+      "imported": false,
+      "compositions": false,
+      "success": false
+    },
+    {
+      "language": "Arabic",
+      "iso": "ar",
+      "family": "afro-asiatic",
+      "speakers_millions": 380,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "Hindi",
+      "iso": "hi",
+      "family": "indo-aryan",
+      "speakers_millions": 600,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "Turkish",
+      "iso": "tr",
+      "family": "turkic",
+      "speakers_millions": 90,
+      "downloaded": true,
+      "imported": false,
+      "compositions": false,
+      "success": false
+    },
+    {
+      "language": "Danish",
+      "iso": "da",
+      "family": "germanic",
+      "speakers_millions": 6,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "Norwegian",
+      "iso": "no",
+      "family": "germanic",
+      "speakers_millions": 5,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "Finnish",
+      "iso": "fi",
+      "family": "uralic",
+      "speakers_millions": 5,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "Czech",
+      "iso": "cs",
+      "family": "slavic",
+      "speakers_millions": 11,
+      "downloaded": true,
+      "imported": false,
+      "compositions": false,
+      "success": false
+    },
+    {
+      "language": "Hungarian",
+      "iso": "hu",
+      "family": "uralic",
+      "speakers_millions": 13,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "Greek",
+      "iso": "el",
+      "family": "hellenic",
+      "speakers_millions": 13,
+      "downloaded": true,
+      "imported": false,
+      "compositions": false,
+      "success": false
+    },
+    {
+      "language": "Hebrew",
+      "iso": "he",
+      "family": "afro-asiatic",
+      "speakers_millions": 9,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "Romanian",
+      "iso": "ro",
+      "family": "romance",
+      "speakers_millions": 26,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "Ukrainian",
+      "iso": "uk",
+      "family": "slavic",
+      "speakers_millions": 45,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "Indonesian",
+      "iso": "id",
+      "family": "austronesian",
+      "speakers_millions": 200,
+      "downloaded": true,
+      "imported": false,
+      "compositions": false,
+      "success": false
+    },
+    {
+      "language": "Malay",
+      "iso": "ms",
+      "family": "austronesian",
+      "speakers_millions": 80,
+      "downloaded": true,
+      "imported": false,
+      "compositions": false,
+      "success": false
+    },
+    {
+      "language": "Thai",
+      "iso": "th",
+      "family": "tai-kadai",
+      "speakers_millions": 60,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "Vietnamese",
+      "iso": "vi",
+      "family": "austroasiatic",
+      "speakers_millions": 85,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "Urdu",
+      "iso": "ur",
+      "family": "indo-aryan",
+      "speakers_millions": 230,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "Persian",
+      "iso": "fa",
+      "family": "iranian",
+      "speakers_millions": 110,
+      "downloaded": true,
+      "imported": false,
+      "compositions": false,
+      "success": false
+    },
+    {
+      "language": "Bengali",
+      "iso": "bn",
+      "family": "indo-aryan",
+      "speakers_millions": 270,
+      "downloaded": true,
+      "imported": false,
+      "compositions": false,
+      "success": false
+    },
+    {
+      "language": "Tamil",
+      "iso": "ta",
+      "family": "dravidian",
+      "speakers_millions": 85,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "Telugu",
+      "iso": "te",
+      "family": "dravidian",
+      "speakers_millions": 83,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "Catalan",
+      "iso": "ca",
+      "family": "romance",
+      "speakers_millions": 10,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "Bulgarian",
+      "iso": "bg",
+      "family": "slavic",
+      "speakers_millions": 8,
+      "downloaded": true,
+      "imported": false,
+      "compositions": false,
+      "success": false
+    },
+    {
+      "language": "Croatian",
+      "iso": "hr",
+      "family": "slavic",
+      "speakers_millions": 6,
+      "downloaded": false,
+      "imported": false,
+      "compositions": false,
+      "success": false
+    },
+    {
+      "language": "Serbian",
+      "iso": "sr",
+      "family": "slavic",
+      "speakers_millions": 12,
+      "downloaded": false,
+      "imported": false,
+      "compositions": false,
+      "success": false
+    },
+    {
+      "language": "Slovak",
+      "iso": "sk",
+      "family": "slavic",
+      "speakers_millions": 5,
+      "downloaded": true,
+      "imported": false,
+      "compositions": false,
+      "success": false
+    },
+    {
+      "language": "Slovenian",
+      "iso": "sl",
+      "family": "slavic",
+      "speakers_millions": 2.5,
+      "downloaded": false,
+      "imported": false,
+      "compositions": false,
+      "success": false
+    },
+    {
+      "language": "Lithuanian",
+      "iso": "lt",
+      "family": "baltic",
+      "speakers_millions": 3,
+      "downloaded": true,
+      "imported": false,
+      "compositions": false,
+      "success": false
+    },
+    {
+      "language": "Latvian",
+      "iso": "lv",
+      "family": "baltic",
+      "speakers_millions": 1.5,
+      "downloaded": true,
+      "imported": false,
+      "compositions": false,
+      "success": false
+    },
+    {
+      "language": "Estonian",
+      "iso": "et",
+      "family": "uralic",
+      "speakers_millions": 1.1,
+      "downloaded": true,
+      "imported": false,
+      "compositions": false,
+      "success": false
+    },
+    {
+      "language": "Icelandic",
+      "iso": "is",
+      "family": "germanic",
+      "speakers_millions": 0.4,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "Irish",
+      "iso": "ga",
+      "family": "celtic",
+      "speakers_millions": 1.8,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "Welsh",
+      "iso": "cy",
+      "family": "celtic",
+      "speakers_millions": 0.7,
+      "downloaded": true,
+      "imported": false,
+      "compositions": false,
+      "success": false
+    },
+    {
+      "language": "Basque",
+      "iso": "eu",
+      "family": "isolate",
+      "speakers_millions": 0.75,
+      "downloaded": true,
+      "imported": false,
+      "compositions": false,
+      "success": false
+    },
+    {
+      "language": "Georgian",
+      "iso": "ka",
+      "family": "kartvelian",
+      "speakers_millions": 4,
+      "downloaded": true,
+      "imported": false,
+      "compositions": false,
+      "success": false
+    },
+    {
+      "language": "Armenian",
+      "iso": "hy",
+      "family": "armenian",
+      "speakers_millions": 7,
+      "downloaded": true,
+      "imported": false,
+      "compositions": false,
+      "success": false
+    },
+    {
+      "language": "Swahili",
+      "iso": "sw",
+      "family": "niger-congo",
+      "speakers_millions": 100,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "Latin",
+      "iso": "la",
+      "family": "romance-classical",
+      "speakers_millions": 0,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "Sanskrit",
+      "iso": "sa",
+      "family": "indo-aryan-classical",
+      "speakers_millions": 0,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "Ancient Greek",
+      "iso": "gr",
+      "family": "hellenic-classical",
+      "speakers_millions": 0,
+      "downloaded": false,
+      "imported": false,
+      "compositions": false,
+      "success": false
+    },
+    {
+      "language": "Afrikaans",
+      "iso": "af",
+      "family": "germanic",
+      "speakers_millions": 7,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "Tagalog",
+      "iso": "tl",
+      "family": "austronesian",
+      "speakers_millions": 28,
+      "downloaded": true,
+      "imported": false,
+      "compositions": false,
+      "success": false
+    },
+    {
+      "language": "Hausa",
+      "iso": "ha",
+      "family": "afro-asiatic",
+      "speakers_millions": 80,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "Yoruba",
+      "iso": "yo",
+      "family": "niger-congo",
+      "speakers_millions": 47,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "Zulu",
+      "iso": "zu",
+      "family": "niger-congo",
+      "speakers_millions": 12,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "Amharic",
+      "iso": "am",
+      "family": "afro-asiatic",
+      "speakers_millions": 32,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "Nepali",
+      "iso": "ne",
+      "family": "indo-aryan",
+      "speakers_millions": 17,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "Burmese",
+      "iso": "my",
+      "family": "sino-tibetan",
+      "speakers_millions": 33,
+      "downloaded": true,
+      "imported": false,
+      "compositions": false,
+      "success": false
+    },
+    {
+      "language": "Khmer",
+      "iso": "km",
+      "family": "austroasiatic",
+      "speakers_millions": 16,
+      "downloaded": true,
+      "imported": false,
+      "compositions": false,
+      "success": false
+    },
+    {
+      "language": "Lao",
+      "iso": "lo",
+      "family": "tai-kadai",
+      "speakers_millions": 30,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "Mongolian",
+      "iso": "mn",
+      "family": "mongolic",
+      "speakers_millions": 6,
+      "downloaded": true,
+      "imported": false,
+      "compositions": false,
+      "success": false
+    },
+    {
+      "language": "Kazakh",
+      "iso": "kk",
+      "family": "turkic",
+      "speakers_millions": 13,
+      "downloaded": true,
+      "imported": false,
+      "compositions": false,
+      "success": false
+    },
+    {
+      "language": "Uzbek",
+      "iso": "uz",
+      "family": "turkic",
+      "speakers_millions": 35,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    },
+    {
+      "language": "Azerbaijani",
+      "iso": "az",
+      "family": "turkic",
+      "speakers_millions": 25,
+      "downloaded": true,
+      "imported": true,
+      "compositions": true,
+      "success": true
+    }
+  ]
+}
