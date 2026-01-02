@@ -209,6 +209,12 @@ case "$PHASE" in
     5|phase5|analysis)
         phase5
         ;;
+    2-5|rest)
+        phase2
+        phase3
+        phase4
+        phase5
+        ;;
     all)
         phase1
         phase2
@@ -225,11 +231,13 @@ case "$PHASE" in
         echo "  3, phase3, multilingual - OMW"
         echo "  4, phase4, lexical      - Kaikki (default: en)"
         echo "  5, phase5, analysis     - Compositions, Master index"
+        echo "  2-5, rest               - Skip Phase 1, run 2-5"
         echo "  all                     - Run all phases (default)"
         echo ""
         echo "Examples:"
         echo "  $0                      # Run all phases for English"
         echo "  $0 1                    # Run only Phase 1"
+        echo "  $0 2-5 en               # Skip Phase 1, run rest for English"
         echo "  $0 4 de                 # Run Phase 4 for German"
         echo "  $0 all ja               # Run all phases for Japanese"
         exit 1
