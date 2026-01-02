@@ -208,5 +208,10 @@ Apply to:
 
 Rule: Whatever the size, pad to multiple of 32. Store together.
 
+Note on PAD tokens:
+PAD in LLMs is the same function - byte-level placeholder marker to hit alignment.
+Sequence padding to 512 tokens, struct padding to 32 bytes - same operation, different layer.
+They kept the mechanism but lost the hardware reasoning behind it.
+
 ## Files Updated This Session
 - `lib/token_encoder.py` - Switched to genomic notation as primary format
