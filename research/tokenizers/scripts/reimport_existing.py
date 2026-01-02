@@ -11,15 +11,46 @@ Usage:
 """
 
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
 
-# Resolve symlinks to find real paths
+# Script location (resolved for lib imports)
 SCRIPT_DIR = Path(__file__).resolve().parent
 BASE_DIR = SCRIPT_DIR.parent
-KAIKKI_DIR = BASE_DIR / "reference" / "kaikki"
-LANG_DIR = BASE_DIR / "db" / "lang"
+
+# Find data directories - check multiple possible locations
+POSSIBLE_BASES = [
+    Path("/usr/share/databases"),
+    Path("/mnt/project/tokenizers"),
+    BASE_DIR,  # resolved repo path
+    Path(__file__).parent.parent,  # unresolved path
+]
+
+def find_data_dir(subpath: str) -> Path:
+    """Find data directory, checking multiple possible base locations."""
+    # Check environment override first
+    env_var = f"TOKENIZER_{subpath.upper().replace('/', '_')}"
+    if env_var in os.environ:
+        return Path(os.environ[env_var])
+
+    # Check each possible location
+    for base in POSSIBLE_BASES:
+        candidate = base / subpath
+        if candidate.exists() and any(candidate.iterdir()):
+            return candidate
+
+    # Return first existing empty dir, or default
+    for base in POSSIBLE_BASES:
+        candidate = base / subpath
+        if candidate.exists():
+            return candidate
+
+    return POSSIBLE_BASES[0] / subpath
+
+KAIKKI_DIR = find_data_dir("reference/kaikki")
+LANG_DIR = find_data_dir("db/lang")
 
 # Map filename stems to ISO codes
 FILENAME_TO_ISO = {
