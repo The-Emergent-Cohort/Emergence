@@ -174,5 +174,27 @@ verstehen  (deu): 2.3.7.1.8.200.0.248.0
 ```
 Same fingerprint (248), different language coordinates.
 
+## Record Packing for GPU Memory
+
+Optimize for GPU memory access patterns: 32-byte aligned chunks.
+
+Token record layout:
+```
+[Token ID: 4 bytes][metadata][padding to 32 bytes]
+```
+
+Why 32 bytes:
+- GPU memory transactions are typically 32/64/128 byte aligned
+- Misaligned reads = multiple transactions = wasted bandwidth
+- Padding costs trivial storage, saves significant GPU cycles
+- Coalesced memory access when adjacent threads read adjacent records
+
+Apply to:
+- Query result structures
+- Import record layouts where GPU processing expected
+- Any data structure that will be batch-loaded to VRAM
+
+Rule: When defining byte layout, think in 32-byte chunks first.
+
 ## Files Updated This Session
 - `lib/token_encoder.py` - Switched to genomic notation as primary format
